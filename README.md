@@ -10,7 +10,7 @@ Research Paper will be attached:
 topic wise
 
 Topics:
-* [Batch Machine Learning](Introductory_Chapters/1_Batch_Machine_Learning.excalidraw)
+* [Batch Machine Learning](Introductory_Chapters/)
 * Online Machine Learning
 * Instance Based Vs Model Based Learning 
 * Challenges in Machine Learning 
