@@ -14,10 +14,10 @@ topic wise
 Topics:
 
 Introductory Chapters
-* [Batch Machine Learning](Introductory_Chapters/)
-* [Online Machine Learning](Introductory_Chapters/)
-* [Instance Based Vs Model Based Learning](Introductory_Chapters/)
-* [Challenges in Machine Learning](Introductory_Chapters/) 
+* Batch Machine Learning: [Notes](Introductory_Chapters/1_Batch_Machine_Learning.excalidraw) 
+* Online Machine Learning: [Notes](Introductory_Chapters/2_Online_Learning.excalidraw) | [Code](Introductory_Chapters/online-ml.ipynb)
+* Instance Based Vs Model Based Learning: [Notes](Introductory_Chapters/3_Instance-based_Model-based.excalidraw)
+* Challenges in Machine Learning: [Notes](Introductory_Chapters/4_Challenges_in_machine_learning.excalidraw) | [Research Paper: unreasonable effectiveness of data](Introductory_Chapters/unreasonable_effectiveness_of_data.pdf) | [Research Paper: Cost of AI](Introductory_Chapters/unreasonable_effectiveness_of_data.pdf)
 
 To be added
 
