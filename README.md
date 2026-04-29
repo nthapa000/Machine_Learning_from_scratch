@@ -11,7 +11,7 @@ topic wise
 
 Topics:
 * [Batch Machine Learning](Introductory_Chapters/)
-* Online Machine Learning
+* [Online Machine Learning](Introductory_Chapters/)
 * Instance Based Vs Model Based Learning 
 * Challenges in Machine Learning 
 
