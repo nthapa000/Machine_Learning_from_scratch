@@ -13,6 +13,8 @@ topic wise
 
 Topics:
 
+Numpy Fundamentals: [Notes/Code](Numpy/numpy_fundamentals.ipynb)
+
 Introductory Chapters
 * Batch Machine Learning: [Notes](Introductory_Chapters/1_Batch_Machine_Learning.excalidraw) 
 * Online Machine Learning: [Notes](Introductory_Chapters/2_Online_Learning.excalidraw) | [Code](Introductory_Chapters/online-ml.ipynb)
