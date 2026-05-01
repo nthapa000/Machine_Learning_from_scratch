@@ -18,7 +18,7 @@ Introductory Chapters
 * Online Machine Learning: [Notes](Introductory_Chapters/2_Online_Learning.excalidraw) | [Code](Introductory_Chapters/online-ml.ipynb)
 * Instance Based Vs Model Based Learning: [Notes](Introductory_Chapters/3_Instance-based_Model-based.excalidraw)
 * Challenges in Machine Learning: [Notes](Introductory_Chapters/4_Challenges_in_machine_learning.excalidraw) | [Research Paper: unreasonable effectiveness of data](Introductory_Chapters/unreasonable_effectiveness_of_data.pdf) | [Research Paper: Cost of AI](Introductory_Chapters/costofai.pdf)
-
+* Machine Learning Development Lifecycle: [Notes](Introductory_Chapters/5_Machine_learning_developlement_lifecycle.excalidraw)
 To be added
 
 
