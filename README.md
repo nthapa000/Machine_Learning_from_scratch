@@ -21,6 +21,7 @@ Introductory Chapters
 * Instance Based Vs Model Based Learning: [Notes](Introductory_Chapters/3_Instance-based_Model-based.excalidraw)
 * Challenges in Machine Learning: [Notes](Introductory_Chapters/4_Challenges_in_machine_learning.excalidraw) | [Research Paper: unreasonable effectiveness of data](Introductory_Chapters/unreasonable_effectiveness_of_data.pdf) | [Research Paper: Cost of AI](Introductory_Chapters/costofai.pdf)
 * Machine Learning Development Lifecycle: [Notes](Introductory_Chapters/5_Machine_learning_developlement_lifecycle.excalidraw)
+* Tensors: [Notes](Introductory_Chapters/6_Tensors.excalidraw) | [Code](Introductory_Chapters/tensors_demo.ipynb)
 To be added
 
 
