@@ -15,6 +15,8 @@ Topics:
 
 Numpy Fundamentals: [Notes/Code](Numpy/numpy_fundamentals.ipynb)
 
+Pandas for ML: [Notes/Code](Pandas_for_ML/pandas.ipynb)
+
 Introductory Chapters
 * Batch Machine Learning: [Notes](Introductory_Chapters/1_Batch_Machine_Learning.excalidraw) 
 * Online Machine Learning: [Notes](Introductory_Chapters/2_Online_Learning.excalidraw) | [Code](Introductory_Chapters/online-ml.ipynb)
@@ -22,7 +24,8 @@ Introductory Chapters
 * Challenges in Machine Learning: [Notes](Introductory_Chapters/4_Challenges_in_machine_learning.excalidraw) | [Research Paper: unreasonable effectiveness of data](Introductory_Chapters/unreasonable_effectiveness_of_data.pdf) | [Research Paper: Cost of AI](Introductory_Chapters/costofai.pdf)
 * Machine Learning Development Lifecycle: [Notes](Introductory_Chapters/5_Machine_learning_developlement_lifecycle.excalidraw)
 * Tensors: [Notes](Introductory_Chapters/6_Tensors.excalidraw) | [Code](Introductory_Chapters/tensors_demo.ipynb)
-To be added
+
+End to End Toy Project
 
 
 Hex-Codes(Notes)
