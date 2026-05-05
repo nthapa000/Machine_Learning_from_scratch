@@ -17,6 +17,11 @@ Numpy Fundamentals: [Notes/Code](Numpy/numpy_fundamentals.ipynb)
 
 Pandas for ML: [Notes/Code](Pandas_for_ML/pandas.ipynb)
 
+
+Miscellaneous Implementation
+* Z_Score_Normalization: [Notes/Code](Implementation_from_scratch/z_score.ipynb) | Implementation of StandardScaler of sckit learn
+
+
 Introductory Chapters
 * Batch Machine Learning: [Notes](Introductory_Chapters/1_Batch_Machine_Learning.excalidraw) 
 * Online Machine Learning: [Notes](Introductory_Chapters/2_Online_Learning.excalidraw) | [Code](Introductory_Chapters/online-ml.ipynb)
@@ -25,7 +30,7 @@ Introductory Chapters
 * Machine Learning Development Lifecycle: [Notes](Introductory_Chapters/5_Machine_learning_developlement_lifecycle.excalidraw)
 * Tensors: [Notes](Introductory_Chapters/6_Tensors.excalidraw) | [Code](Introductory_Chapters/tensors_demo.ipynb)
 
-End to End Toy Project
+End to End Toy Project: [Info](Toy_project/Info.md) | [Code](Toy_project/end_to_end_ml.ipynb) | [Dataset](Toy_project/placement.csv)
 
 
 Hex-Codes(Notes)
