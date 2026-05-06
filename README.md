@@ -29,6 +29,7 @@ Introductory Chapters
 * Challenges in Machine Learning: [Notes](Introductory_Chapters/4_Challenges_in_machine_learning.excalidraw) | [Research Paper: unreasonable effectiveness of data](Introductory_Chapters/unreasonable_effectiveness_of_data.pdf) | [Research Paper: Cost of AI](Introductory_Chapters/costofai.pdf)
 * Machine Learning Development Lifecycle: [Notes](Introductory_Chapters/5_Machine_learning_developlement_lifecycle.excalidraw)
 * Tensors: [Notes](Introductory_Chapters/6_Tensors.excalidraw) | [Code](Introductory_Chapters/tensors_demo.ipynb)
+* How to Frame a ML Problem: [Notes](Introductory_Chapters/7_How_to_frame_ML_problem.excalidraw)
 
 End to End Toy Project: [Info](Toy_project/Info.md) | [Code](Toy_project/end_to_end_ml.ipynb) | [Dataset](Toy_project/placement.csv)
 
