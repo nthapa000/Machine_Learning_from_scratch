@@ -34,7 +34,12 @@ Introductory Chapters
 End to End Toy Project: [Info](Toy_project/Info.md) | [Code](Toy_project/end_to_end_ml.ipynb) | [Dataset](Toy_project/placement.csv)
 
 
-Hex-Codes(Notes)
+Data Gathering:  [Types](Data_gathering/Data_Gathering.png)
+* Working with CSV: [Code / Notes](Data_gathering/working_with_csv.ipynb)
+* Working with JSON/SQL: [Code / Notes](Data_gathering/working_with_json_sql.ipynb)
+
+
+Hex-Code(Notes)
 * Background: #121212
 * White (main text): #FFFFFF
 
