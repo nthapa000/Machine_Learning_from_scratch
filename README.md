@@ -37,6 +37,7 @@ End to End Toy Project: [Info](Toy_project/Info.md) | [Code](Toy_project/end_to_
 Data Gathering:  [Types](Data_gathering/Data_Gathering.png)
 * Working with CSV: [Code / Notes](Data_gathering/working_with_csv.ipynb)
 * Working with JSON/SQL: [Code / Notes](Data_gathering/working_with_json_sql.ipynb)
+* Working with API: [Code / Notes](Data_gathering/working_with_api.ipynb)
 
 
 Hex-Code(Notes)
