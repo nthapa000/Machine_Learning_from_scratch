@@ -40,6 +40,10 @@ Data Gathering:  [Types](Data_gathering/Data_Gathering.png)
 * Working with API: [Code / Notes](Data_gathering/working_with_api.ipynb)
 * Fetching data using web scrapping: [Code /Notes](Data_gathering/fetching_data_using_web_scrapping.ipynb)
 
+
+Understanding your data: [Brief Overview](understanding_your_data_eda/understand_your_data.png)
+* Understanding your data: [Code/ Notes](understanding_your_data_eda/understand_data.ipynb)
+
 Hex-Code(Notes)
 * Background: #121212
 * White (main text): #FFFFFF
