@@ -38,7 +38,7 @@ Data Gathering:  [Types](Data_gathering/Data_Gathering.png)
 * Working with CSV: [Code / Notes](Data_gathering/working_with_csv.ipynb)
 * Working with JSON/SQL: [Code / Notes](Data_gathering/working_with_json_sql.ipynb)
 * Working with API: [Code / Notes](Data_gathering/working_with_api.ipynb)
-
+* Fetching data using web scrapping: [Code /Notes](Data_gathering/fetching_data_using_web_scrapping.ipynb)
 
 Hex-Code(Notes)
 * Background: #121212
