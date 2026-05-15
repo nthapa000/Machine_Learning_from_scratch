@@ -43,6 +43,9 @@ Data Gathering:  [Types](Data_gathering/Data_Gathering.png)
 
 Understanding your data: [Brief Overview](understanding_your_data_eda/understand_your_data.png)
 * Understanding your data: [Code/ Notes](understanding_your_data_eda/understand_data.ipynb)
+* EDA univariate Analysis: [Code/ Notes](understanding_your_data_eda/eda_univariate.ipynb)
+* EDA bivariate and multivariate analysis: [Code/ Notes](understanding_your_data_eda/eda_bivariate_multivariate.ipynb)
+
 
 Hex-Code(Notes)
 * Background: #121212
