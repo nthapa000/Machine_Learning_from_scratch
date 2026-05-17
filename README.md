@@ -47,6 +47,8 @@ Understanding your data: [Brief Overview](understanding_your_data_eda/understand
 * EDA bivariate and multivariate analysis: [Code/ Notes](understanding_your_data_eda/eda_bivariate_multivariate.ipynb)
 
 
+Foundation of Machine Learning and Artificial intelligence: [Module_1.md](Module_1_Foundation_of_ML_AI/Module_1.md)
+
 Hex-Code(Notes)
 * Background: #121212
 * White (main text): #FFFFFF
