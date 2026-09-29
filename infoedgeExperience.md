@@ -22,8 +22,9 @@ through campus placements (Day 1, Slot 1).
 | Round 4 | Background discussion + case studies (senior data scientist) | ~1 hr |
 | Round 5 | HR | 15-20 min |
 
-- Rounds 1 and 2 are broad "drilling" rounds: three or four questions from each of the core topics. These two rounds
-  eliminate the most candidates.
+- Rounds 1 and 2 are broad "drilling" rounds: three or four questions from each core topic. The topics are Python,
+  SQL, machine learning, deep learning, statistics, probability and sometimes linear algebra. About 40 students were
+  shortlisted for interviews, and these two rounds eliminated the most.
 - **Interview day** ([00:21](https://www.youtube.com/watch?v=nWyBQhGnHaM&t=21s)): it started between 8 and 9 AM, with
   waits of 5-30 minutes between rounds on the same Meet link. He was also doing other companies' rounds the same day,
   so it was long and tiring.
@@ -33,6 +34,9 @@ through campus placements (Day 1, Slot 1).
 ---
 
 ## 2. Rounds 1 & 2: technical questions ([04:55](https://www.youtube.com/watch?v=nWyBQhGnHaM&t=295s))
+
+These are the questions he remembered. He listed Python and SQL among the topics too, but did not describe those
+questions.
 
 ### Statistics
 - What a p-value is, what alpha (significance level) is, and how to compare the two.
@@ -81,7 +85,8 @@ What he did:
    impressed.
 2. Checked for missing values (there were none).
 3. Checked for outliers using `describe()`. All percentages were within 0-100, so any extreme values were genuine data,
-   not errors.
+   not errors. This was a test of judgement: blindly removing "outliers" with box plots or z-scores would have been
+   the wrong move here.
 4. Ran value counts on the categorical columns and split the columns into numerical and categorical.
 5. Built a correlation matrix.
 6. Trained a **logistic regression** model.
@@ -93,8 +98,9 @@ What he did:
 
 Taken by a senior data scientist.
 
-**Background check:** where he learned ML and what he had worked on (computer vision, some NLP). The interviewer
-wanted to see whether he had genuinely been doing ML for a long time.
+**Background check:** where he learned ML and what else he had been exposed to: reinforcement learning (through a
+robotics club), computer vision and some NLP. The interviewer wanted to see whether he had genuinely been doing ML for
+a long time.
 
 ### Case 1: will this user buy a property? (99acres) ([09:00](https://www.youtube.com/watch?v=nWyBQhGnHaM&t=540s))
 Given a user's browsing data on 99acres, design features that predict whether they will buy a property. The
@@ -111,8 +117,9 @@ interviewer kept asking for more until he ran out; he came up with roughly 5-10 
   transformations.
 
 ### Case 2: you are the sales head of Naukri.com ([10:54](https://www.youtube.com/watch?v=nWyBQhGnHaM&t=654s))
-Name three things you would do to increase revenue. The twist: **no clarifying questions allowed**, unlike most case
-rounds.
+Name three things you would do to increase revenue. The twist: **no clarifying questions allowed**. In most case
+rounds you would ask clarifying questions and structure the problem first. He thinks the interviewer was also testing
+his knowledge of the company.
 - **His framing:** a large part of the revenue comes from companies paying to post jobs. It is a two-sided cycle. More
   companies attract more job seekers (and more ad revenue), and more job seekers attract more companies, so both sides
   must grow together.
@@ -130,8 +137,11 @@ rounds.
 - **Work model:** they told him office attendance was moving to 4 days in office and 1 day from home. He said he was
   keen to be in the office to learn from seniors in person.
 - **"Why InfoEdge?"** He calls this the most important HR question, a chance to show you are a strong fit and not just
-  interested. His answer was that InfoEdge combines a strong business side with real tech (deep learning models such as
-  transformers), and offers varied work across several products rather than a single one.
+  interested. His answer had three parts:
+  - InfoEdge combines business and tech: its ML models solve real problems for real customers.
+  - It is strong technically. He referred to the company's pre-placement presentation and the deep learning work it
+    showed, such as transformers.
+  - It offers varied work across several products rather than a single one.
 
 ---
 
@@ -142,7 +152,8 @@ rounds.
 - He joined a placement-preparation programme (its name is unclear in the audio) a few weeks after its batch started.
   In his account, it helped with:
   - **Aptitude speed:** anyone can solve aptitude questions; what matters is speed. Practice made him much faster at
-    permutations & combinations and probability, which helped in the MCQ test.
+    permutations & combinations and probability (topics most people have not revised since JEE), which helped in the
+    MCQ test.
   - **Group discussions:** he took part in 9 of the 10 GDs, which built his impromptu speaking. He also learned to tell
     his intro and experiences as engaging stories.
   - **Knowing the syllabus:** what companies do and do not ask in probability and statistics. Mentors across tech,
@@ -165,15 +176,16 @@ roles roughly doubled year on year.
 1. **The online test is a speed test.** Practise aptitude, P&C and probability until you are fast. Expect 40 MCQs across
    ML, DL, statistics and probability.
 2. **Prepare linear algebra.** Rank, eigenvalues and eigenvectors, and null space all came up, which is unusual for
-   data science interviews. DSA was not asked.
+   data science interviews. DSA was not asked, but Python and SQL are on the topic list.
 3. **Know the fundamentals deeply, not just by name:** p-values, Naive Bayes from Bayes' theorem, PCA via SVD, t-SNE,
    Fisher LDA, backpropagation, vanishing/exploding gradients, weight initialisation, ARIMA vs LSTM/GRU, linear
    regression assumptions, GLMs.
 4. **Everything on your resume will be drilled.** Be ready to explain any technique you mention.
 5. **In the coding round, think like a data scientist before writing code:** check for leakage, missing values and
-   outliers, then build a simple baseline (logistic regression) and evaluate it properly (confusion matrix, precision,
-   recall, F1).
+   outliers (using judgement rather than blindly dropping values), then build a simple baseline (logistic regression)
+   and evaluate it properly (confusion matrix, precision, recall, F1).
 6. **In case studies, engineer features that capture user intent** (price range, location), and expect the interviewer
    to keep pushing for more.
 7. **For HR, research the company in depth** (history, products) and prepare a strong, specific "Why InfoEdge?".
+   Referring to what you learned from the company's pre-placement talk helps.
 8. **Manage your energy on interview day:** the rounds run back to back for hours, so keep water handy.
