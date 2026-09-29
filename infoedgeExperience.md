@@ -59,8 +59,8 @@ Questions followed the projects on his resume:
 - How a network trains: forward pass, computing the loss, backpropagation and computing gradients.
 - Ways to prevent overfitting.
 - Weight initialisation: Xavier/Glorot vs He initialisation, and which activations each suits.
-- **Time series** ([07:08](https://www.youtube.com/watch?v=nWyBQhGnHaM&t=428s)): which models to use. He covered ARIMA and
-  its drawbacks, then LSTMs and GRUs and their internal structure.
+- **Time series** ([07:08](https://www.youtube.com/watch?v=nWyBQhGnHaM&t=428s)): which models to use. He covered RNNs and
+  their drawbacks, then LSTMs and GRUs and their internal structure.
 
 ### Linear algebra (the hardest part) ([07:25](https://www.youtube.com/watch?v=nWyBQhGnHaM&t=445s))
 - His view: InfoEdge is the only data science company he saw that asks linear algebra, and it did not ask DSA at all.
@@ -90,7 +90,7 @@ What he did:
 4. Ran value counts on the categorical columns and split the columns into numerical and categorical.
 5. Built a correlation matrix.
 6. Trained a **logistic regression** model.
-7. Evaluated it with a confusion matrix, precision, recall and F1 score.
+7. Evaluated it with a confusion matrix, precision, recall, F1 score and accuracy.
 
 ---
 
@@ -149,7 +149,7 @@ his knowledge of the company.
 
 - He had expected a pre-placement offer (PPO) from an NVIDIA internship. Because of a hiring freeze, very few interns
   got one (he says about 1 in 6), so he started preparing for placements.
-- He joined a placement-preparation programme (its name is unclear in the audio) a few weeks after its batch started.
+- He joined MAS, a placement-preparation programme, about three weeks after its first batch started.
   In his account, it helped with:
   - **Aptitude speed:** anyone can solve aptitude questions; what matters is speed. Practice made him much faster at
     permutations & combinations and probability (topics most people have not revised since JEE), which helped in the
@@ -178,12 +178,12 @@ roles roughly doubled year on year.
 2. **Prepare linear algebra.** Rank, eigenvalues and eigenvectors, and null space all came up, which is unusual for
    data science interviews. DSA was not asked, but Python and SQL are on the topic list.
 3. **Know the fundamentals deeply, not just by name:** p-values, Naive Bayes from Bayes' theorem, PCA via SVD, t-SNE,
-   Fisher LDA, backpropagation, vanishing/exploding gradients, weight initialisation, ARIMA vs LSTM/GRU, linear
+   Fisher LDA, backpropagation, vanishing/exploding gradients, weight initialisation, RNNs vs LSTMs/GRUs, linear
    regression assumptions, GLMs.
 4. **Everything on your resume will be drilled.** Be ready to explain any technique you mention.
 5. **In the coding round, think like a data scientist before writing code:** check for leakage, missing values and
    outliers (using judgement rather than blindly dropping values), then build a simple baseline (logistic regression)
-   and evaluate it properly (confusion matrix, precision, recall, F1).
+   and evaluate it properly (confusion matrix, precision, recall, F1, accuracy).
 6. **In case studies, engineer features that capture user intent** (price range, location), and expect the interviewer
    to keep pushing for more.
 7. **For HR, research the company in depth** (history, products) and prepare a strong, specific "Why InfoEdge?".
