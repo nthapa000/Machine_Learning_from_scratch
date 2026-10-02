@@ -1,1 +1,217 @@
-% TODO 19_cnn
+\chapter{Convolutional Neural Networks}
+\companion{3Blue1Brown: But what is a convolution?}{\ytid{KuXjwB4LzSA}}
+
+InfoEdge interviews reportedly asked CNN filters, stride and padding with the output-size formula, max pooling, and whether CNNs are
+rotation and translation invariant. 99acres has millions of property photos; Naukri parses resume PDFs and images; Jeevansathi has profile
+photos (and fake-photo detection). This chapter builds convolution from a 3$\times$3 example to modern architectures.
+
+\section{Why not a dense network on images?}
+A 224$\times$224 colour image has $224\times224\times3 = 150{,}528$ numbers. A dense layer to just 1{,}000 units needs 150 million weights.
+Worse, a dense layer treats pixel (10, 10) and pixel (11, 10) as unrelated, and a cat in the top-left corner is a completely different input
+from the same cat in the bottom-right. Images have two properties a model should exploit:
+\begin{itemize}
+\item \textbf{Locality}: nearby pixels are related; edges and textures are local patterns.
+\item \textbf{Translation}: the same pattern (an edge, a window, a face) can appear anywhere.
+\end{itemize}
+A convolution layer uses \emph{small} filters (locality) and \emph{slides the same filter} everywhere (weight sharing for translation).
+
+\section{The convolution operation, by hand}
+A \textbf{filter} (kernel) is a small grid of weights, e.g. 3$\times$3. Slide it over the image; at each position, multiply element-wise with the
+patch under it and sum: one output number. The grid of outputs is a \textbf{feature map}.
+\begin{example}[: a vertical-edge detector]
+Input (4$\times$4) and filter:
+\[ X = \begin{pmatrix}10&10&0&0\\10&10&0&0\\10&10&0&0\\10&10&0&0\end{pmatrix},\qquad
+K = \begin{pmatrix}1&0&-1\\1&0&-1\\1&0&-1\end{pmatrix}. \]
+Top-left position: patch columns 1--3: $(10 + 10 + 10)\cdot1 + 0 + (0 + 0 + 0)\cdot(-1) = 30$. Top-right position: columns 2--4:
+$(10+10+10) - 0 = 30$. Output (2$\times$2) is all 30: strong response where brightness drops left to right: a vertical edge.
+On a uniform patch the output would be 0.
+\end{example}
+(Technically deep-learning libraries compute cross-correlation, without flipping the kernel; since kernels are learned, it does not matter.)
+
+With $C_{in}$ input channels (RGB: 3), each filter has depth $C_{in}$ (3$\times$3$\times$3) and sums over all channels. Using $C_{out}$ filters gives
+$C_{out}$ output channels, each a different detected pattern.
+
+\section{Output size: the formula}
+For input size $n$, filter $f$, padding $p$, stride $s$:
+\[ \boxed{n_{out} = \Big\lfloor\frac{n + 2p - f}{s}\Big\rfloor + 1.} \]
+\begin{itemize}
+\item \textbf{Padding} adds $p$ rows/columns of zeros around the border, so edges are processed and size can be kept. ``Same'' padding for stride 1:
+  $p = (f-1)/2$ (1 for 3$\times$3).
+\item \textbf{Stride} is the step between positions; stride 2 halves the size (downsampling).
+\end{itemize}
+\begin{example}[: output sizes]
+$32\times32$, $f = 5$, $p = 0$, $s = 1$: $28$. AlexNet layer 1: $227$, $f = 11$, $s = 4$, $p = 0$: $(216/4) + 1 = 55$.
+$28$, $f = 3$, same padding: $p = 1$, output 28. $7$, $f = 3$, $s = 2$: $3$. $8$, $f = 3$, $s = 2$: $\lfloor5/2\rfloor + 1 = 3$ (floor matters).
+$64$, $f = 5$, $s = 3$, $p = 2$: $\lfloor63/3\rfloor + 1 = 22$.
+\end{example}
+
+\section{Parameters and computation}
+A conv layer has $(f\cdot f\cdot C_{in} + 1)\cdot C_{out}$ parameters (one bias per filter), \emph{independent of image size}.
+\begin{example}[: parameter counts]
+64 filters of 3$\times$3 on RGB: $(27 + 1)\cdot64 = 1{,}792$. 64 filters of 5$\times$5 on 32 channels: $(800 + 1)\cdot64 = 51{,}264$.
+A 1$\times$1 conv from 256 to 64 channels: $(256 + 1)\cdot64 = 16{,}448$.
+Compare a dense layer from a flattened $32\times32\times3$ image to 100 units: $307{,}200$ weights.
+\end{example}
+Multiplications: output size $\times$ per-output cost: producing $28\times28\times64$ from 3 channels with 3$\times$3 filters: $28\cdot28\cdot64\cdot27 = 1{,}354{,}752$.
+
+\section{Pooling}
+\textbf{Max pooling} (usually 2$\times$2, stride 2) keeps the largest value in each window: halves width and height, adds small-shift robustness, has
+\emph{no parameters}. \textbf{Average pooling} takes the mean. \textbf{Global average pooling} averages each whole channel to one number
+($7\times7\times512\to512$), replacing huge dense layers at the end of modern CNNs.
+\begin{example}[: max vs average pooling]
+Window $\begin{pmatrix}1&3\\2&8\end{pmatrix}$: max $= 8$, average $= 3.5$.
+\end{example}
+During backprop through max pooling, the gradient goes only to the position that held the maximum (others get 0).
+
+\section{Invariance vs equivariance}
+\begin{itemize}
+\item \textbf{Equivariance}: shifting the input shifts the output by the same amount. Convolution is (approximately) \textbf{translation equivariant}:
+  a cat moved 10 pixels right produces the same feature map moved 10 pixels right.
+\item \textbf{Invariance}: the output does not change. Pooling (and global pooling at the end) adds some \textbf{translation invariance}: the final
+  ``cat'' score barely depends on where the cat is.
+\item CNNs are \textbf{not} inherently \textbf{rotation} or \textbf{scale} invariant: a filter tuned to vertical edges does not fire on horizontal ones.
+  We get approximate rotation/scale robustness from \textbf{data augmentation} (random rotations, crops, zoom) or special architectures.
+  Strides and pooling also break exact equivariance (small shifts can change outputs).
+\end{itemize}
+
+\section{Receptive field and the feature hierarchy}
+The \textbf{receptive field} of a unit is the input region that can affect it. Stacking three 3$\times$3 convolutions (stride 1) gives a 7$\times$7 receptive
+field, with fewer parameters ($3\cdot9C^2 = 27C^2$) than one 7$\times$7 layer ($49C^2$) and more non-linearities. Two 3$\times$3 layers ($18C^2$) see as much as
+one 5$\times$5 ($25C^2$): the VGG insight. Dilated convolutions (gaps between filter taps; 3$\times$3 with dilation 2 has an effective size 5) enlarge the
+receptive field cheaply.
+
+Early layers detect edges and colours; middle layers textures and parts (windows, door handles); deep layers whole objects (kitchen, bathroom).
+
+\section{Landmark architectures}
+\begin{itemize}
+\item \textbf{LeNet-5} (1998): digits; conv--pool--conv--pool--dense.
+\item \textbf{AlexNet} (2012): won ImageNet by a large margin; ReLU, dropout, data augmentation, GPUs, overlapping max pooling.
+\item \textbf{VGG} (2014): only 3$\times$3 convs, very deep (16--19 layers); about 138M parameters, most in the final dense layers.
+\item \textbf{GoogLeNet/Inception} (2014): parallel 1$\times$1, 3$\times$3, 5$\times$5 branches; \textbf{1$\times$1 convolutions} reduce channels cheaply (a ``bottleneck'').
+\item \textbf{ResNet} (2015): residual connections, 50--152 layers.
+\item \textbf{MobileNet}: \textbf{depthwise separable} convolutions: a 3$\times$3 filter per input channel, then a 1$\times$1 to mix. For 64$\to$128 channels:
+  $9\cdot64 + 64\cdot128 = 8{,}768$ weights vs $9\cdot64\cdot128 = 73{,}728$.
+\item \textbf{EfficientNet}: scaling depth, width and resolution together.
+\item \textbf{Vision Transformers (ViT)}: split the image into 16$\times$16 patches (224$\times$224 gives 196 patches, 197 tokens with [CLS]) and apply a
+  Transformer; weaker built-in locality bias, so they need more data or pre-training.
+\end{itemize}
+
+\section{Transfer learning}
+Take a CNN pre-trained on ImageNet; its early and middle layers are general. With little data (2{,}000 labelled property photos), replace the final layer and
+train it (feature extraction), then optionally unfreeze the top blocks with a small learning rate (fine-tuning). Use the same input normalisation as
+pre-training. This is usually the single biggest win on small image datasets.
+
+\section{1-D CNNs}
+Convolutions also work on sequences: text (filters over word embeddings detect n-gram patterns, e.g. TextCNN) and time series (daily applications). They are
+fast and parallel, with a limited receptive field.
+
+\begin{practical}[: CNNs at InfoEdge]
+\begin{itemize}
+\item \textbf{99acres}: room-type classification of listing photos, image quality scoring (blurry/dark photos ranked lower), duplicate-listing detection with
+  CNN embeddings, watermark/contact-number detection in images.
+\item \textbf{Jeevansathi}: photo moderation and fake-profile detection (stock photos, celebrity images, GAN-generated faces).
+\item \textbf{Naukri}: OCR and layout models for resume parsing (CNN backbones in document AI).
+\end{itemize}
+\end{practical}
+
+\stuck{Stanford CS231n notes: Convolutional Neural Networks}{https://cs231n.github.io/convolutional-networks/}
+\section{Interview questions}
+
+\begin{qa}{\pyq{INT: output size formula} Input $32\times32$, filter $5\times5$, padding 0, stride 1: output size? AlexNet: input 227, filter 11, stride 4: output size?
+State the general formula and why the floor is there.}
+\oneline{$\lfloor(n + 2p - f)/s\rfloor + 1$: 28 and 55; the floor appears because a filter that would run past the padded border is not applied.}
+\why Count positions: the filter's left edge can start at $0, s, 2s, \dots$ as long as it fits within $n + 2p$, i.e. start $\le n + 2p - f$. Number of
+starts $= \lfloor(n + 2p - f)/s\rfloor + 1$.
+\worked $8\times8$, $f = 3$, $s = 2$: $\lfloor5/2\rfloor + 1 = 3$; the last column is skipped.
+\end{qa}
+
+\begin{qa}{\pyq{INT: same padding} What padding keeps a $28\times28$ input at $28\times28$ with a $3\times3$ filter and stride 1? In general?}
+\oneline{$p = 1$; in general $p = (f - 1)/2$ for odd $f$ and stride 1.}
+\end{qa}
+
+\begin{qa}{\pyq{INT: filters and parameters} How many parameters and outputs does a conv layer with 64 filters of $3\times3$ on a $32\times32\times16$ input (same
+padding, stride 1) have?}
+\oneline{$(3\cdot3\cdot16 + 1)\cdot64 = 9{,}280$ parameters; output $32\times32\times64$.}
+\why Each filter spans all 16 input channels; parameters do not depend on the $32\times32$ spatial size. This weight sharing is why CNNs are parameter-efficient.
+\end{qa}
+
+\begin{qa}{\pyq{INT: max pooling} What does max pooling do and why is it used? What happens to gradients through it?}
+\oneline{It keeps the largest activation in each window, shrinking the feature map, adding small-shift robustness and reducing computation with no parameters; in
+backprop the gradient flows only to the maximum element of each window.}
+\why ``Did this feature appear anywhere in this region?'' Max keeps the strongest evidence. Average pooling is smoother; global average pooling summarises each
+channel for classification. Strided convolutions can replace pooling (learned downsampling).
+\end{qa}
+
+\begin{qa}{\pyq{INT: rotation and translation invariance} Is a CNN translation invariant? Rotation invariant?}
+\oneline{Convolution layers are translation \emph{equivariant} (shifted input, shifted feature map); pooling and global pooling make the final output approximately translation
+\emph{invariant}; CNNs are not rotation (or scale) invariant by design, so we use augmentation or special architectures for that.}
+\why A filter is applied identically at every position: equivariance. Rotate an image by 90\textdegree\ and horizontal edges become vertical: different filters respond.
+Max pooling's window and strides only give invariance to small shifts; in fact aliasing can make outputs sensitive to 1-pixel shifts.
+\pushes \emph{``How would you make a property-photo classifier robust to rotated uploads?''} Random rotation augmentation; or detect orientation (EXIF) and correct it.
+\end{qa}
+
+\begin{qa}{Why do CNNs work better than dense networks on images?}
+\oneline{Local connectivity and weight sharing exploit the locality and translation structure of images, giving far fewer parameters, better generalisation, and a
+hierarchy of features from edges to objects.}
+\worked Dense from $32\times32\times3$ to 100 units: 307{,}200 weights; a conv layer with 64 filters of $3\times3$: 1{,}792.
+\end{qa}
+
+\begin{qa}{What does a $1\times1$ convolution do?}
+\oneline{It mixes channels at each pixel independently, a per-pixel dense layer; used to reduce or expand the number of channels cheaply (bottlenecks) and add
+non-linearity.}
+\worked 256$\to$64 channels: 16{,}448 parameters. In a bottleneck block, 256$\to$64 (1$\times$1), 64$\to$64 (3$\times$3), 64$\to$256 (1$\times$1) is much cheaper than
+3$\times$3 at 256 channels.
+\end{qa}
+
+\begin{qa}{What is the receptive field of three stacked $3\times3$ convolutions? Why stack small filters?}
+\oneline{$7\times7$; stacking small filters gives the same receptive field with fewer parameters and more non-linearities than one large filter.}
+\why Each extra $3\times3$ layer adds 2 to the receptive field: $3\to5\to7$. Parameters $27C^2$ vs $49C^2$.
+\end{qa}
+
+\begin{qa}{Explain depthwise separable convolution and compute its saving for $3\times3$, 64$\to$128 channels.}
+\oneline{Split a convolution into a per-channel spatial filter (depthwise) and a $1\times1$ channel mixer (pointwise): $576 + 8{,}192 = 8{,}768$ weights vs 73{,}728, about
+8.4 times fewer.}
+\end{qa}
+
+\begin{qa}{\deep Why did VGG-16 have 138M parameters, and how did later networks shrink this?}
+\oneline{Most parameters sit in the first fully connected layer ($7\times7\times512\to4096$, about 103M); later networks replaced the dense head with global average pooling and
+used bottlenecks and depthwise convolutions.}
+\end{qa}
+
+\begin{qa}{\deep You have 2{,}000 labelled 99acres photos across 6 room types. How do you build a classifier?}
+\oneline{Transfer learning: start from an ImageNet-pretrained ResNet/EfficientNet, replace the head with a 6-way classifier, train the head first, then fine-tune the top
+blocks with a small learning rate, with augmentation, class balancing and a held-out test set split by listing.}
+\why Split by listing (photos of the same flat are near-duplicates: leakage). Augmentations: flips, crops, colour jitter, small rotations. Evaluate macro F1 and the
+confusion matrix (kitchen vs dining confusions). Consider CLIP zero-shot as a baseline. Expect 90\%+ quickly.
+\end{qa}
+
+\begin{qa}{\deep Can you use a CNN on tabular data? On text?}
+\oneline{On text and time series, yes: 1-D convolutions over the sequence detect local patterns (n-grams, short-term motifs); on ordinary tabular data, no natural spatial
+order exists, so convolution's locality assumption is meaningless and trees or MLPs are better.}
+\end{qa}
+
+\begin{qa}{What does a transposed convolution do? Compute the output for input 4, kernel 4, stride 2, padding 1.}
+\oneline{It upsamples (the gradient of a strided convolution), used in decoders and GAN generators; output $= (n - 1)s - 2p + f = 3\cdot2 - 2 + 4 = 8$.}
+\end{qa}
+
+\begin{qa}{How many multiplications to produce a $28\times28\times64$ output from 3 channels with $3\times3$ filters?}
+\oneline{$28\cdot28\cdot64\cdot27 = 1{,}354{,}752$.}
+\end{qa}
+
+\begin{qa}{Global average pooling on a $7\times7\times512$ tensor: output shape, and why use it?}
+\oneline{512 numbers (one per channel); it removes huge dense layers, reduces overfitting, and accepts variable input sizes.}
+\end{qa}
+
+\begin{qa}{\deep What features does a CNN learn at different depths, and how could you check?}
+\oneline{Edges and colour blobs early, textures and parts in the middle, object-level concepts deep; check by visualising filters, feature maps, maximally activating image
+patches, or saliency maps such as Grad-CAM.}
+\end{qa}
+
+\begin{qa}{CNN vs Vision Transformer: what is the trade-off?}
+\oneline{CNNs have strong built-in biases (locality, translation equivariance) and do well with less data; ViTs have weaker biases and global attention from the first layer,
+so they need more data or pre-training but scale better and capture long-range relations.}
+\end{qa}
+
+\begin{qa}{How would you detect duplicate property listings that use the same photos with small edits?}
+\oneline{Embed photos with a CNN (or perceptual hashes for exact/near copies), index embeddings with ANN, and flag listing pairs with several highly similar photos, combined with text and location similarity.}
+\end{qa}

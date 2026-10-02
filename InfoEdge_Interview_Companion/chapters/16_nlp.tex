@@ -1,1 +1,240 @@
-% TODO 16_nlp
+\chapter{Basic NLP: Preprocessing, Bag of Words and TF-IDF}
+\companion{Krish Naik: TF-IDF Intuition (NLP)}{\yts{Krish+Naik+TF-IDF+intuition+NLP}}
+
+InfoEdge is a text company: resumes, job descriptions, search queries, chat messages, matrimonial bios. The OA has asked about
+bag of words, tokenisation, stemming and lemmatisation; Round 3 lists ``basic text processing''; the PremiumX slide shows hybrid
+retrieval where the ``sparse'' half is keyword (TF-IDF/BM25) search. This chapter makes you fluent in classical NLP.
+
+\section{Why text needs special treatment}
+Models need numbers; text is a sequence of symbols of variable length, with a huge vocabulary, ambiguity (``Java'' the language
+vs the island), spelling variants (``Bengaluru'', ``Bangalore''), abbreviations (``ML'', ``Sr.''), and meaning that depends on order
+(``not good''). Classical NLP turns text into fixed-length vectors through a pipeline:
+\[ \text{raw text}\to\text{clean}\to\text{tokenise}\to\text{normalise}\to\text{vectorise}\to\text{model}. \]
+
+\section{Tokenisation}
+Splitting text into units (\textbf{tokens}).
+\begin{itemize}
+\item \textbf{Word-level}: split on spaces and punctuation. ``Sr. Data Scientist, 5+ yrs'' $\to$ [Sr, ., Data, Scientist, ,, 5, +, yrs].
+  Problems: ``C++'', ``Node.js'', ``e-mail'', URLs, Hindi--English code mixing; unknown words at test time (\textbf{OOV}, out of vocabulary).
+\item \textbf{Character-level}: no OOV, but long sequences and little meaning per token.
+\item \textbf{Subword} (BPE, WordPiece, SentencePiece/Unigram): frequent words stay whole, rare words split into pieces
+  (``unbelievable'' $\to$ ``un'', ``\#\#believ'', ``\#\#able''). The standard for modern models: small vocabulary, no OOV.
+\end{itemize}
+
+\subsection{Byte-pair encoding (BPE) in one example}
+Start from characters; repeatedly merge the most frequent adjacent pair into a new symbol.
+\begin{example}[: BPE merges]
+Corpus: ``low'' $\times5$, ``lower'' $\times2$, ``newest'' $\times6$, ``widest'' $\times3$. Count adjacent pairs: ``e s'' occurs in newest (6)
+and widest (3) $= 9$; ``s t'' also 9; ``l o'' 7; ``w e'' 8. Merge ``e s'' $\to$ ``es'' (first of the ties). Next, ``es t'' $= 9\to$ ``est''. Then
+``l o'' $\to$ ``lo''. After a few merges, ``est'' and ``low'' are single tokens, and an unseen word like ``lowest'' is ``low'' + ``est''.
+\end{example}
+
+\section{Normalisation}
+\begin{itemize}
+\item \textbf{Lower-casing} (careful: ``US'' vs ``us'', ``IT'' department vs ``it'').
+\item \textbf{Removing punctuation, numbers, HTML}; or keeping them when meaningful (``C++'', ``5+ yrs'').
+\item \textbf{Stop words}: very common words (the, is, and) carry little topical meaning; removing them shrinks the vocabulary.
+  Dangerous for sentiment (``not'') and phrase meaning (``to be or not to be'').
+\item \textbf{Stemming}: chop suffixes with rules (Porter, Snowball): ``running'', ``runs'' $\to$ ``run''; ``studies'' $\to$ ``studi''. Fast, crude:
+  \emph{over-stemming} merges unrelated words (``university'', ``universe'' $\to$ ``univers''); \emph{under-stemming} misses related ones.
+\item \textbf{Lemmatisation}: map to the dictionary form (lemma) using vocabulary and part of speech: ``better'' $\to$ ``good'', ``was'' $\to$ ``be'',
+  ``meeting'' $\to$ ``meet'' (verb) or ``meeting'' (noun). Accurate, slower, needs POS context.
+\item \textbf{Domain normalisation}: synonyms and spelling variants (``Bangalore'' = ``Bengaluru''; ``ML'' = ``machine learning''): the
+  SilverSkAI taxonomy problem.
+\end{itemize}
+
+\section{Bag of Words (BoW)}
+Fix a \textbf{vocabulary} (all words seen in training, perhaps the top 50{,}000). Represent each document by a vector of word counts, ignoring
+order.
+\begin{example}[: BoW vectors]
+Vocabulary [ml, python, sql]. ``python ml python'' $\to$ (1, 2, 0). ``sql and ml'' $\to$ (1, 0, 1) (``and'' is not in the vocabulary).
+\end{example}
+Variants: binary presence (0/1); term frequency normalised by document length; \textbf{n-grams}: add pairs (bigrams) or triples of adjacent words
+to capture short phrases (``machine learning'', ``not good''). A sentence of 7 tokens has 6 bigrams and 5 trigrams ($n - k + 1$ $k$-grams).
+
+\textbf{Limitations}: loses word order (``dog bites man'' = ``man bites dog''), huge sparse vectors, no notion of similarity between words
+(``ML'' and ``machine learning'' are unrelated columns), common words dominate counts.
+\begin{example}[: sparsity]
+10{,}000 resumes, vocabulary 50{,}000, about 100 distinct words per resume: non-zero fraction $= 100/50{,}000 = 0.2\%$. Stored as a sparse matrix.
+\end{example}
+
+\section{TF-IDF: down-weighting words everybody uses}
+Raw counts make ``experience'', ``team'', ``work'' look important in every resume. TF-IDF multiplies a word's frequency in the document by how
+\emph{rare} it is across documents.
+\[ \text{tf-idf}(t, d) = \text{tf}(t, d)\times\text{idf}(t),\qquad \text{idf}(t) = \log\frac{N}{\text{df}(t)}, \]
+with $N$ = number of documents and df$(t)$ = number containing $t$.
+\begin{itemize}
+\item A word in every document: idf $= \log1 = 0$; it contributes nothing.
+\item A word in one document of 10: idf $= \log_{10}10 = 1$.
+\end{itemize}
+\begin{example}[: TF-IDF of one word]
+A resume has 100 words; ``Kubernetes'' appears 3 times: tf $= 0.03$. It appears in 100 of 10{,}000 resumes: idf $= \log_{10}100 = 2$.
+tf-idf $= 0.06$. ``Team'' appears 5 times (tf $0.05$) but in 8{,}000 resumes: idf $= \log_{10}1.25 = 0.097$; tf-idf $= 0.005$.
+Kubernetes is 12 times more important for this resume despite appearing less often.
+\end{example}
+
+\subsection{scikit-learn's version}
+\code{TfidfVectorizer} uses raw counts for tf and a \emph{smoothed} idf $= \ln\frac{1 + N}{1 + \text{df}} + 1$ (so no word gets 0 and no division by
+zero), then L2-normalises each document vector. With $N = 3$, df $= 1$: $\ln(4/2) + 1 = 1.693$; df $= 3$: $\ln1 + 1 = 1$.
+Useful options: \code{ngram\_range=(1,2)}, \code{min\_df} (drop rare typos), \code{max\_df} (drop near-stopwords), \code{sublinear\_tf=True}
+($1 + \log\text{tf}$, so 20 mentions are not 20 times one mention), \code{stop\_words}, \code{max\_features}.
+
+\subsection{Comparing documents: cosine similarity}
+\[ \cos(\mathbf a,\mathbf b) = \frac{\mathbf a^\top\mathbf b}{\norm{\mathbf a}\norm{\mathbf b}}. \]
+It measures the angle, ignoring length, so a long resume and a short job description about the same skills are still similar.
+Example: $(1,1,0)$ and $(1,0,1)$: $1/(\sqrt2\sqrt2) = 0.5$.
+
+\subsection{BM25: TF-IDF for search}
+Search engines (Elasticsearch/Lucene, behind keyword retrieval in Resdex) use \textbf{BM25}, which (1) saturates term frequency (the 10th
+occurrence adds little), with parameter $k_1$, and (2) normalises by document length relative to the average, with parameter $b$:
+\[ \text{score}(q, d) = \sum_{t\in q}\text{idf}(t)\frac{\text{tf}(t,d)(k_1 + 1)}{\text{tf}(t,d) + k_1(1 - b + b\frac{|d|}{\text{avgdl}})}. \]
+
+\section{Classic text classifiers}
+On TF-IDF features: Multinomial Naive Bayes (fast baseline), logistic regression and linear SVM (strong baselines, often within a few points of
+deep models on topic classification). For 500 job categories and millions of titles, TF-IDF (word + character n-grams) + linear SVM is a
+formidable baseline.
+
+\section{Other basic NLP vocabulary}
+\begin{itemize}
+\item \textbf{N-gram language model}: $P(w_t\mid w_{t-1})$ estimated from counts; MLE $\frac{c(w_{t-1}w_t)}{c(w_{t-1})}$; smoothing for unseen pairs.
+\item \textbf{Perplexity}: $2^{\text{cross-entropy}}$; ``how many choices the model is confused between''. A model giving every token probability
+  $1/4$ has perplexity 4.
+\item \textbf{POS tagging}, \textbf{NER} (tag ``Infosys'' as ORG, ``Pune'' as LOC, ``Python'' as SKILL in resumes), \textbf{dependency parsing}.
+\item \textbf{Edit distance} (Levenshtein): minimum insertions, deletions, substitutions; ``kitten'' $\to$ ``sitting'' $= 3$. Fuzzy matching of
+  company names.
+\item \textbf{Jaccard similarity}: $|A\cap B|/|A\cup B|$ for skill sets; $\{$python, sql, ml$\}$ vs $\{$python, ml, spark, aws$\}$: $2/5 = 0.4$.
+\item \textbf{Regular expressions}: extract emails, phones, years of experience (``(\textbackslash d+)\textbackslash+?\textbackslash s*(yrs|years)'').
+\end{itemize}
+
+\begin{practical}[: classic NLP inside Naukri]
+\begin{itemize}
+\item \textbf{Query intelligence} (Resdex slide): normalise ``sr data scientist blr 5+ yrs'' into title = Senior Data Scientist, location =
+  Bengaluru, experience $\ge5$, using dictionaries, regex, NER and the taxonomy.
+\item \textbf{Sparse retrieval}: BM25 over resumes returns candidates containing the exact skills; the dense (embedding) half catches synonyms.
+\item \textbf{Title/skill normalisation}: character n-gram TF-IDF + cosine nearest neighbour maps ``Sr. S/W Engg'' to ``Senior Software Engineer''.
+\end{itemize}
+\end{practical}
+
+\stuck{scikit-learn: Text feature extraction (TF-IDF)}{https://scikit-learn.org/stable/modules/feature_extraction.html\#text-feature-extraction}
+\section{Interview questions}
+
+\begin{qa}{\pyq{OA: bag of words} What is the bag-of-words representation? Give the vector for ``python ml python'' with vocabulary [ml, python, sql].}
+\oneline{A document is represented by the counts of each vocabulary word, ignoring order and grammar; here $(1, 2, 0)$.}
+\why Each vocabulary word is one dimension; most entries are zero. It works surprisingly well for topic classification because topics are signalled by
+which words appear, not their order.
+\pushes \emph{``Limitations?''} Order lost, sparsity, no semantic similarity, sensitivity to vocabulary choice, dominated by frequent words (hence TF-IDF).
+\end{qa}
+
+\begin{qa}{\pyq{OA: stemming vs lemmatisation vs tokenisation} Define each, and say which maps ``better'' to ``good''.}
+\oneline{Tokenisation splits text into units; stemming chops affixes by rules to a crude stem; lemmatisation maps a word to its dictionary form using vocabulary
+and part of speech, and only lemmatisation maps ``better'' to ``good''.}
+\why A stemmer sees no suffix to remove in ``better''; a lemmatiser knows it is the comparative of the adjective ``good''. Stemming is fast and
+language-agnostic-ish; lemmatisation is accurate but needs a dictionary and POS tags (``meeting'' as noun vs verb).
+\end{qa}
+
+\begin{qa}{\pyq{OA: lemmatisation needs context} Why does lemmatising ``meeting'' depend on context?}
+\oneline{Because its lemma depends on its part of speech: as a verb (``I am meeting them'') it is ``meet'', as a noun (``the meeting was long'') it stays ``meeting''.}
+\end{qa}
+
+\begin{qa}{Explain TF-IDF from scratch and compute it for a word appearing 3 times in a 100-word resume and in 100 of 10{,}000 resumes ($\log_{10}$).}
+\oneline{TF-IDF weights a word by how often it appears in this document times how rare it is across documents; here $0.03\times\log_{10}(100) = 0.06$.}
+\why tf rewards words central to this document; idf penalises words that appear everywhere (they do not distinguish documents). A word in every document
+gets idf 0. The product highlights words that are frequent here and rare elsewhere: the document's distinctive vocabulary.
+\pushes \emph{``Why log in idf?''} Without it, a word in 1 of a million documents would get weight $10^6$ vs 1 for a word in half of them; the log
+compresses this to roughly ``information content'' (idf $\approx -\log P(\text{word in doc})$).
+\end{qa}
+
+\begin{qa}{\pyq{OA: limitations of bag of words} Give the limitations of BoW/TF-IDF and what fixes each.}
+\oneline{No word order (use n-grams or sequence models), no synonymy (use embeddings), sparsity and high dimension (use dimensionality reduction or
+embeddings), OOV words (subword tokenisation), and no context (contextual models like BERT).}
+\end{qa}
+
+\begin{qa}{\pyq{Round 3: basic text processing} In pandas, count the top 10 most frequent words in a column of job titles, after lower-casing and
+removing punctuation.}
+\oneline{Lower-case and strip punctuation with vectorised string methods, split into lists, explode to one word per row, and use \code{value\_counts}.}
+\why
+\begin{lstlisting}
+words = (df["title"].str.lower()
+           .str.replace(r"[^a-z0-9+#\s]", " ", regex=True)   # keep c++, c#
+           .str.split()
+           .explode())
+words = words[~words.isin({"and", "the", "of", "for"})]
+print(words.value_counts().head(10))
+\end{lstlisting}
+Alternative: \code{CountVectorizer} then sum columns. Mention keeping ``+'' and ``\#'' so ``c++'' and ``c\#'' survive.
+\end{qa}
+
+\begin{qa}{Why is cosine similarity preferred to Euclidean distance for TF-IDF document vectors?}
+\oneline{Cosine compares direction (which words, in what proportions) and ignores length, so a long and a short document on the same topic are similar; Euclidean
+distance is dominated by document length.}
+\why After L2-normalising vectors (as TfidfVectorizer does), Euclidean distance and cosine are monotonically related: $\norm{\mathbf a - \mathbf b}^2 = 2 - 2\cos$.
+\end{qa}
+
+\begin{qa}{\deep Should you remove stop words? Give a case where it hurts.}
+\oneline{It helps topic classification and search efficiency, but hurts tasks where function words carry meaning: sentiment (``not''), phrase or question
+matching (``jobs \emph{in} Delhi'' vs ``jobs \emph{near} Delhi''), and any model that uses word order (BERT should see full text).}
+\end{qa}
+
+\begin{qa}{What are n-grams and what do they buy you? How many bigrams and trigrams does a 7-token sentence have?}
+\oneline{Contiguous sequences of $n$ tokens that capture local order and short phrases (``machine learning'', ``not good''); 6 bigrams and 5 trigrams.}
+\why The vocabulary grows fast with $n$, so prune with \code{min\_df}. Character n-grams (3--5) are robust to typos and morphology.
+\end{qa}
+
+\begin{qa}{Explain subword tokenisation (BPE/WordPiece) and why modern models use it.}
+\oneline{It splits words into frequent pieces learned from the corpus, so common words are single tokens and rare or new words are built from pieces; this keeps
+the vocabulary small (about 30K--50K) with no out-of-vocabulary words.}
+\why BPE: start with characters, repeatedly merge the most frequent adjacent pair. WordPiece (BERT): merge the pair that most increases training-data likelihood;
+continuation pieces are marked ``\#\#''.
+\end{qa}
+
+\begin{qa}{\deep A user searches ``ML engineer''; resumes say ``machine learning engineer''. Why does TF-IDF search miss them, and how would you fix it?}
+\oneline{TF-IDF matches exact tokens, so ``ML'' and ``machine learning'' share nothing; fix with query expansion via a synonym taxonomy, normalisation at index
+time, or dense embedding retrieval that maps both to nearby vectors, ideally combined in hybrid retrieval.}
+\why This is exactly why PremiumX uses hybrid retrieval: sparse for exact skills and rare terms (a precise certification code), dense for meaning. Merge result
+sets (e.g. reciprocal rank fusion) and re-rank.
+\end{qa}
+
+\begin{qa}{What does BM25 improve over TF-IDF?}
+\oneline{Term-frequency saturation (extra occurrences give diminishing returns) and document-length normalisation relative to the average length, both tunable
+($k_1$, $b$), which makes it the standard keyword ranking function.}
+\end{qa}
+
+\begin{qa}{Compute $P(\text{NLP}\mid\text{love})$ from the corpus ``I love NLP . I love ML .'' and explain why smoothing is needed.}
+\oneline{$c(\text{love NLP})/c(\text{love}) = 1/2$; without smoothing any unseen bigram gets probability 0, making whole sentences impossible.}
+\worked Laplace: $c(w_1) = 8$, $c(w_1w_2) = 0$, $|V| = 12$: $(0 + 1)/(8 + 12) = 0.05$.
+\end{qa}
+
+\begin{qa}{What is perplexity? A model gives each of 5 tokens probability $1/4$: what is the perplexity?}
+\oneline{Perplexity is $\exp$ of the average negative log-likelihood per token, the effective number of equally likely choices; here 4.}
+\end{qa}
+
+\begin{qa}{\deep Why do TF-IDF + linear models still compete with deep learning on some text tasks?}
+\oneline{For topic-like tasks where the presence of keywords decides the label, a linear model on TF-IDF is near-optimal, fast, and data-efficient; deep models
+shine when meaning depends on context, order, or paraphrase, or when labelled data are plentiful.}
+\why Job-category classification from titles: keywords like ``accountant'', ``Java'' are decisive. Sentiment with negation, or matching a CV to a JD with different
+vocabulary, needs context.
+\end{qa}
+
+\begin{qa}{How would you detect duplicate job postings?}
+\oneline{Normalise text, represent postings with TF-IDF or MinHash shingles (or embeddings), and find pairs with cosine or Jaccard similarity above a threshold using
+locality-sensitive hashing to avoid comparing all pairs; add rules on recruiter, company, location and posting time.}
+\end{qa}
+
+\begin{qa}{Compute the Levenshtein distance between ``kitten'' and ``sitting'' and give a use.}
+\oneline{3 (substitute k$\to$s, e$\to$i, insert g); used for fuzzy matching of company names and correcting typos in queries.}
+\end{qa}
+
+\begin{qa}{Where must the TF-IDF vocabulary and idf be fitted, and why?}
+\oneline{On the training data only (inside a Pipeline), because idf computed with test documents leaks information about the test set into training.}
+\end{qa}
+
+\begin{qa}{\deep How would you extract ``years of experience'' and ``skills'' from 1 crore unstructured resumes?}
+\oneline{Combine regular expressions and rules for structured patterns (dates, ``5+ years''), dictionary and taxonomy matching for skills with fuzzy matching, and a
+trained NER/sequence-labelling model (fine-tuned BERT) for the long tail, validated on a hand-labelled sample.}
+\why Compute experience from employment date ranges, handling overlaps and ``present''. Precision/recall per field on a labelled sample; human review for low-confidence
+extractions.
+\end{qa}
+
+\begin{qa}{What is the Jaccard similarity of $\{$python, sql, ml$\}$ and $\{$python, ml, spark, aws$\}$, and when would you use it instead of cosine?}
+\oneline{$2/5 = 0.4$; use Jaccard for sets (presence/absence), cosine for weighted vectors like TF-IDF.}
+\end{qa}

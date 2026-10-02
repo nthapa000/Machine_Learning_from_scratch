@@ -1,1 +1,255 @@
-% TODO 17_embeddings
+\chapter{Embeddings: Word2Vec, GloVe, FastText and BERT}
+\companion{StatQuest: Word Embedding and Word2Vec, Clearly Explained}{\ytid{viZrOnJclY0}}
+
+The syllabus says ``embeddings-based approaches (Word2Vec, FastText, BERT)''. The IIT Roorkee OA had questions on word embeddings;
+the Tools slide lists BERT, Siamese networks and label attention networks; PremiumX retrieval uses a vector index. Embeddings are how
+InfoEdge represents skills, titles, resumes and jobs so that ``similar'' becomes ``nearby''.
+
+\section{From one-hot to dense vectors}
+\textbf{One-hot}: a vocabulary of 50{,}000 words; each word is a 50{,}000-long vector with a single 1. Problems: huge, and every pair of
+words is equally different (dot product 0): ``Python'' is as far from ``Django'' as from ``Accounting''.
+
+\textbf{Embedding}: each word is a short dense vector (say 300 numbers) learned so that words used in similar contexts get similar vectors.
+Similarity is measured by cosine. Dimensions are not individually named, but directions often encode meaning.
+
+\begin{intuition}[: the distributional hypothesis]
+``You shall know a word by the company it keeps'' (Firth). ``PyTorch'' and ``TensorFlow'' appear near the same words (``model'',
+``training'', ``GPU'', ``deep learning''), so a method that predicts context words will give them similar vectors, even if they never
+appear together.
+\end{intuition}
+
+\section{Word2Vec}
+\subsection{Two training tasks}
+Slide a window over text. For a centre word and the words within $\pm m$ positions:
+\begin{itemize}
+\item \textbf{Skip-gram}: predict each context word from the centre word.
+\item \textbf{CBOW} (continuous bag of words): predict the centre word from the average of its context vectors.
+\end{itemize}
+\begin{example}[: skip-gram training pairs]
+Sentence ``senior data scientist python pune'' (5 words), window 2. Centre ``scientist'': pairs (scientist, senior), (scientist, data),
+(scientist, python), (scientist, pune). Over all centres: $2 + 3 + 4 + 3 + 2 = 14$ pairs.
+\end{example}
+
+\subsection{The model}
+Each word has two vectors: an input (centre) vector $\mathbf v_w$ and an output (context) vector $\mathbf u_w$. Score of context $c$ given centre $w$:
+$\mathbf u_c^\top\mathbf v_w$; probability by softmax over the whole vocabulary:
+\[ P(c\mid w) = \frac{\exp(\mathbf u_c^\top\mathbf v_w)}{\sum_{c'\in V}\exp(\mathbf u_{c'}^\top\mathbf v_w)}. \]
+It is a neural network with one linear hidden layer (the embedding lookup, no activation) and a softmax output. The embedding table has
+$|V|\times d$ parameters: 10{,}000 words $\times$ 300 $= 3$ million.
+
+\subsection{Making it fast: negative sampling}
+The softmax denominator sums over the whole vocabulary for every pair: far too slow. \textbf{Negative sampling} turns it into binary
+classification: is $(w, c)$ a real pair (label 1) or a random fake pair (label 0)? For each real pair, draw $k$ (5--20) random ``negative''
+words. Loss:
+\[ -\log\sigma(\mathbf u_c^\top\mathbf v_w) - \sum_{n=1}^k\log\sigma(-\mathbf u_{n}^\top\mathbf v_w). \]
+Each pair now costs $k + 1$ dot products instead of $|V|$. Negatives are drawn with probability $\propto f^{3/4}$ (frequency to the 3/4), which
+gives rare words a bit more chance than raw frequency.
+\begin{example}[: the 3/4 power]
+Two words with counts 16 and 1: $16^{0.75} = 8$, $1^{0.75} = 1$: probabilities $8/9$ and $1/9$ instead of $16/17$ and $1/17$.
+\end{example}
+\textbf{Subsampling} frequent words: each occurrence of word $w$ is dropped with probability $1 - \sqrt{t/f(w)}$ ($t\approx10^{-5}$), so ``the''
+does not flood training. For $f = 0.01$: $\sqrt{0.001} = 0.032$, so 97\% of occurrences are dropped.
+
+\subsection{Famous property: analogies}
+$\mathbf v_{king} - \mathbf v_{man} + \mathbf v_{woman}\approx\mathbf v_{queen}$. Relationships become directions. Toy 2-D: king $(3,4)$, man $(2,1)$,
+woman $(2,3)$: result $(3, 6)$; the nearest word to it would be ``queen''. In job data: $\mathbf v_{\text{Java developer}} - \mathbf v_{\text{Java}} +
+\mathbf v_{\text{Python}}\approx\mathbf v_{\text{Python developer}}$.
+
+\subsection{Skip-gram vs CBOW}
+Skip-gram: better for rare words and small data (each occurrence produces several training pairs); slower. CBOW: faster, smoother for frequent
+words (averaging context).
+
+\section{GloVe}
+\textbf{Global Vectors} start from a word--word co-occurrence matrix $X$ (how often $j$ appears near $i$ in the whole corpus) and fit vectors so
+that $\mathbf w_i^\top\tilde{\mathbf w}_j + b_i + \tilde b_j\approx\log X_{ij}$, with a weighting that down-weights rare and caps very frequent pairs.
+It is a weighted matrix factorisation of log co-occurrences; Word2Vec does something similar implicitly (skip-gram with negative sampling
+factorises a shifted PMI matrix).
+
+\section{FastText: embeddings from character n-grams}
+Represent each word as the sum of vectors of its character n-grams (3--6 characters, with boundary markers) plus the word itself.
+``where'' with $n = 3$: \code{<wh, whe, her, ere, re>} (5 trigrams) plus \code{<where>}.
+\begin{itemize}
+\item \textbf{OOV words get vectors}: a typo ``pythn'' or a new skill ``langchainx'' shares n-grams with known words.
+\item \textbf{Morphology}: ``developer'', ``development'', ``developing'' share n-grams.
+\item Great for noisy user-generated text (resumes, queries) and morphologically rich languages (Hindi).
+\end{itemize}
+FastText is also a fast text classifier: average word/n-gram embeddings, then a linear softmax layer.
+
+\section{Static vs contextual embeddings}
+Word2Vec, GloVe and FastText give each word \emph{one} vector regardless of context: ``Java'' (language) and ``Java'' (island), ``bank'' (river vs
+money), ``lead'' (team lead vs sales lead) get one blended vector. \textbf{Contextual} models produce a different vector for each occurrence,
+computed from the whole sentence: ELMo (bidirectional LSTMs), then BERT (Transformers).
+
+\section{BERT}
+\subsection{Architecture}
+A stack of Transformer \textbf{encoder} layers (Chapter 21). BERT-base: 12 layers, hidden size 768, 12 attention heads (64 dimensions each), about 110M
+parameters; BERT-large: 24 layers, 1024 hidden, 16 heads, 340M. WordPiece vocabulary of about 30{,}000; maximum 512 tokens. Input embedding of each
+token $=$ token embedding $+$ position embedding $+$ segment embedding (sentence A or B). Special tokens: \code{[CLS]} at the start (its final vector
+summarises the sequence for classification), \code{[SEP]} between/after sentences, \code{[MASK]}.
+\begin{example}[: BERT sizes]
+Token embedding table: $30{,}522\times768 = 23.4$M parameters. Per-head dimension: $768/12 = 64$.
+\end{example}
+
+\subsection{Pre-training objectives}
+\begin{itemize}
+\item \textbf{Masked language modelling (MLM)}: choose 15\% of tokens; of those, replace 80\% with \code{[MASK]}, 10\% with a random token, keep 10\%
+  unchanged; predict the original token. Because the model sees both left and right context, it is \textbf{bidirectional}. The 80/10/10 split exists
+  because \code{[MASK]} never appears at fine-tuning time; mixing in random and unchanged tokens forces the model to build good representations for
+  every token, not just masked ones. In a 512-token input, about 77 tokens are selected and about 61 actually replaced by \code{[MASK]}.
+\item \textbf{Next sentence prediction (NSP)}: is sentence B the real next sentence? Later shown to be of little use (RoBERTa dropped it).
+\end{itemize}
+
+\subsection{Fine-tuning}
+Add a small task head on top and train the whole network briefly (2--4 epochs, learning rate $2$--$5\times10^{-5}$): \code{[CLS]} $\to$ linear layer
+for classification (resume $\to$ job function); token vectors $\to$ per-token labels for NER (skill extraction); two segments for pair tasks (does
+this CV match this JD?).
+
+\subsection{The family}
+RoBERTa (more data, longer training, dynamic masking, no NSP); DistilBERT (40\% smaller, 60\% faster, about 97\% of performance via distillation);
+ALBERT (parameter sharing); domain models (a ``Naukri-BERT'' further pre-trained on resumes); multilingual BERT/IndicBERT. GPT models are decoder-only
+and left-to-right (generation), BERT is encoder-only (understanding).
+
+\section{Sentence and document embeddings}
+\begin{itemize}
+\item \textbf{Average of word vectors} (optionally TF-IDF weighted): simple, surprisingly strong baseline; loses order.
+\item \textbf{BERT [CLS] or mean-pooled tokens}: off-the-shelf they are poor for similarity search.
+\item \textbf{Sentence-BERT}: a \textbf{Siamese} (twin) BERT fine-tuned so that cosine similarity of the two pooled outputs matches semantic similarity
+  (contrastive or triplet loss). The standard for semantic search and matching; this is the ``Siamese neural networks'' on the Tools slide.
+\item \textbf{Bi-encoder vs cross-encoder}: bi-encoders embed query and document separately (fast, index millions, used for retrieval); a cross-encoder
+  feeds both together through BERT (slow, more accurate, used to re-rank the top 100).
+\end{itemize}
+
+\begin{practical}[: embeddings at InfoEdge]
+\begin{itemize}
+\item \textbf{Job--CV matching engine}: a two-tower (bi-encoder) model embeds jobs and resumes; ANN search retrieves candidates; a cross-encoder or
+  GBM re-ranks.
+\item \textbf{PremiumX hybrid retrieval}: vector index (dense) + keyword index (sparse), merged, then LLM-based ranking features.
+\item \textbf{Taxonomy (SilverSkAI)}: FastText/BERT embeddings of 50 lakh raw skill strings, nearest-neighbour to 70K canonical skills.
+\item \textbf{Label attention networks} (Tools slide): for multi-label tagging (which of thousands of skills a JD needs), each label gets its own attention
+  over the text's token embeddings.
+\end{itemize}
+\end{practical}
+
+\stuck{Jay Alammar: The Illustrated BERT, ELMo, and co.}{https://jalammar.github.io/illustrated-bert/}
+\section{Interview questions}
+
+\begin{qa}{\pyq{OA (IIT Roorkee): word embeddings} What are word embeddings and why are they better than one-hot vectors?}
+\oneline{Dense, low-dimensional vectors learned from context so that words used similarly are close; unlike one-hot vectors they are compact, encode similarity,
+and generalise from one word to its neighbours.}
+\why One-hot: dimension $|V|$, all pairs orthogonal, nothing learned about ``Python'' helps ``Django''. Embeddings: 100--300 dimensions, cosine similarity
+reflects meaning, and a model trained with ``Python'' examples transfers to related words. They are learned by predicting context (Word2Vec), from
+co-occurrence statistics (GloVe), or inside a task model.
+\end{qa}
+
+\begin{qa}{\pyq{OA (IIT Roorkee): CBOW vs skip-gram} Explain CBOW and skip-gram and when to use each.}
+\oneline{CBOW predicts the centre word from its averaged context; skip-gram predicts each context word from the centre word; skip-gram is better for rare words
+and smaller corpora, CBOW is faster and good for frequent words.}
+\why Skip-gram generates $2m$ training pairs per position, giving rare words many updates; CBOW makes one prediction per position from an average, which
+smooths over context noise.
+\end{qa}
+
+\begin{qa}{\pyq{INT: BERT basics} Explain BERT: architecture, pre-training and fine-tuning.}
+\oneline{BERT is a stack of Transformer encoders pre-trained on large text with masked language modelling (and originally next-sentence prediction), giving
+bidirectional contextual token vectors; you fine-tune it end to end with a small task head.}
+\why
+\textbf{Architecture.} WordPiece tokens with token, position and segment embeddings; 12 (base) or 24 (large) encoder layers of multi-head self-attention and
+feed-forward sublayers with residuals and LayerNorm.
+\textbf{MLM.} 15\% of tokens selected; 80\% $\to$ [MASK], 10\% random, 10\% unchanged; predict the originals. Because attention is not masked, every token
+sees left and right context: bidirectional.
+\textbf{Fine-tuning.} [CLS] vector into a classifier; token vectors for tagging; sentence pairs for matching. Small learning rate, few epochs.
+\pushes \emph{``Why not just train left-to-right?''} Many understanding tasks benefit from both sides of context (``the bank of the river''); MLM allows it
+without the model trivially seeing the word it predicts. \emph{``BERT vs GPT?''} Encoder vs decoder; understanding vs generation; MLM vs next-token.
+\end{qa}
+
+\begin{qa}{\pyq{INT: Word2Vec vs FastText vs BERT} Compare them.}
+\oneline{Word2Vec learns one static vector per word from context prediction; FastText does the same but builds vectors from character n-grams, so it handles
+misspellings and unseen words; BERT produces contextual vectors per token occurrence using a deep Transformer, so the same word gets different vectors in
+different sentences.}
+\why Cost and use: Word2Vec/FastText are tiny and fast (good features, similarity of skills); BERT is heavy but captures context (``lead'' in ``team lead'' vs
+``sales lead''). For OOV: Word2Vec none, FastText yes, BERT via subwords.
+\end{qa}
+
+\begin{qa}{Why is the full softmax slow in Word2Vec and how does negative sampling fix it?}
+\oneline{The softmax denominator sums over the entire vocabulary for every training pair; negative sampling replaces it with a binary task on the true pair and
+$k$ random negatives, costing $k + 1$ dot products instead of $|V|$.}
+\why With $|V| = 10^6$ and $k = 5$, that is a 160{,}000-fold reduction per pair. Hierarchical softmax (a binary tree, $\log_2|V|$ steps) is the other option.
+\end{qa}
+
+\begin{qa}{Count skip-gram pairs for a 5-word sentence with window 2, and FastText trigrams for ``where''.}
+\oneline{14 pairs ($2 + 3 + 4 + 3 + 2$); 5 trigrams: \code{<wh, whe, her, ere, re>}.}
+\end{qa}
+
+\begin{qa}{\deep Why does $\text{king} - \text{man} + \text{woman}\approx\text{queen}$ work?}
+\oneline{Because the training objective makes vector differences encode consistent changes in context: words that differ only by gender co-occur with similar
+words except for gendered ones, so their difference vectors align, and adding the gender direction to ``king'' lands near ``queen''.}
+\why Formally, skip-gram with negative sampling approximately factorises a PMI matrix; log co-occurrence ratios that are constant across pairs (king:queen ::
+man:woman) become constant vector offsets. Analogies are not perfect, and embeddings also encode social biases (``engineer'' closer to ``he''), which matters
+for fair candidate ranking.
+\end{qa}
+
+\begin{qa}{\deep Static embeddings give ``Java'' one vector. When does that hurt a job portal and what do you do?}
+\oneline{When a word has several senses or the sense depends on context: ``Java'' (language vs coffee/island), ``lead'' (team lead vs sales lead), ``Spark''
+(Apache Spark vs ``spark plug'' in automotive jobs); contextual embeddings (BERT) or phrase-level tokens and taxonomy disambiguation fix it.}
+\end{qa}
+
+\begin{qa}{Why does BERT mask with 80/10/10 rather than always using [MASK]?}
+\oneline{Because [MASK] never appears in real fine-tuning text; replacing some selected tokens with random words or leaving them unchanged forces the model to keep
+a good representation for every token and reduces the pre-train/fine-tune mismatch.}
+\end{qa}
+
+\begin{qa}{What are the dimensions of BERT-base, and how many parameters are in its token embedding table?}
+\oneline{12 layers, hidden 768, 12 heads of 64, about 110M parameters; token embeddings $30{,}522\times768\approx23.4$M.}
+\end{qa}
+
+\begin{qa}{\deep You need to search 50 lakh resumes semantically for each recruiter query in under 100 ms. Bi-encoder or cross-encoder?}
+\oneline{A bi-encoder for retrieval, because resume vectors are pre-computed and indexed, so a query needs one encoding plus an ANN lookup; then a cross-encoder (or
+GBM) to re-rank the top 100--200, where accuracy matters and the cost is affordable.}
+\why A cross-encoder needs a full BERT pass per (query, resume) pair: 50 lakh passes per query is impossible. This retrieve-then-rank cascade is exactly the
+Resdex ``retrieval + ranking'' design.
+\end{qa}
+
+\begin{qa}{What is a Siamese network, and how would you train one for job--CV matching?}
+\oneline{Two identical encoders with shared weights map a job and a CV into the same vector space; trained with a contrastive, triplet or in-batch softmax loss so that
+matched pairs (applied and shortlisted) are close and unmatched pairs are far.}
+\why Positives: recruiter shortlisted the CV for the job. Negatives: random CVs (easy), CVs shown but not shortlisted (hard negatives). Triplet loss
+$\max(0, d(a, p) - d(a, n) + \text{margin})$. In-batch negatives (every other job in the batch) make training efficient. Evaluate with recall@k.
+\end{qa}
+
+\begin{qa}{How would you build a sentence embedding from Word2Vec vectors, and what are its weaknesses?}
+\oneline{Average the word vectors (optionally weighted by TF-IDF, removing the top principal component); it ignores word order and negation and is dominated by
+frequent words, but is a fast, decent baseline.}
+\end{qa}
+
+\begin{qa}{\deep How does FastText give a vector to a misspelled skill like ``kubernets''?}
+\oneline{By summing the vectors of its character n-grams, most of which (``kub'', ``ube'', ``ber'', ``ern'', ``rne'') are shared with ``kubernetes'', so the
+result lands near the correct word.}
+\end{qa}
+
+\begin{qa}{What are typical embedding dimensions, and how do you choose one?}
+\oneline{100--300 for Word2Vec/FastText, 384--1024 for sentence Transformers; choose by downstream validation and the cost of storage and search (a vector index of
+50 lakh $\times$ 768 floats is about 15 GB).}
+\end{qa}
+
+\begin{qa}{How do you evaluate embeddings?}
+\oneline{Intrinsically (word similarity correlation with human scores, analogy accuracy, nearest-neighbour inspection) and extrinsically (performance of downstream
+tasks such as retrieval recall@k or classification F1); extrinsic evaluation is what matters.}
+\end{qa}
+
+\begin{qa}{\deep Would you fine-tune BERT or use it as a frozen feature extractor for classifying 2 lakh resumes into 40 job functions?}
+\oneline{Fine-tune (or fine-tune a distilled version), because with 2 lakh labelled examples end-to-end training adapts representations to resume language and usually
+gives clearly better accuracy; use frozen features only with very little data, tight compute, or many tasks sharing one embedding.}
+\why Practical: DistilBERT or a domain-adapted model, max length 256--512 (or chunk), learning rate $3\times10^{-5}$, 2--3 epochs, class weights for rare functions,
+macro F1 for evaluation. Compare against TF-IDF + linear SVM baseline.
+\end{qa}
+
+\begin{qa}{What did RoBERTa and DistilBERT change?}
+\oneline{RoBERTa trained longer on more data with bigger batches, dynamic masking and no NSP, improving accuracy; DistilBERT used knowledge distillation to produce a
+model 40\% smaller and 60\% faster with about 97\% of BERT's performance.}
+\end{qa}
+
+\begin{qa}{What is a label attention network (on InfoEdge's Tools slide), and why would InfoEdge use one?}
+\oneline{A multi-label text classifier where each label has its own attention vector over the token representations, so each label looks at the parts of the text relevant
+to it; useful for tagging job descriptions or resumes with many skills from a large taxonomy.}
+\why A single pooled vector must serve thousands of labels; per-label attention lets ``Kubernetes'' focus on the DevOps paragraph and ``Negotiation'' on the sales paragraph,
+and it gives interpretable highlights (``search highlights on the profile'' in PremiumX).
+\end{qa}

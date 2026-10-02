@@ -1,1 +1,313 @@
-% TODO 18_nn
+\chapter{Neural Network Foundations: Backpropagation, Activations, Initialisation and Regularisation}
+\companion{3Blue1Brown: But what is a neural network? (Deep Learning, Chapter 1)}{\ytid{aircAruvnKk}}
+
+Deep learning was ``the most drilled section'' for the InfoEdge hire: vanishing and exploding gradients, weight decay, how a network
+learns (backprop), preventing overfitting, Xavier vs He initialisation. The OA asked about the universal approximation theorem, the
+number of hidden layers in a ``deep'' network, classification losses, ResNets for vanishing gradients, and RBMs/DBNs. This chapter
+covers each from scratch, with a backprop computation you can do on paper.
+
+\section{From a neuron to a network}
+\subsection{One neuron}
+A neuron computes a weighted sum of its inputs plus a bias, then applies a non-linear \textbf{activation} function:
+\[ z = \mathbf w^\top\mathbf x + b,\qquad a = g(z). \]
+\begin{example}[: one neuron]
+$\mathbf x = (1, 2)$, $\mathbf w = (0.5, -1)$, $b = 1$: $z = 0.5 - 2 + 1 = -0.5$. ReLU: $a = \max(0, -0.5) = 0$. Sigmoid: $a = \sigma(-0.5) = 0.378$.
+\end{example}
+Logistic regression is exactly one neuron with a sigmoid.
+
+\subsection{Layers}
+A \textbf{layer} is many neurons reading the same inputs: $\mathbf a^{(l)} = g(W^{(l)}\mathbf a^{(l-1)} + \mathbf b^{(l)})$. Stacking layers gives a
+\textbf{multilayer perceptron (MLP)}. The first layer reads raw features; \textbf{hidden layers} build intermediate features; the output layer produces
+the prediction. A dense layer from $n_{in}$ to $n_{out}$ has $(n_{in} + 1)n_{out}$ parameters.
+\begin{example}[: counting parameters]
+MLP 784--128--10 (MNIST): $(784 + 1)\cdot128 + (128 + 1)\cdot10 = 100{,}480 + 1{,}290 = 101{,}770$.
+\end{example}
+
+\subsection{Why non-linear activations are essential}
+Without them, layer after layer of $W\mathbf x + \mathbf b$ collapses into one linear map: $W_2(W_1\mathbf x + \mathbf b_1) + \mathbf b_2 = W'\mathbf x + \mathbf b'$.
+A 100-layer linear network is just linear regression. Non-linearities let the network bend; e.g. XOR needs a hidden layer with a non-linearity.
+
+\subsection{``Deep'' and the universal approximation theorem}
+A network is usually called \textbf{deep} when it has more than one hidden layer (often many). The \textbf{universal approximation theorem}: a network with
+a single hidden layer and enough units, using a non-polynomial activation (sigmoid, ReLU), can approximate any continuous function on a bounded region
+to any accuracy. It says such a network \emph{exists}; it does not say how many units are needed (possibly exponentially many), nor that gradient descent will
+find the weights, nor that it will generalise. Depth helps because deep networks can represent many functions with exponentially fewer units by reusing
+intermediate features (edges $\to$ shapes $\to$ objects).
+
+\section{Activation functions}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l l l X}
+\toprule
+Name & Formula & Derivative & Notes\\
+\midrule
+Sigmoid & $\frac{1}{1 + e^{-z}}$ & $\sigma(1-\sigma)\le0.25$ & outputs in $(0,1)$; saturates; not zero-centred; use at binary outputs\\
+Tanh & $\frac{e^z - e^{-z}}{e^z + e^{-z}}$ & $1 - \tanh^2\le1$ & zero-centred; still saturates; RNN/LSTM default\\
+ReLU & $\max(0, z)$ & 0 or 1 & cheap, no saturation for $z>0$; ``dying ReLU'' when $z<0$ always\\
+Leaky ReLU & $\max(\alpha z, z)$ & $\alpha$ or 1 & fixes dying ReLU; $\alpha = 0.01$\\
+GELU / SiLU & $z\Phi(z)$ / $z\sigma(z)$ & smooth & Transformers (BERT, GPT use GELU)\\
+Softmax & $\frac{e^{z_k}}{\sum e^{z_j}}$ & & multiclass output layer\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Leaky ReLU at $-2$ with $\alpha = 0.01$: $-0.02$.
+
+\section{Loss functions}
+Regression: MSE, MAE, Huber. Binary classification: sigmoid output + binary cross-entropy. Multiclass: softmax + categorical cross-entropy. Multi-label:
+one sigmoid per label + BCE. Margin: hinge. Ranking/similarity: contrastive, triplet. The output activation and loss are chosen together as a
+likelihood (Chapter 12). Classification losses: cross-entropy/log loss, hinge, exponential, focal. MSE, MAE, Huber are regression losses.
+
+\section{Training: forward pass, loss, backward pass}
+\begin{enumerate}
+\item \textbf{Forward}: compute activations layer by layer and the loss.
+\item \textbf{Backward (backpropagation)}: compute the gradient of the loss with respect to every weight using the chain rule, from the output back to the input.
+\item \textbf{Update}: $W\leftarrow W - \eta\,\partial L/\partial W$ (or Adam).
+\end{enumerate}
+
+\subsection{The chain rule, in words}
+If $L$ depends on $a$, which depends on $z$, which depends on $w$, then a tiny change in $w$ changes $z$ by $\frac{\partial z}{\partial w}$ times as much, which
+changes $a$ by $\frac{\partial a}{\partial z}$ times that, which changes $L$ by $\frac{\partial L}{\partial a}$ times that:
+\[ \frac{\partial L}{\partial w} = \frac{\partial L}{\partial a}\cdot\frac{\partial a}{\partial z}\cdot\frac{\partial z}{\partial w}. \]
+Backprop applies this systematically, \emph{reusing} the shared factors: the gradient flowing into layer $l$ is computed once from the gradient of layer
+$l+1$, so the cost of the backward pass is about the same as the forward pass (not one pass per weight).
+
+\subsection{Backprop for a dense layer}
+Let $\boldsymbol\delta^{(l)} = \partial L/\partial\mathbf z^{(l)}$ (the ``error'' at layer $l$'s pre-activations). Then
+\[ \frac{\partial L}{\partial W^{(l)}} = \boldsymbol\delta^{(l)}\mathbf a^{(l-1)\top},\quad \frac{\partial L}{\partial\mathbf b^{(l)}} = \boldsymbol\delta^{(l)},\quad
+\boldsymbol\delta^{(l-1)} = \big(W^{(l)\top}\boldsymbol\delta^{(l)}\big)\odot g'(\mathbf z^{(l-1)}). \]
+At the output with softmax/sigmoid + cross-entropy, $\boldsymbol\delta = \hat{\mathbf y} - \mathbf y$.
+
+\begin{example}[: full backprop by hand]
+Network: input $x = 1$; hidden $h = \sigma(w_1x)$ with $w_1 = 0.5$; output $\hat y = w_2h$ with $w_2 = 2$; loss $L = \frac12(\hat y - y)^2$ with $y = 1$.
+\textbf{Forward}: $z_1 = 0.5$, $h = \sigma(0.5) = 0.622$, $\hat y = 1.245$, $L = \frac12(0.245)^2 = 0.030$.
+\textbf{Backward}: $\partial L/\partial\hat y = 0.245$. $\partial L/\partial w_2 = 0.245\cdot h = 0.152$.
+$\partial L/\partial h = 0.245\cdot w_2 = 0.490$. $\partial h/\partial z_1 = h(1-h) = 0.235$. $\partial L/\partial z_1 = 0.115$. $\partial L/\partial w_1 = 0.115\cdot x = 0.115$.
+\textbf{Update} ($\eta = 0.1$): $w_2 = 2 - 0.0152 = 1.985$; $w_1 = 0.5 - 0.0115 = 0.4885$. Both moves reduce $\hat y$ toward 1.
+\end{example}
+
+\section{Vanishing and exploding gradients}
+\subsection{Why they happen}
+The gradient at an early layer is a \emph{product} of many factors, one per later layer: each factor involves a weight matrix and an activation derivative.
+\begin{itemize}
+\item If the factors are typically less than 1 in size, the product shrinks exponentially: \textbf{vanishing gradients}; early layers barely learn. Sigmoid's
+  derivative is at most 0.25: through 8 sigmoid layers the factor is at most $0.25^8\approx1.5\times10^{-5}$.
+\item If typically greater than 1, it grows exponentially: \textbf{exploding gradients}; updates become huge, loss jumps to NaN. A factor of 1.5 per step over 20
+  RNN time steps: $1.5^{20}\approx3{,}325$.
+\end{itemize}
+RNNs are the extreme case (the same weight matrix multiplied at every time step, Chapter 20).
+
+\subsection{Fixes}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{X X}
+\toprule
+Fix & Why it works\\
+\midrule
+ReLU-family activations & derivative 1 on the active side: no shrinking from activations\\
+Careful initialisation (Xavier, He) & keeps signal and gradient variance roughly constant across layers\\
+Batch / Layer normalisation & keeps pre-activations in a well-scaled range, out of saturation\\
+Residual (skip) connections & gradient flows through the identity path: $\partial(x + F(x))/\partial x = 1 + F'$\\
+LSTM/GRU gates (RNNs) & additive cell-state path with forget gate near 1\\
+Gradient clipping & caps exploding gradients (by norm)\\
+Smaller learning rate, warmup & avoids large unstable steps\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Weight initialisation: Xavier and He}
+\subsection{Why not zeros or a constant?}
+If all weights in a layer start equal, every neuron computes the same output and receives the same gradient: they stay identical forever (\textbf{symmetry}). Random
+initialisation breaks symmetry. But the \emph{scale} matters: too large and activations saturate or explode; too small and the signal dies after a few layers.
+
+\subsection{The variance argument}
+For $z = \sum_{i=1}^{n_{in}}w_ix_i$ with independent, zero-mean $w_i$ and $x_i$: $\Var(z) = n_{in}\Var(w)\Var(x)$. To keep $\Var(z)\approx\Var(x)$ we need
+$\Var(w) = 1/n_{in}$.
+\begin{itemize}
+\item \textbf{Xavier/Glorot} (tanh, sigmoid): balance forward and backward passes: $\Var(w) = \frac{2}{n_{in} + n_{out}}$. Uniform version:
+  $U[-\sqrt{6/(n_{in}+n_{out})}, +\sqrt{6/(n_{in}+n_{out})}]$.
+\item \textbf{He/Kaiming} (ReLU): ReLU zeroes half the inputs, halving the variance, so double it: $\Var(w) = \frac{2}{n_{in}}$.
+\end{itemize}
+\begin{example}[: initialisation numbers]
+He normal for $n_{in} = 512$: std $= \sqrt{2/512} = 0.0625$. Xavier uniform for $n_{in} = 100$, $n_{out} = 50$: limit $\sqrt{6/150} = 0.2$.
+\end{example}
+
+\section{Residual connections (ResNet)}
+\textbf{Degradation problem}: before ResNet, simply adding more layers to a deep network made even the \emph{training} error worse (not overfitting: an optimisation
+difficulty). A residual block outputs $\mathbf x + F(\mathbf x)$: the layers learn a correction to the identity. If the best thing is to do nothing, set $F = 0$, which is easy.
+Gradients flow straight through the ``$+\mathbf x$'' path, so very deep networks (152 layers and more) train well. Transformers use the same idea around every sublayer.
+
+\section{Normalisation layers}
+\begin{itemize}
+\item \textbf{Batch Normalisation}: for each feature, normalise across the mini-batch to mean 0, variance 1, then scale and shift with learnable $\gamma$, $\beta$:
+  $\hat x = (x - \mu_B)/\sqrt{\sigma_B^2 + \epsilon}$, $y = \gamma\hat x + \beta$. At test time use running averages of $\mu$, $\sigma^2$. Allows higher learning
+  rates, reduces sensitivity to initialisation, mild regulariser. Depends on batch size; awkward for RNNs and tiny batches.
+  \begin{example}[: BatchNorm by hand]
+  Batch $(1, 2, 3)$: $\mu = 2$, $\sigma^2 = 2/3$, $\sigma = 0.816$. For $x = 3$: $\hat x = 1.225$; with $\gamma = 2$, $\beta = 1$: $y = 3.449$. A BatchNorm layer on 64
+  features has $2\times64 = 128$ trainable parameters.
+  \end{example}
+\item \textbf{Layer Normalisation}: normalise across features within each example: independent of batch size; standard in Transformers and RNNs.
+\end{itemize}
+
+\section{Regularisation in deep learning}
+Covered conceptually in Chapter 1; specifics:
+\begin{itemize}
+\item \textbf{Dropout}: during training, zero each unit with probability $p$; \textbf{inverted dropout} scales the survivors by $1/(1-p)$ so the expected activation is
+  unchanged and nothing needs to change at test time (dropout off). With $p = 0.2$, a kept activation of 5 becomes $6.25$. Interpretation: trains an ensemble of
+  thinned networks sharing weights; prevents co-adaptation.
+\item \textbf{Weight decay / L2}, \textbf{early stopping}, \textbf{data augmentation}, \textbf{label smoothing} (with $\epsilon = 0.1$ and 10 classes, the target for the
+  true class becomes $0.9 + 0.01 = 0.91$ and $0.01$ for each other), \textbf{batch norm}, smaller models, transfer learning.
+\end{itemize}
+
+\section{Learning rate and getting unstuck}
+See Chapter 5. In deep nets: warmup, cosine or step decay, reduce-on-plateau; momentum or Adam to traverse plateaus; restarts; check for dead ReLUs (fraction of units
+always 0); always first verify the model can overfit one small batch.
+
+\section{RBMs and Deep Belief Networks (historical)}
+A \textbf{Restricted Boltzmann Machine} is a two-layer generative energy-based model (visible and hidden units, connections only between layers), trained with
+contrastive divergence. A \textbf{Deep Belief Network} stacks RBMs, trained greedily layer by layer, then fine-tuned; it was how deep networks were first trained
+successfully (2006) before ReLU, better initialisation and GPUs made direct training work. Today mostly of historical interest, but the OA asked about them.
+
+\begin{practical}[: neural networks at InfoEdge]
+The Tools slide lists ANNs, PyTorch and Keras/TensorFlow, and ``TensorFlow optimisation''. Typical uses: two-tower recommendation and matching networks; deep
+click models combining embeddings of seeker, job and context; and fine-tuned Transformers. Practical lessons that interviewers like to hear: start with a
+GBM baseline on tabular data; use embeddings for high-cardinality IDs; monitor gradient norms; use mixed precision and early stopping; serve with quantised or
+distilled models for latency.
+\end{practical}
+
+\stuck{3Blue1Brown: Backpropagation, intuitively}{\ytid{Ilg3gGewQ5U}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{INT: how does a network learn / backprop} Explain how a neural network learns, from the forward pass to the weight update.}
+\oneline{Inputs flow forward through weighted sums and non-linearities to a prediction; a loss measures the error; backpropagation applies the chain rule from the
+output back to every weight to get gradients, reusing intermediate results; and an optimiser nudges each weight against its gradient.}
+\why
+\textbf{Forward.} Each layer computes $\mathbf a^{(l)} = g(W^{(l)}\mathbf a^{(l-1)} + \mathbf b^{(l)})$; store $\mathbf z$ and $\mathbf a$ for the backward pass.
+\textbf{Loss.} Cross-entropy or MSE.
+\textbf{Backward.} Start with $\boldsymbol\delta^{(L)} = \partial L/\partial\mathbf z^{(L)}$ ($=\hat{\mathbf y} - \mathbf y$ for softmax + CE). For each layer going backward:
+weight gradient $\boldsymbol\delta^{(l)}\mathbf a^{(l-1)\top}$, then pass the error back through the weights and the activation derivative.
+\textbf{Update.} $W\leftarrow W - \eta\nabla_W L$ on a mini-batch; repeat for many batches and epochs.
+Backprop is efficient because each layer's gradient reuses the next layer's: total cost about 2--3 forward passes, not one per weight.
+\worked The hand computation above: $\partial L/\partial w_2 = 0.152$, $\partial L/\partial w_1 = 0.115$, updated weights 1.985 and 0.4885.
+\pushes \emph{``What is autograd?''} Frameworks record the computation graph during the forward pass and apply the chain rule automatically (reverse-mode
+automatic differentiation). \emph{``Why reverse mode?''} One scalar loss and millions of parameters: reverse mode gets all gradients in one backward pass.
+\end{qa}
+
+\begin{qa}{\pyq{INT: vanishing and exploding gradients} Why do vanishing and exploding gradients happen, and how do you fix each?}
+\oneline{Because the gradient reaching early layers is a product of many per-layer factors (weights times activation derivatives); if those are mostly below 1 it shrinks
+exponentially, above 1 it blows up; fixes are ReLU-type activations, proper initialisation, normalisation, residual connections, gated RNNs, gradient clipping and
+smaller learning rates.}
+\why
+$\frac{\partial L}{\partial\mathbf a^{(1)}} = \prod_{l=2}^{L}\big(W^{(l)\top}\text{diag}(g'(\mathbf z^{(l)}))\big)\frac{\partial L}{\partial\mathbf a^{(L)}}$ (schematically). Sigmoid
+derivatives $\le0.25$ make the product tiny. Large weights (or a recurrent matrix with largest singular value above 1) make it huge.
+\textbf{Symptoms.} Vanishing: early layers' weights barely change, training stalls; gradient norms per layer fall by orders of magnitude toward the input.
+Exploding: loss spikes or NaN; gradient norm spikes.
+\textbf{Fixes.} Vanishing: ReLU/GELU, He/Xavier init, BatchNorm/LayerNorm, residual connections, LSTM/GRU, shorter paths (attention). Exploding: gradient clipping,
+lower learning rate, proper init, normalisation, weight decay.
+\worked 8 sigmoid layers: at most $0.25^8 = 1.5\times10^{-5}$. RNN with factor 1.5 over 20 steps: about 3{,}325.
+\pitfall Saying ``ReLU completely solves vanishing gradients'': it solves the activation part, not the weight-product part, and introduces dead units.
+\end{qa}
+
+\begin{qa}{\pyq{OA and INT: Xavier vs He initialisation} What are Xavier and He initialisation, and why does He use 2 in the numerator?}
+\oneline{Both set random weight variance by layer size to keep activation and gradient variances stable across layers: Xavier uses $2/(n_{in} + n_{out})$ for tanh/sigmoid,
+He uses $2/n_{in}$ for ReLU, the 2 compensating for ReLU zeroing half of its inputs.}
+\why $\Var(z) = n_{in}\Var(w)\Var(x)$. For a symmetric zero-mean input, ReLU passes half the mass, so $\E[\text{ReLU}(z)^2] = \frac12\Var(z)$; to keep the variance, double
+$\Var(w)$: $2/n_{in}$. Xavier averages $n_{in}$ and $n_{out}$ to balance forward and backward.
+\worked He normal $n_{in} = 512$: std $0.0625$. Xavier uniform $n_{in} = 100$, $n_{out} = 50$: limit $0.2$.
+\pushes \emph{``What happens with zero init?''} Symmetry: all units in a layer stay identical. \emph{``Biases?''} Usually zero (fine, symmetry is broken by weights).
+\end{qa}
+
+\begin{qa}{\pyq{OA: ResNets and vanishing gradients} How do residual connections help train very deep networks?}
+\oneline{Each block outputs $\mathbf x + F(\mathbf x)$, so the gradient has a direct identity path backward ($1 + \partial F/\partial\mathbf x$), which does not vanish, and each block
+only needs to learn a small correction, which makes identity mappings easy and solves the degradation problem.}
+\why Without skips, a 56-layer plain network had higher training error than a 20-layer one (optimisation failure). With skips, depth helps. Unrolled, a ResNet is like
+an ensemble of many paths of different lengths.
+\end{qa}
+
+\begin{qa}{\pyq{OA: universal approximation theorem} What does the universal approximation theorem say and not say?}
+\oneline{A one-hidden-layer network with enough units and a suitable non-linear activation can approximate any continuous function on a compact set arbitrarily well;
+it does not say how many units are needed, that training will find the weights, or that the result will generalise.}
+\why Depth gives exponential efficiency for compositional functions; this is why we use deep, not just wide, networks.
+\end{qa}
+
+\begin{qa}{\pyq{OA: number of hidden layers in a deep network} When is a network called ``deep''?}
+\oneline{Conventionally when it has more than one hidden layer, i.e. at least two hidden layers between input and output; modern networks have tens to hundreds.}
+\end{qa}
+
+\begin{qa}{\pyq{OA: classification losses} Which of these are classification losses: cross-entropy, hinge, MSE, Huber, focal, exponential?}
+\oneline{Cross-entropy, hinge, focal and exponential; MSE and Huber are regression losses.}
+\why Focal loss $-(1-p)^\gamma\log p$ down-weights easy examples (object detection, imbalance). Exponential loss is AdaBoost's. Hinge for $y = +1$, score 0.3: $0.7$.
+\end{qa}
+
+\begin{qa}{\pyq{OA: RBMs and DBNs} What are RBMs and deep belief networks?}
+\oneline{An RBM is a two-layer undirected generative model with visible and hidden units connected only across layers, trained by contrastive divergence; a DBN stacks RBMs
+trained greedily layer by layer, historically used to pre-train deep networks before modern techniques made direct training possible.}
+\end{qa}
+
+\begin{qa}{\pyq{INT: dropout} How does dropout work at train and test time, and why does it regularise?}
+\oneline{During training each unit is zeroed with probability $p$ and survivors are scaled by $1/(1-p)$ (inverted dropout); at test time dropout is off and no scaling is needed;
+it regularises by preventing co-adaptation and approximately averaging an ensemble of thinned networks.}
+\worked $p = 0.2$, kept activation 5: $5/0.8 = 6.25$.
+\pushes \emph{``Dropout with BatchNorm?''} Their interaction can shift variance between train and test; place dropout after BN or use it mainly in the classifier head.
+\emph{``Monte Carlo dropout?''} Keep dropout on at test time and average many passes to estimate uncertainty.
+\end{qa}
+
+\begin{qa}{\pyq{INT: weight decay; learning rate adjustment} How do weight decay and learning-rate schedules interact in deep learning training?}
+\oneline{Weight decay shrinks weights each step by a factor proportional to the learning rate (for SGD), so schedules change effective regularisation; with Adam, use AdamW so
+decay is decoupled from adaptive scaling; typical recipes pair warmup and cosine decay with weight decay 0.01--0.1.}
+\end{qa}
+
+\begin{qa}{Why do we need non-linear activations? What happens to a 10-layer network without them?}
+\oneline{Without non-linearities, compositions of linear layers are a single linear map, so a 10-layer network can represent nothing a linear model cannot (it cannot learn XOR).}
+\end{qa}
+
+\begin{qa}{Compare sigmoid, tanh and ReLU. What is a dying ReLU?}
+\oneline{Sigmoid and tanh saturate (gradients near 0 for large $|z|$), sigmoid is also not zero-centred; ReLU does not saturate for positive inputs and is cheap, but a unit whose
+input is always negative outputs 0 with 0 gradient forever: a dead ReLU.}
+\why Causes of dying: large learning rate or large negative bias. Fixes: Leaky ReLU, ELU, GELU, He init, lower learning rate.
+\end{qa}
+
+\begin{qa}{Explain Batch Normalisation. What happens at inference?}
+\oneline{It normalises each feature over the mini-batch to zero mean and unit variance and then applies a learnable scale and shift; at inference it uses running averages of
+the training mean and variance, so predictions do not depend on the batch.}
+\worked Batch $(1,2,3)$, $\gamma = 2$, $\beta = 1$: output for 3 is $3.449$.
+\pushes \emph{``Why does it help?''} Keeps activations in a good range, smooths the loss landscape, allows larger learning rates. \emph{``BN vs LayerNorm?''} LN normalises
+across features per example; used in Transformers and RNNs; independent of batch size.
+\end{qa}
+
+\begin{qa}{\deep Why can't we initialise all weights to the same non-zero value?}
+\oneline{Because every unit in a layer would compute the same output and receive the same gradient, so they would remain identical after every update and the layer would behave
+like a single unit.}
+\end{qa}
+
+\begin{qa}{\deep Is a neural network with a sigmoid output and cross-entropy loss just logistic regression?}
+\oneline{Its last layer is exactly a logistic regression, but on learned features from the hidden layers rather than raw inputs; with no hidden layers it is logistic regression.}
+\why This is the cleanest way to explain what hidden layers do: learn a representation in which the classes become linearly separable.
+\end{qa}
+
+\begin{qa}{Count the parameters of an MLP 784--128--10, and of a BatchNorm layer on 64 features.}
+\oneline{101{,}770 and 128 trainable (plus 128 running statistics that are not trained).}
+\end{qa}
+
+\begin{qa}{Gradient of binary cross-entropy with respect to the logit when $p = 0.8$, $y = 1$?}
+\oneline{$p - y = -0.2$.}
+\end{qa}
+
+\begin{qa}{\deep Your training loss is flat from the first epoch. List what you check.}
+\oneline{That the model can overfit a single small batch (if not, a bug), that labels match inputs, that the loss and output activation are consistent, that gradients are non-zero
+and not NaN, that the learning rate is in a sensible range, that inputs are normalised, and that layers are not frozen.}
+\why Common culprits: applying softmax before \code{CrossEntropyLoss} (which expects logits), forgetting \code{optimizer.zero\_grad()}, data loader returning the same
+batch, a dead network from bad init.
+\end{qa}
+
+\begin{qa}{\deep Deep learning vs gradient-boosted trees for a tabular dataset with 5 lakh rows and 60 features. Which would you start with?}
+\oneline{Gradient-boosted trees: on tabular data with heterogeneous features they usually match or beat neural networks with far less tuning; I would consider a neural network
+if there are high-cardinality IDs or text/image inputs that benefit from learned embeddings, or to ensemble with the GBM.}
+\end{qa}
+
+\begin{qa}{What is label smoothing? Compute the targets for $\epsilon = 0.1$ with 10 classes.}
+\oneline{Replace the one-hot target with $(1-\epsilon)$ on the true class plus $\epsilon/K$ spread over all classes: true class $0.91$, others $0.01$ each; it discourages
+over-confident logits and improves calibration.}
+\end{qa}
+
+\begin{qa}{\deep A 3-layer linear chain $h_1 = w_1x$, $h_2 = w_2h_1$, $\hat y = w_3h_2$ with all weights 0.5 and $x = 1$. What is $\partial\hat y/\partial w_1$, and what happens with 50
+such layers?}
+\oneline{$\partial\hat y/\partial w_1 = w_3w_2x = 0.25$; with 50 layers the corresponding product is $0.5^{49}\approx1.8\times10^{-15}$: a vanishing gradient caused by weights alone.}
+\end{qa}
