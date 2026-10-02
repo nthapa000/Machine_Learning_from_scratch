@@ -1,0 +1,2 @@
+EXPLAIN QUERY PLAN
+SELECT * FROM applications WHERE cand_id = 105;

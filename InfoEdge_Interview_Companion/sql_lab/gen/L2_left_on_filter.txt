@@ -1,0 +1,13 @@
+name   | offer_job
+-------+----------
+Aarav  | 207
+Diya   | 204
+Kabir  | NULL
+Meera  | 202
+Rohan  | NULL
+Sana   | NULL
+Vikram | 208
+Ananya | NULL
+Ishaan | NULL
+Priya  | NULL
+(10 rows)

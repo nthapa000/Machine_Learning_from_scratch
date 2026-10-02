@@ -1,0 +1,13 @@
+name  | dept        | salary | row_num | rnk | dense_rnk
+------+-------------+--------+---------+-----+----------
+Neha  | Leadership  | 90     | 1       | 1   | 1
+Yash  | Engineering | 75     | 2       | 2   | 2
+Rahul | Engineering | 70     | 3       | 3   | 3
+Arjun | DataScience | 60     | 4       | 4   | 4
+Sneha | Engineering | 50     | 5       | 5   | 5
+Kavya | DataScience | 45     | 6       | 6   | 6
+Manav | DataScience | 45     | 7       | 6   | 6
+Pooja | Sales       | 40     | 8       | 8   | 7
+Tara  | DataScience | 30     | 9       | 9   | 8
+Dev   | Sales       | 25     | 10      | 10  | 9
+(10 rows)

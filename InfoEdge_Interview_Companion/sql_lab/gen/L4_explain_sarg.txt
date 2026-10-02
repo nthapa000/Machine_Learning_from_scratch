@@ -1,0 +1,1 @@
+QUERY PLAN: SEARCH applications USING INDEX idx_app_date (applied_date>? AND applied_date<?)

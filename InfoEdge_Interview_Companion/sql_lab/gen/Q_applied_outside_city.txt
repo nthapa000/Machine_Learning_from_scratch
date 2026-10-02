@@ -1,0 +1,13 @@
+name   | home_city | job_city  | title
+-------+-----------+-----------+---------------
+Aarav  | Bengaluru | Noida     | Data Scientist
+Diya   | Mumbai    | Bengaluru | Data Scientist
+Ishaan | Bengaluru | Noida     | Data Scientist
+Kabir  | Delhi     | Mumbai    | Data Analyst
+Kabir  | Delhi     | Pune      | Data Analyst
+Kabir  | Delhi     | Bengaluru | Data Analyst
+Meera  | Bengaluru | Noida     | ML Engineer
+Rohan  | Pune      | Bengaluru | Data Scientist
+Rohan  | Pune      | Mumbai    | Data Scientist
+Vikram | Noida     | Bengaluru | Data Scientist
+(10 rows)

@@ -1,0 +1,9 @@
+company   | applications | offers | offer_rate
+----------+--------------+--------+-----------
+EduSpark  | 4            | 1      | 0.25
+DataNest  | 5            | 1      | 0.2
+ShopKart  | 5            | 1      | 0.2
+PayWave   | 6            | 1      | 0.17
+MediCore  | 2            | 0      | 0
+GreenGrid | 0            | 0      | NULL
+(6 rows)

@@ -1,0 +1,4 @@
+second_highest
+--------------
+75
+(1 row)

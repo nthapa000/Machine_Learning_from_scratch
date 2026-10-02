@@ -1,0 +1,6 @@
+title          | avg_days_to_apply | n_apps
+---------------+-------------------+-------
+ML Engineer    | 1                 | 3
+Data Analyst   | 5.88              | 8
+Data Scientist | 8.73              | 11
+(3 rows)

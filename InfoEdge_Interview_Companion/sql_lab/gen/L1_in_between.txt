@@ -1,0 +1,6 @@
+name   | city  | exp_yrs
+-------+-------+--------
+Rohan  | Pune  | 3
+Vikram | Noida | 10
+Priya  | Delhi | 6
+(3 rows)

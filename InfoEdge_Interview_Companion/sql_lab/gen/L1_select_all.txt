@@ -1,0 +1,9 @@
+company_id | name      | city      | industry   | size
+-----------+-----------+-----------+------------+------
+1          | DataNest  | Bengaluru | IT         | large
+2          | PayWave   | Mumbai    | Fintech    | mid
+3          | MediCore  | Pune      | Healthcare | small
+4          | ShopKart  | Bengaluru | E-commerce | large
+5          | EduSpark  | Noida     | Edtech     | mid
+6          | GreenGrid | Delhi     | Energy     | small
+(6 rows)

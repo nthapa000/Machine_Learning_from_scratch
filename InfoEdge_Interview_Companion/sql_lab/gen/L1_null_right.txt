@@ -1,0 +1,4 @@
+name | city
+-----+-----
+Sana | NULL
+(1 row)

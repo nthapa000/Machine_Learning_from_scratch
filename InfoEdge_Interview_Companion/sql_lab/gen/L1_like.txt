@@ -1,0 +1,10 @@
+job_id | title          | city
+-------+----------------+----------
+201    | Data Scientist | Bengaluru
+203    | Data Analyst   | Mumbai
+204    | Data Scientist | Mumbai
+205    | Data Analyst   | Pune
+206    | Data Scientist | Bengaluru
+207    | Data Analyst   | Bengaluru
+209    | Data Scientist | Noida
+(7 rows)

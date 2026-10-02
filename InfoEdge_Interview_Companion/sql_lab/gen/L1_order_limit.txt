@@ -1,0 +1,6 @@
+name   | ctc_lpa
+-------+--------
+Vikram | 42
+Meera  | 30
+Priya  | 24
+(3 rows)

@@ -1,0 +1,6 @@
+name  | ctc_lpa
+------+--------
+Kabir | NULL
+Sana  | 5.5
+Aarav | 8
+(3 rows)

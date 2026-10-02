@@ -1,0 +1,18 @@
+name   | job_id | title          | min_exp
+-------+--------+----------------+--------
+Aarav  | 201    | Data Scientist | 2
+Aarav  | 207    | Data Analyst   | 1
+Ananya | 203    | Data Analyst   | 1
+Ananya | 204    | Data Scientist | 3
+Diya   | 203    | Data Analyst   | 1
+Diya   | 204    | Data Scientist | 3
+Ishaan | 201    | Data Scientist | 2
+Ishaan | 207    | Data Analyst   | 1
+Meera  | 201    | Data Scientist | 2
+Meera  | 202    | ML Engineer    | 4
+Meera  | 206    | Data Scientist | 5
+Meera  | 207    | Data Analyst   | 1
+Rohan  | 205    | Data Analyst   | 0
+Vikram | 208    | ML Engineer    | 6
+Vikram | 209    | Data Scientist | 2
+(15 rows)

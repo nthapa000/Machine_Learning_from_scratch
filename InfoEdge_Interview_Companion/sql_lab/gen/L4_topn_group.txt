@@ -1,0 +1,11 @@
+dept        | name  | salary
+------------+-------+-------
+DataScience | Arjun | 60
+DataScience | Kavya | 45
+DataScience | Manav | 45
+Engineering | Yash  | 75
+Engineering | Rahul | 70
+Leadership  | Neha  | 90
+Sales       | Pooja | 40
+Sales       | Dev   | 25
+(8 rows)

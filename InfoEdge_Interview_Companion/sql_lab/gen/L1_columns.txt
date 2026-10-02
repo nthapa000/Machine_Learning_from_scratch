@@ -1,0 +1,13 @@
+name   | city      | exp_yrs
+-------+-----------+--------
+Aarav  | Bengaluru | 2
+Diya   | Mumbai    | 5
+Kabir  | Delhi     | 0
+Meera  | Bengaluru | 7
+Rohan  | Pune      | 3
+Sana   | NULL      | 1
+Vikram | Noida     | 10
+Ananya | Mumbai    | 4
+Ishaan | Bengaluru | 2
+Priya  | Delhi     | 6
+(10 rows)

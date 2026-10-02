@@ -1,0 +1,14 @@
+level | name  | path
+------+-------+---------------------
+0     | Neha  | Neha
+1     | Arjun | Neha > Arjun
+2     | Kavya | Neha > Arjun > Kavya
+2     | Manav | Neha > Arjun > Manav
+2     | Tara  | Neha > Arjun > Tara
+1     | Pooja | Neha > Pooja
+2     | Dev   | Neha > Pooja > Dev
+2     | Zoya  | Neha > Pooja > Zoya
+1     | Rahul | Neha > Rahul
+2     | Sneha | Neha > Rahul > Sneha
+2     | Yash  | Neha > Rahul > Yash
+(11 rows)

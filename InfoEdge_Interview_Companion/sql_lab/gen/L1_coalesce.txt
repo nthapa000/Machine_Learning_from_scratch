@@ -1,0 +1,5 @@
+name  | city    | ctc_lpa_filled
+------+---------+---------------
+Kabir | Delhi   | 0
+Sana  | Unknown | 5.5
+(2 rows)

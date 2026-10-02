@@ -1,0 +1,13 @@
+name  | dept        | salary | rank_in_dept | dept_avg | diff_from_avg
+------+-------------+--------+--------------+----------+--------------
+Arjun | DataScience | 60     | 1            | 45       | 15
+Kavya | DataScience | 45     | 2            | 45       | 0
+Manav | DataScience | 45     | 2            | 45       | 0
+Tara  | DataScience | 30     | 3            | 45       | -15
+Yash  | Engineering | 75     | 1            | 65       | 10
+Rahul | Engineering | 70     | 2            | 65       | 5
+Sneha | Engineering | 50     | 3            | 65       | -15
+Neha  | Leadership  | 90     | 1            | 90       | 0
+Pooja | Sales       | 40     | 1            | 32.5     | 7.5
+Dev   | Sales       | 25     | 2            | 32.5     | -7.5
+(10 rows)

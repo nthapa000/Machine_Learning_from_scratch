@@ -1,0 +1,9 @@
+city      | n_cands | pct
+----------+---------+----
+Bengaluru | 3       | 30
+Delhi     | 2       | 20
+Mumbai    | 2       | 20
+Noida     | 1       | 10
+Pune      | 1       | 10
+Unknown   | 1       | 10
+(6 rows)

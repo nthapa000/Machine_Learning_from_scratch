@@ -1,0 +1,437 @@
+\chapter{SQL Level 4: Interview Patterns, SQL for Machine Learning, Performance and Design}\label{ch:sql4}
+\companion{techTFQ: Solving real SQL interview queries step by step}{\yts{techtfq+sql+interview+queries+solved+step+by+step}}
+
+This chapter is a catalogue of the patterns that most SQL interview problems are built from. For each: the problem in words, the idea in one sentence,
+the query, the real output, and how to explain it aloud. Then the data-scientist-specific part: building leak-free ML feature tables in SQL. Then the
+engineering questions every interviewer asks at the end: indexes, query plans, normalisation, OLTP vs OLAP.
+
+\begin{recap}[: how to answer any SQL problem in an interview]
+\begin{enumerate}
+\item \textbf{Restate the grain}: ``one output row per \emph{what}?'' (per candidate, per day, per department).
+\item \textbf{Ask about edge cases}: ties, NULLs, duplicates, days with no data, what to return if nothing qualifies.
+\item \textbf{Build in steps} with CTEs; say each step aloud.
+\item \textbf{Check with a tiny example}: walk two or three rows through your query.
+\item \textbf{Mention performance} only after correctness (indexes on join/filter keys).
+\end{enumerate}
+\end{recap}
+
+\section{Nth highest value}
+\stuck{SQL Nth highest salary: all methods}{\yts{sql+nth+highest+salary+all+methods+dense_rank}}
+Salaries (known): 90, 75, 70, 60, 50, 45, 45, 40, 30, 25. Third highest distinct value = 70.
+\paragraph{Method 1: DENSE\_RANK (best answer).} Handles ties correctly and generalises to ``per department''.
+\runsql{L4_nth_dense}
+\paragraph{Method 2: DISTINCT + LIMIT/OFFSET.} Skip $N-1$ distinct values. Returns no row (not NULL) if fewer than $N$ values exist.
+\runsql{L4_nth_limit}
+\paragraph{Method 3: correlated count (works on any SQL).} A salary is the 3rd highest if exactly 2 distinct salaries are greater.
+\runsql{L4_nth_correlated}
+\paragraph{Second highest with MAX only.} The largest value below the maximum:
+\runsql{L4_second_max}
+\begin{trap}
+\code{ORDER BY salary DESC LIMIT 1 OFFSET 2} \emph{without} DISTINCT returns the 3rd \emph{row}, which is wrong when the top salaries tie. ROW\_NUMBER has
+the same flaw. Also say what happens when there are fewer than $N$ distinct salaries (method 1 returns no row; wrap in
+\code{SELECT (subquery) AS nth} to return NULL instead, which is what LeetCode-style graders expect).
+\end{trap}
+
+\section{Top N per group}
+\stuck{SQL top N per group using window functions}{\yts{sql+top+n+per+group+window+function}}
+``Top 2 salaries in each department.'' Rank inside each partition, then filter outside:
+\runsql{L4_topn_group}
+DataScience returns three people because Kavya and Manav tie for the second-highest salary. If the business wants exactly two people, use ROW\_NUMBER with
+a tie-breaker (\code{ORDER BY salary DESC, hire\_date}) and say so. The same pattern gives ``latest application per candidate'', ``most recent salary
+per employee'', ``top 3 jobs by applications in each city''.
+
+\section{Duplicates: find, inspect, delete}
+\stuck{SQL find and delete duplicate rows}{\yts{sql+find+and+delete+duplicate+rows+row_number}}
+Decide first what ``duplicate'' means: same \emph{business key} (candidate, job, date), not the same id.
+\runsql{L4_dupes_find}
+ROW\_NUMBER labels the copies; every row with \code{rn > 1} is a duplicate to remove:
+\runsql{L4_dupes_rownum}
+Delete everything except the smallest id in each duplicate group:
+\runsql{L4_dupes_delete}
+23 rows became 22. In analytics you often do not delete at all: you deduplicate in a CTE (\code{WHERE rn = 1}) at the start of every query, keeping the
+raw table untouched.
+
+\section{Self-join classics: employee vs manager}
+\runsql{L4_more_than_manager}
+Yash (75) earns more than his manager Rahul (70). Variants: ``employees hired before their manager'' (compare hire dates), ``managers with at least 3
+reports'' (GROUP BY \code{manager\_id} HAVING \code{COUNT(*) >= 3}: Neha and Arjun, 3 reports each).
+
+\section{Consecutive days: the gaps-and-islands trick}
+\stuck{SQL gaps and islands consecutive days problem}{\yts{sql+gaps+and+islands+consecutive+days+problem}}
+``Candidates who logged in on at least 3 consecutive days.'' The trick: number each candidate's distinct login dates 1, 2, 3, \dots\ and subtract that
+number of days from the date. Consecutive dates move up by one day while the row number also moves up by one, so the difference stays constant; a gap
+breaks the run and changes the difference. Each constant value is one \emph{island} (streak).
+\runsql{L4_streak_steps}
+Aarav's 1--3 March all map to 28 February (one island of length 3); 5--6 March map to 1 March (a new island of length 2). Group by that value and count:
+\runsql{L4_streaks}
+Note the first CTE: \code{SELECT DISTINCT} removes candidate 109's double login on 4 March. Without it the row numbers would advance twice on one date
+and break the islands.
+
+\section{Daily, rolling and cohort metrics}
+\stuck{SQL user retention cohort analysis query}{\yts{sql+cohort+retention+analysis+query+tutorial}}
+\subsection{Daily active users and rolling active users}
+Daily active users with every day shown is the date-spine query from Chapter 47 (\code{L3\_recursive\_dates}). ``Active in the last 3 days'' for each
+day uses a range join:
+\runsql{L4_rolling_users}
+On 3 March, users active on 1--3 March: 101, 102, 104, 105, 109 = 5.
+
+\subsection{Cohort retention}
+Group candidates by signup month (their \emph{cohort}) and ask what fraction were active in the first week of March:
+\runsql{L4_cohort}
+January signups (101--104): 101, 102 and 104 logged in, retention $3/4 = 0.75$. Real retention tables put cohorts on rows and ``months since signup'' on
+columns; the logic is the same, with \code{months\_since = month(login) - month(signup)} as the column key.
+
+\subsection{Month-over-month growth}
+\runsql{L4_mom}
+February: $(11 - 6)/6 = +83.3\%$; March: $(6 - 11)/11 = -45.5\%$. (March is only partial data: say so before anyone panics. Compare like with like, e.g.\
+month-to-date vs the same days of last month.)
+
+\section{Funnels and A/B tests}
+\stuck{SQL funnel analysis and A/B test analysis}{\yts{sql+funnel+analysis+conversion+rate+query}}
+\subsection{Hiring funnel}
+Applications move applied $\to$ shortlisted $\to$ interview $\to$ offer. The table stores only the current status, so map each status to the furthest
+stage reached and count how many reached at least each stage. (Simplification, said aloud: we treat \code{rejected} as ``stopped at applied'' because we
+do not know at which stage the rejection happened. A real events table with one row per stage change would remove this assumption.)
+\runsql{L4_funnel}
+In SQLite a comparison is 1 or 0, so \code{SUM(reached >= 2)} counts rows; elsewhere write \code{SUM(CASE WHEN reached >= 2 THEN 1 ELSE 0 END)}. 22
+applications (duplicate removed), 12 reached shortlisting (54.5\%), 8 interviews, 4 offers: half of interviews convert.
+
+\subsection{A/B test click-through rate}
+\runsql{L4_ab_ctr}
+Variant B (new ranking) has CTR 0.625 vs 0.25. Is that real? A two-proportion z-test (Chapter 39): pooled $p = 7/16 = 0.4375$, standard error
+$\sqrt{p(1-p)(1/8 + 1/8)} = 0.248$, $z = (0.625 - 0.25)/0.248 = 1.51$, two-sided p-value 0.13: \textbf{not significant} with 8 impressions per arm.
+SQL computes the counts; the decision needs statistics. Also check the split by day:
+\runsql{L4_ctr_daily}
+B wins or ties every day, which is reassuring; when a variant wins in every segment but loses overall (or vice versa) you are looking at Simpson's
+paradox, caused by unequal segment sizes between arms.
+
+\section{Other patterns worth knowing}
+\subsection{Median without a MEDIAN function}
+Number the sorted values; the median is the middle row (odd $n$) or the average of the two middle rows (even $n$). With integer division,
+\code{(n+1)/2} and \code{(n+2)/2} are the same row when $n$ is odd and the two middle rows when $n$ is even.
+\runsql{L4_median}
+9 known CTCs; the 5th smallest is 15 (Ananya). PostgreSQL: \code{PERCENTILE\_CONT(0.5) WITHIN GROUP (ORDER BY ctc\_lpa)}.
+
+\subsection{Pivot: rows to columns}
+\runsql{L4_pivot}
+Conditional aggregation is the portable pivot (pandas: \code{pd.crosstab(jobs.company, jobs.title)}).
+
+\subsection{First event per entity}
+\runsql{L4_first_app}
+
+\subsection{Time between two events}
+\runsql{L4_time_to_apply}
+Candidates apply to ML Engineer postings within a day on average, but take almost 9 days for Data Scientist postings, which could mean DS postings are
+less visible or attract more deliberate applicants: a question for the product team, not a conclusion.
+
+\subsection{``Applied to all'' (relational division)}
+``Candidates who applied to every Data Analyst job'': count each candidate's distinct DA jobs and compare with the total number of DA jobs.
+\runsql{L4_division}
+Kabir (103) applied to all three (203, 205, 207).
+
+\subsection{Non-equi join as a data-quality check}
+Candidates whose current CTC already exceeds the job's maximum (likely to reject an offer, or a recommendation the ranker should not have made):
+\runsql{L4_overqualified}
+
+\section{SQL for machine learning: feature tables without leakage}
+\stuck{Feature engineering with SQL for machine learning}{\yts{feature+engineering+with+sql+for+machine+learning}}
+In industry, the training table for a model is usually built in SQL: one row per entity (candidate), one column per feature, one label column. Two
+mistakes ruin such tables: fan-out and leakage.
+
+\subsection{Fan-out with two one-to-many tables}
+Joining candidates to applications \emph{and} logins in one go multiplies rows: candidate 101 has 4 application rows and 5 login rows, so the join creates
+$4 \times 5 = 20$ rows and every count is inflated:
+\runsql{L4_feature_fanout}
+Correct: aggregate each source to one row per candidate in its own CTE, then LEFT JOIN the summaries:
+\runsql{L4_feature_table}
+Every candidate appears exactly once, including those with no applications or logins (filled with 0), and \code{ctc\_missing} keeps the information
+that the fresher had no salary.
+
+\subsection{Leakage: point-in-time correctness}
+The feature table above uses \emph{all} history, including events after the moment a prediction would have been made. To train ``will this candidate get
+an offer?'', features must use only data before a cutoff date, and the label must come from after it:
+\runsql{Q_point_in_time}
+Only candidates who had signed up before the cutoff are included (an entity must exist at prediction time). Aarav had 2 applications before 15 February
+and got an offer after it (label 1). In production, repeat this for many cutoffs (one snapshot per week) to build a larger training set, and validate on
+later cutoffs than you train on (time-based split, Chapter 37).
+
+\begin{trap}[: features that leak]
+\code{got\_offer} computed over all time, ``number of interviews'' (which only happens after a shortlist), ``days since last login'' computed at query
+time rather than at the cutoff, and global target encodings (offer rate per company over all data) all leak future information. The model looks perfect
+offline and fails in production: the same lesson as salary in the placement data (Chapter 42).
+\end{trap}
+
+\section{Performance: indexes and query plans}
+\stuck{How database indexes work (B-tree) explained}{\yts{how+database+indexes+work+b+tree+explained}}
+\subsection{What an index is}
+Without an index, finding candidate 105's applications means reading every row (a \emph{full table scan}), like finding a name in an unsorted pile of
+forms. An \textbf{index} is a separate, sorted structure (usually a B-tree: a balanced tree whose leaves hold the key values in order with pointers to the
+rows), like the alphabetical index at the back of a book. A lookup takes $O(\log n)$ steps instead of $O(n)$: about 30 steps for a billion rows.
+\runsql{L4_explain_noindex}
+\runsql{L4_explain_index}
+\code{SCAN} = read everything; \code{SEARCH ... USING INDEX} = jump straight to the matching rows.
+
+\subsection{Sargable filters}
+An index on \code{applied\_date} is sorted by the raw date. Wrapping the column in a function hides that order from the optimiser, so it scans:
+\runsql{L4_explain_nonsarg}
+Rewrite as a range on the raw column (``\textbf{S}earch \textbf{ARG}ument-\textbf{able}''):
+\runsql{L4_explain_sarg}
+Other non-sargable forms: \code{WHERE salary * 12 > 600}, \code{LIKE '\%data'} (leading wildcard), \code{WHERE LOWER(email) = ...} (unless there is an index
+on \code{LOWER(email)}), implicit type casts (comparing a text column to a number).
+
+\subsection{Rules of thumb}
+\begin{itemize}
+\item Index columns used in WHERE, JOIN ON, ORDER BY and GROUP BY of frequent queries; foreign keys almost always.
+\item A \textbf{composite index} on (\code{cand\_id}, \code{applied\_date}) serves filters on \code{cand\_id} alone or on both, but not on
+\code{applied\_date} alone (\emph{leftmost-prefix rule}), like a phone book sorted by surname then first name.
+\item A \textbf{covering index} contains every column a query needs, so the table itself is never read.
+\item Indexes cost: every INSERT/UPDATE must update them, and they use disk. Low-cardinality columns (gender) rarely benefit.
+\item Read the plan (\code{EXPLAIN} / \code{EXPLAIN ANALYZE}) instead of guessing; select only needed columns; filter early; avoid \code{SELECT DISTINCT}
+as a fix for fan-out; in warehouses, filter on partition columns (e.g.\ date) so whole partitions are skipped.
+\end{itemize}
+
+\section{Schema design: normalisation, OLTP vs OLAP, star schema}
+\stuck{Database normalization 1NF 2NF 3NF explained simply}{\yts{database+normalization+1nf+2nf+3nf+explained+simply}}
+\subsection{Normalisation in three steps}
+Start from one wide sheet: \emph{(app\_id, candidate\_name, candidate\_city, skills, job\_title, company\_name, company\_city, status)}.
+\begin{itemize}
+\item \textbf{1NF} (atomic values): \code{skills = 'python, sql'} holds a list in one cell; move skills to their own table, one row per (candidate, skill).
+\item \textbf{2NF} (no partial dependency): in a table keyed by (cand\_id, job\_id), \code{candidate\_city} depends on cand\_id alone; move it to
+\code{candidates}.
+\item \textbf{3NF} (no transitive dependency): \code{company\_city} depends on company, which depends on job; move it to \code{companies}.
+\end{itemize}
+The result is exactly MiniNaukri's design: each fact stored once, so updates cannot create contradictions (\emph{update anomalies}).
+
+\subsection{OLTP vs OLAP}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X}
+\toprule
+& OLTP (the product database) & OLAP (the analytics warehouse)\\
+\midrule
+Workload & Many small reads and writes (apply to a job) & Few large scans and aggregations (applications per city per month)\\
+Design & Normalised (3NF), row-oriented & Denormalised star/snowflake schema, column-oriented\\
+Examples & MySQL, PostgreSQL & Redshift, BigQuery, Snowflake, Hive, ClickHouse\\
+Priorities & ACID, low latency & Throughput, compression, scanning only needed columns\\
+\bottomrule
+\end{tabularx}
+\end{center}
+A \textbf{star schema} has a central \emph{fact} table (one row per event: an application, with numeric measures and foreign keys) surrounded by
+\emph{dimension} tables (candidate, job, company, date) that describe it. Analysts join the fact to a few dimensions and aggregate. Data scientists usually
+query the warehouse, never the production OLTP database.
+
+\section{SQL $\leftrightarrow$ pandas translation}
+\stuck{SQL vs pandas: equivalent operations}{\yts{sql+vs+pandas+equivalent+operations+groupby+merge}}
+\begin{center}\scriptsize
+\begin{tabularx}{\linewidth}{X X}
+\toprule
+SQL & pandas\\
+\midrule
+\code{SELECT a, b FROM t WHERE x > 5} & \code{t.loc[t.x > 5, ['a','b']]}\\
+\code{ORDER BY a DESC LIMIT 3} & \code{t.sort\_values('a', ascending=False).head(3)} or \code{t.nlargest(3,'a')}\\
+\code{SELECT DISTINCT a} & \code{t['a'].drop\_duplicates()} / \code{t['a'].unique()}\\
+\code{GROUP BY g} with \code{COUNT(*), AVG(x)} & \code{t.groupby('g').agg(n=('x','size'), avg=('x','mean'))}\\
+\code{HAVING COUNT(*) >= 3} & \code{.query('n >= 3')} after the groupby\\
+\code{LEFT JOIN u ON t.k = u.k} & \code{t.merge(u, on='k', how='left')}\\
+\code{UNION ALL} / \code{UNION} & \code{pd.concat([t, u])} / \code{.drop\_duplicates()}\\
+\code{CASE WHEN} & \code{np.where}, \code{np.select}, \code{pd.cut}\\
+\code{COALESCE(x, 0)} & \code{t.x.fillna(0)}\\
+\code{AVG(x) OVER (PARTITION BY g)} & \code{t.groupby('g').x.transform('mean')}\\
+\code{ROW\_NUMBER() OVER (PARTITION BY g ORDER BY d)} & \code{t.sort\_values('d').groupby('g').cumcount() + 1}\\
+\code{DENSE\_RANK() OVER (ORDER BY x DESC)} & \code{t.x.rank(method='dense', ascending=False)}\\
+\code{LAG(x) OVER (PARTITION BY g ORDER BY d)} & \code{t.sort\_values('d').groupby('g').x.shift()}\\
+\code{SUM(x) OVER (ORDER BY d)} & \code{t.sort\_values('d').x.cumsum()}\\
+Pivot with \code{SUM(CASE ...)} & \code{pd.pivot\_table} / \code{pd.crosstab}\\
+\bottomrule
+\end{tabularx}
+\end{center}
+One semantic difference to mention: pandas' \code{groupby} drops NaN keys by default (\code{dropna=False} keeps them), whereas SQL's GROUP BY keeps NULL as
+its own group.
+
+% ======================================================================
+\section{Interview questions: Level 4}
+\stuck{Advanced SQL interview questions for data scientists}{\yts{advanced+sql+interview+questions+data+scientist}}
+
+\begin{qa}{\classic Find the second (and the Nth) highest salary. What if there are ties or fewer than N salaries?}
+\oneline{\code{DENSE\_RANK() OVER (ORDER BY salary DESC)} and keep rank N; ties are handled because DENSE\_RANK ranks distinct values; if fewer than N
+distinct values exist, return NULL by wrapping the query as a scalar subquery.}
+\why Ranking distinct values is exactly what ``Nth highest salary'' means. \code{MAX(salary) WHERE salary < (SELECT MAX(salary) ...)} works for N = 2 only.
+\code{LIMIT 1 OFFSET N-1} needs DISTINCT. The correlated version (count distinct greater values = N-1) works on any SQL, at $O(n^2)$ cost.
+\worked Here: second highest = 75 (\code{L4\_second\_max}); third = 70 by all three methods (\code{L4\_nth\_dense}, \code{L4\_nth\_limit},
+\code{L4\_nth\_correlated}).
+\begin{lstlisting}[style=sql]
+SELECT (SELECT DISTINCT salary FROM
+          (SELECT salary, DENSE_RANK() OVER (ORDER BY salary DESC) AS dr
+           FROM employees WHERE salary IS NOT NULL) t
+        WHERE dr = 20) AS nth_salary;   -- returns one row with NULL
+\end{lstlisting}
+\pushes \emph{Per department?} Add \code{PARTITION BY dept}. \emph{Without window functions or LIMIT?} The correlated count. \emph{What about the NULL
+salary?} Exclude it explicitly; in a DESC sort SQLite puts NULL last, PostgreSQL puts NULL first, and RANK would then give NULL rank 1 in PostgreSQL.
+\pitfall ROW\_NUMBER or LIMIT without DISTINCT.
+\end{qa}
+
+\begin{qa}{\classic Find and delete duplicate rows, keeping one copy.}
+\oneline{Define the business key, find duplicates with \code{GROUP BY key HAVING COUNT(*) > 1}, label copies with \code{ROW\_NUMBER() OVER (PARTITION BY
+key ORDER BY id)}, and delete rows with \code{rn > 1} (or keep \code{MIN(id)} per key).}
+\why Duplicates almost never share the surrogate id; they share the business key (candidate, job, date). ROW\_NUMBER's ORDER BY decides which copy is kept
+(the first-inserted, the latest-updated, the most complete).
+\worked \code{L4\_dupes\_find} finds (101, 201, 2026-01-16) twice; \code{L4\_dupes\_delete} keeps \code{MIN(app\_id)} and leaves 22 rows.
+In PostgreSQL:
+\begin{lstlisting}[style=sql]
+DELETE FROM applications WHERE app_id IN (
+  SELECT app_id FROM (
+    SELECT app_id, ROW_NUMBER() OVER (PARTITION BY cand_id, job_id, applied_date
+                                      ORDER BY app_id) AS rn
+    FROM applications) t
+  WHERE rn > 1);
+\end{lstlisting}
+\pushes \emph{How do you prevent it?} A UNIQUE constraint on the business key, or idempotent inserts (\code{INSERT ... ON CONFLICT DO NOTHING}).
+\emph{Table has no id at all?} Use the database's row id (\code{ctid}, \code{rowid}) or rebuild with \code{CREATE TABLE ... AS SELECT DISTINCT}.
+\pitfall Deleting all copies (\code{WHERE key IN (duplicates)}), including the one to keep.
+\end{qa}
+
+\begin{qa}{\classic Find users who logged in on at least 3 consecutive days.}
+\oneline{Deduplicate (user, date), subtract ROW\_NUMBER (in days) from the date to get a constant per run, group by user and that constant, keep groups
+with count $\ge 3$.}
+\why Within a run of consecutive dates, both the date and the row number increase by 1 per row, so their difference is constant; any gap increases the
+date by more than the row number and starts a new group.
+\worked \code{L4\_streak\_steps} shows Aarav's dates mapping to 28 Feb, 28 Feb, 28 Feb, 1 Mar, 1 Mar; \code{L4\_streaks} returns 104 (4 days), 101 (3)
+and 107 (3).
+\pushes \emph{Alternative?} LAG: flag rows where \code{date - LAG(date) > 1} as a new streak, then a running SUM of the flags gives the streak id.
+\emph{Longest streak per user?} \code{MAX(streak\_len)} per user over the grouped result. \emph{Consecutive weeks?} Use week numbers instead of dates.
+\pitfall Forgetting to remove same-day duplicates.
+\end{qa}
+
+\begin{qa}{\classic Compute 7-day retention: of the users who signed up on each day, what fraction were active 7 days later?}
+\oneline{Cohort table (user, signup\_date) LEFT JOIN activity on \code{user = user AND activity\_date = signup\_date + 7}, group by signup date,
+\code{COUNT(activity.user) / COUNT(*)}.}
+\why The LEFT JOIN keeps users who were not retained (they count in the denominator); the join condition defines ``retained''. Variants: ``active on day
+7'' (exact) or ``active any time in days 1--7'' (\code{BETWEEN}).
+\worked The monthly-cohort version on MiniNaukri, \code{L4\_cohort}: January 0.75, February 0.5, March 0.5.
+\begin{lstlisting}[style=sql]
+SELECT c.signup_date, COUNT(*) AS cohort,
+       COUNT(DISTINCT l.cand_id) AS retained_d7,
+       ROUND(1.0 * COUNT(DISTINCT l.cand_id) / COUNT(*), 2) AS d7_retention
+FROM candidates c
+LEFT JOIN logins l ON l.cand_id = c.cand_id
+                  AND l.login_date = date(c.signup_date, '+7 days')
+GROUP BY c.signup_date;
+\end{lstlisting}
+On MiniNaukri this returns 0 for every signup day, because the login log only covers 1--6 March and no candidate's day 7 falls in it: a reminder to check
+that the activity data actually covers each cohort's window.
+\pushes \emph{Why might the latest cohorts look bad?} They have not had 7 days yet (right-censoring); exclude cohorts younger than the window.
+\emph{Why COUNT(DISTINCT) in the numerator?} A user can log in twice on day 7.
+\pitfall Putting the activity condition in WHERE (drops non-retained users, giving 100\% retention).
+\end{qa}
+
+\begin{qa}{\classic Top 3 jobs by number of applications in each city.}
+\oneline{Count applications per job (LEFT JOIN so zero-application jobs count), rank with \code{DENSE\_RANK() OVER (PARTITION BY city ORDER BY n DESC)},
+keep rank $\le 3$.}
+\worked
+\begin{lstlisting}[style=sql]
+WITH n AS (
+  SELECT j.job_id, j.city, COUNT(a.app_id) AS n_apps
+  FROM jobs j LEFT JOIN applications a ON a.job_id = j.job_id
+  GROUP BY j.job_id, j.city
+), r AS (
+  SELECT *, DENSE_RANK() OVER (PARTITION BY city ORDER BY n_apps DESC) AS dr FROM n
+)
+SELECT city, job_id, n_apps FROM r WHERE dr <= 3 ORDER BY city, n_apps DESC;
+\end{lstlisting}
+\why Grain: one row per job first, then rank within city. Bengaluru has 4 jobs (201: 5 including the duplicate, 207: 3, 206: 2, 202: 1), so 202 is cut.
+\pushes \emph{Ties?} State whether you want DENSE\_RANK (all ties) or ROW\_NUMBER (exactly 3).
+\pitfall Ranking before aggregating (ranking individual application rows).
+\end{qa}
+
+\begin{qa}{Build a hiring funnel from an \code{application\_events} table (one row per status change). How is that better than a status column?}
+\oneline{Count distinct applications that reached each stage (\code{COUNT(DISTINCT CASE WHEN stage = 'interview' THEN app\_id END)}), divide consecutive
+stages; an events table records the path, so ``rejected after interview'' is distinguishable from ``rejected at screening''.}
+\why A single status column overwrites history; MiniNaukri's funnel had to assume rejected applications stopped at stage 1 (\code{L4\_funnel}). With events
+you also get time between stages (median days to shortlist) and where in the funnel rejections happen.
+\worked With the current-status approximation: 22 applied, 12 shortlisted (54.5\%), 8 interviews, 4 offers (50\% of interviews).
+\pushes \emph{Ordered funnel (must pass stage 2 after stage 1)?} Compare per-application timestamps of each stage with MIN() per stage and require
+increasing times.
+\pitfall Counting events instead of distinct applications (a stage can be logged twice).
+\end{qa}
+
+\begin{qa}{Your query computing applications per day is slow on a 2-billion-row table. How do you investigate?}
+\oneline{Read the plan with EXPLAIN (ANALYZE); check that the date filter is sargable and hits a partition or index; select only needed columns;
+pre-aggregate (materialised daily table); check statistics and join strategy.}
+\why Typical culprits: \code{WHERE DATE(applied\_at) = ...} (function on the column defeats indexes and partition pruning), \code{SELECT *} on a columnar
+warehouse (reads every column), joining before filtering, fan-out joins, \code{COUNT(DISTINCT)} on huge cardinalities (approximate with
+\code{APPROX\_COUNT\_DISTINCT}/HyperLogLog when exactness is not needed).
+\worked \code{L4\_explain\_nonsarg} shows \code{SCAN} for \code{strftime('\%Y', applied\_date) = '2026'}; the half-open range in \code{L4\_explain\_sarg}
+uses the index.
+\pushes \emph{Composite index for ``applications of candidate X in March''?} (\code{cand\_id}, \code{applied\_date}): equality column first, range
+column second. \emph{Why not index everything?} Writes slow down and storage grows.
+\pitfall Guessing optimisations without looking at the plan.
+\end{qa}
+
+\begin{qa}{What is normalisation? When would you deliberately denormalise?}
+\oneline{Organising tables so each fact is stored once (1NF atomic values, 2NF no partial dependency on part of a key, 3NF no transitive dependency),
+which prevents update anomalies; denormalise in analytics warehouses and read-heavy paths, where fewer joins matter more than update cost.}
+\why A normalised OLTP schema makes writes safe and small. Analytical queries then need many joins; a warehouse star schema (wide fact + dimensions) or a
+flat feature table trades redundancy for speed and simplicity. Updates there come from batch pipelines, not users, so anomalies are controlled.
+\worked The single wide application sheet with \code{skills = 'python, sql'} and company city repeated per row becomes MiniNaukri's 4 tables plus a
+skills table.
+\pushes \emph{What is BCNF?} A stricter 3NF: every determinant is a candidate key. \emph{Star vs snowflake?} Snowflake normalises the dimensions further
+(company $\to$ industry table).
+\pitfall Claiming normalised is always better.
+\end{qa}
+
+\begin{qa}{\deep You are asked for ``average applications per active candidate per day''. Write down three different numbers this could mean, and the SQL
+for the one you would pick.}
+\oneline{(1) total applications / total candidate-days with activity; (2) the mean over days of (applications that day / active candidates that day);
+(3) the mean over candidates of their own daily average; they differ because of weighting, and the choice must be agreed with the stakeholder.}
+\why (1) weights busy days more; (2) gives each day equal weight (an average of ratios); (3) gives each candidate equal weight, so a candidate active one
+day counts as much as one active every day. ``Active'' also needs a definition: logged in, or applied? Each choice is a different metric.
+\worked Definition (2), with active = logged in:
+\begin{lstlisting}[style=sql]
+WITH a AS (SELECT applied_date AS d, COUNT(*) AS apps FROM applications GROUP BY 1),
+     u AS (SELECT login_date AS d, COUNT(DISTINCT cand_id) AS users FROM logins GROUP BY 1)
+SELECT AVG(1.0 * COALESCE(a.apps, 0) / u.users) AS avg_apps_per_active_user
+FROM u LEFT JOIN a ON a.d = u.d;
+\end{lstlisting}
+\pushes \emph{Which would you report?} The one matching the decision: capacity planning wants (1); a product health dashboard usually wants (2) with
+the numerator and denominator shown. \emph{Why show both parts?} So that a change in the ratio can be traced to a change in applications or in users.
+\pitfall Writing SQL before defining the metric.
+\end{qa}
+
+\begin{qa}{\deep You build a training table in SQL for ``will this candidate get an offer in the next 30 days?'' and the offline AUC is 0.99. What do you
+check first?}
+\oneline{Leakage: every feature must be computed only from data before the prediction cutoff, the label only from after it, and the population must be
+the candidates who existed (and were eligible) at the cutoff.}
+\why Features computed over all history (``number of interviews'', ``has offer'', ``days since last login'' computed today) contain the answer. Global
+aggregates (company offer rate over all time) leak too. A random train/test split of snapshots also leaks, because the same candidate's later snapshots
+inform earlier ones; split by time.
+\worked \code{Q\_point\_in\_time}: features from applications strictly before 15 February, label from on or after it, only candidates who signed up
+before the cutoff. Aarav: 2 earlier applications, label 1 (offer on 19 February).
+\pushes \emph{How do feature stores help?} They store timestamped feature values and do ``as-of'' joins automatically. \emph{Sanity checks?} Feature
+importance dominated by one suspicious feature; performance collapsing on a later time-split; features whose values change for the past when recomputed.
+\pitfall Celebrating the AUC.
+\end{qa}
+
+\begin{qa}{\deep Your A/B test query shows variant B with CTR 0.625 vs A with 0.25. The product manager wants to ship B today. What do you say?}
+\oneline{The counts are tiny (8 impressions per arm): a two-proportion z-test gives $z = 1.51$, p = 0.13, so the difference is not significant; we also
+need to check randomisation balance, the unit of analysis (users, not impressions) and novelty effects before shipping.}
+\why SQL gives counts; inference needs the sampling variability. Impressions from the same user are correlated, so the effective sample size is the number of
+users and the variance should be computed per user (or by the delta method). A sample-ratio-mismatch check (are arms the expected size?) catches broken
+assignment. Novelty: users click new things at first.
+\worked Pooled $p = 7/16$; SE $= \sqrt{0.4375 \times 0.5625 \times (1/8 + 1/8)} = 0.248$; $z = 0.375/0.248 = 1.51$; two-sided $p = 0.13$.
+\pushes \emph{How many impressions would you need?} For 80\% power to detect 0.25 $\to$ 0.35 at $\alpha = 0.05$: about $n \approx (1.96 + 0.84)^2
+[0.25\cdot0.75 + 0.35\cdot0.65]/0.1^2 \approx 325$ per arm. \emph{Daily results?} \code{L4\_ctr\_daily}: B is never worse on any day, encouraging but
+not proof.
+\pitfall Treating a SQL ratio as a conclusion.
+\end{qa}
+
+\begin{qa}{\deep Why is \code{WHERE YEAR(applied\_at) = 2026} slower than \code{WHERE applied\_at >= '2026-01-01' AND applied\_at < '2027-01-01'}
+when there is an index on \code{applied\_at}?}
+\oneline{The index stores raw \code{applied\_at} values in sorted order; the optimiser can binary-search a range on the raw column, but it cannot search
+for values of a function of the column without computing the function for every row, so it scans.}
+\why A B-tree supports lookups on its key's order. \code{YEAR(x) = 2026} is equivalent to a range, but the optimiser does not invert arbitrary functions.
+Expression indexes (\code{CREATE INDEX ... ON t (YEAR(applied\_at))}) or partitioning on the year are alternatives.
+\worked SQLite plans: \code{SCAN applications} for the strftime filter vs \code{SEARCH applications USING INDEX idx\_app\_date (applied\_date>? AND
+applied\_date<?)} for the range (\code{L4\_explain\_nonsarg}, \code{L4\_explain\_sarg}).
+\pushes \emph{Same issue elsewhere?} \code{WHERE amount + 0 = 5}, \code{WHERE CAST(id AS TEXT) = '5'}, \code{LIKE '\%x'}, and comparing a VARCHAR column
+with an integer literal (implicit cast on the column).
+\pitfall Answering ``functions are slow''; the real reason is losing the index order.
+\end{qa}

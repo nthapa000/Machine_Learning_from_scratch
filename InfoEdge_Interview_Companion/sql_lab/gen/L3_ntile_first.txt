@@ -1,0 +1,12 @@
+name   | ctc_lpa | quartile | top_earner | pct_rank
+-------+---------+----------+------------+---------
+Sana   | 5.5     | 1        | Vikram     | 0
+Aarav  | 8       | 1        | Vikram     | 0.125
+Ishaan | 9.5     | 1        | Vikram     | 0.25
+Rohan  | 12      | 2        | Vikram     | 0.375
+Ananya | 15      | 2        | Vikram     | 0.5
+Diya   | 18      | 3        | Vikram     | 0.625
+Priya  | 24      | 3        | Vikram     | 0.75
+Meera  | 30      | 4        | Vikram     | 0.875
+Vikram | 42      | 4        | Vikram     | 1
+(9 rows)

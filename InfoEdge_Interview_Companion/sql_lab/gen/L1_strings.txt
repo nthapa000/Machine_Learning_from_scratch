@@ -1,0 +1,7 @@
+name  | upper_name | n_chars | first3 | label
+------+------------+---------+--------+------------------
+Aarav | AARAV      | 5       | Aar    | Aarav (Bengaluru)
+Diya  | DIYA       | 4       | Diy    | Diya (Mumbai)
+Kabir | KABIR      | 5       | Kab    | Kabir (Delhi)
+Meera | MEERA      | 5       | Mee    | Meera (Bengaluru)
+(4 rows)

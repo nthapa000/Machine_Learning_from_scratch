@@ -1,0 +1,6 @@
+name  | salary
+------+-------
+Neha  | 90
+Yash  | 75
+Rahul | 70
+(3 rows)

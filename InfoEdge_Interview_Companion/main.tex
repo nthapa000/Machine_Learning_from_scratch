@@ -1,7 +1,7 @@
 \documentclass[11pt,openany]{book}
 \input{preamble}
 
-\hypersetup{pdftitle={InfoEdge DS Interview Companion: Classical ML, Deep Learning, Python and Case Studies},
+\hypersetup{pdftitle={InfoEdge DS Interview Companion: Classical ML, Deep Learning, SQL, Python and Case Studies},
   pdfauthor={Prepared for Nishant}}
 
 \begin{document}
@@ -16,7 +16,7 @@
 {\color{accent}\rule{\linewidth}{1.5pt}}\par\vspace{0.6cm}
 {\Huge\bfseries\color{accent} The InfoEdge Interview Companion\par}
 \vspace{0.4cm}
-{\LARGE\bfseries Classical ML, Deep Learning, Python (Round 3)\\ and Case Studies (Round 4)\par}
+{\LARGE\bfseries Classical ML, Deep Learning, SQL, Python (Round 3)\\ and Case Studies (Round 4)\par}
 \vspace{0.4cm}
 {\color{accent}\rule{\linewidth}{1.5pt}}\par
 \vspace{0.8cm}
@@ -28,7 +28,7 @@ one-line answer first, then the full logic, a worked example, the follow-ups and
 \vspace{1cm}
 \begin{tcolorbox}[colback=accentlight,colframe=accent,width=0.86\linewidth,arc=2pt,boxrule=0.6pt]
 \small
-\textbf{What this book covers} (exactly the InfoEdge Pre-Placement Talk 2025--26 syllabus, minus SQL as requested):\\[3pt]
+\textbf{What this book covers} (the InfoEdge Pre-Placement Talk 2025--26 syllabus, with SQL in Part IX):\\[3pt]
 \textbf{Rounds 1 and 2, Classical ML and Deep Learning (66.66\%):} Bagging, Boosting, Gradient Descent,
 Decision Trees, Linear and Logistic Regression, Random Forests, Gradient Boosting Machines, XGBoost, LightGBM,
 SVM and the Kernel Trick, Regularisation, Bias--Variance Tradeoff, Metrics (Precision, Recall, F1, TPR \dots),
@@ -40,6 +40,8 @@ group-by, basic visualisation, basic text processing; scikit-learn: train--test 
 performance testing.\\[3pt]
 \textbf{Round 4, Case Study:} real world data science problems: data challenges, modelling and design choices,
 model assessment, thought process.\\[3pt]
+\textbf{SQL (Part IX):} four levels from zero (SELECT, NULL logic, joins, GROUP BY, window functions, CTEs) to interview patterns,
+leak-free feature tables, indexes and schema design; every query run on a small job-portal database.\\[3pt]
 \textbf{Plus} the ``unconventional variants'' InfoEdge rewards (GLMs, Poisson regression, SVR, quantile
 regression, kernel methods beyond SVM \dots) and basic GenAI/LLM knowledge mentioned in the 2026--27 talk.
 \end{tcolorbox}
@@ -115,6 +117,12 @@ regression, kernel methods beyond SVM \dots) and basic GenAI/LLM knowledge menti
 \input{chapters/42_eda_placement}
 \input{chapters/43_eda_hr}
 \input{chapters/44_eda_titanic_pima}
+
+\part{SQL for Data Scientists: From Zero to Interview Level (with a Colab Notebook)}
+\input{chapters/45_sql_level1}
+\input{chapters/46_sql_level2}
+\input{chapters/47_sql_level3}
+\input{chapters/48_sql_level4}
 
 \backmatter
 \input{chapters/99_end}

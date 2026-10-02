@@ -1,0 +1,12 @@
+title          | city
+---------------+----------
+Data Analyst   | Bengaluru
+Data Analyst   | Mumbai
+Data Analyst   | Pune
+Data Scientist | Bengaluru
+Data Scientist | Mumbai
+Data Scientist | Noida
+ML Engineer    | Bengaluru
+ML Engineer    | Hyderabad
+ML Engineer    | Noida
+(9 rows)

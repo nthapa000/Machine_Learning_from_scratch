@@ -1,0 +1,6 @@
+name   | ctc_lpa
+-------+--------
+Diya   | 18
+Ananya | 15
+Rohan  | 12
+(3 rows)

@@ -1,0 +1,8 @@
+city
+---------
+Bengaluru
+Delhi
+Mumbai
+Noida
+Pune
+(5 rows)

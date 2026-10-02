@@ -1,0 +1,8 @@
+status      | n
+------------+--
+rejected    | 5
+interview   | 5
+applied     | 5
+shortlisted | 4
+offer       | 4
+(5 rows)

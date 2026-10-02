@@ -1,0 +1,6 @@
+title          | n_jobs | avg_max_ctc | best_max_ctc
+---------------+--------+-------------+-------------
+ML Engineer    | 3      | 34          | 45
+Data Scientist | 4      | 25.75       | 40
+Data Analyst   | 3      | 10          | 12
+(3 rows)

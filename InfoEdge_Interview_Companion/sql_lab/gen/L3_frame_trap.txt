@@ -1,0 +1,7 @@
+name  | salary | last_default | last_full
+------+--------+--------------+----------
+Tara  | 30     | Tara         | Arjun
+Kavya | 45     | Manav        | Arjun
+Manav | 45     | Manav        | Arjun
+Arjun | 60     | Arjun        | Arjun
+(4 rows)

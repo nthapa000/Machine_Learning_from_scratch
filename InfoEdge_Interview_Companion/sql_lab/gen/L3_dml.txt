@@ -1,0 +1,5 @@
+app_id | cand_id | job_id | status
+-------+---------+--------+------------
+1      | 101     | 201    | interview
+24     | 110     | 210    | shortlisted
+(2 rows)

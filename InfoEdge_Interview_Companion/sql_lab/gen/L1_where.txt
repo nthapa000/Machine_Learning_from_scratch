@@ -1,0 +1,6 @@
+name   | city      | exp_yrs | ctc_lpa
+-------+-----------+---------+--------
+Aarav  | Bengaluru | 2       | 8
+Meera  | Bengaluru | 7       | 30
+Ishaan | Bengaluru | 2       | 9.5
+(3 rows)

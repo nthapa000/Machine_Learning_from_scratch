@@ -1,0 +1,304 @@
+\chapter{SQL Level 3: Subqueries, CTEs, Window Functions and Changing Data}
+\companion{techTFQ: SQL Window Functions explained (RANK, DENSE\_RANK, ROW\_NUMBER, LAG, LEAD)}{\yts{techtfq+sql+window+function+row_number+rank+dense_rank+lag+lead}}
+
+Level 2 answered ``one number per group''. Level 3 answers questions that need \emph{a query inside a query} (``candidates earning more than the average'')
+and questions that need \emph{each row compared with its neighbours or its group} (``rank employees within department'', ``days since the previous
+application''). These are the tools behind almost every medium and hard SQL interview problem.
+
+\section{Subqueries: a query inside a query}
+\stuck{SQL subqueries explained: scalar, IN, correlated, EXISTS}{\yts{sql+subquery+correlated+subquery+exists+explained}}
+A subquery is a SELECT in brackets used where a value, a list or a table is expected.
+
+\subsection{Scalar subquery: returns one value}
+``Candidates earning above the average CTC.'' First compute the average, then compare each row with it:
+\runsql{L3_scalar_sub}
+The inner query \code{SELECT AVG(ctc\_lpa) FROM candidates} returns one number ($164/9 = 18.2$; Kabir's NULL is ignored), and the outer query compares
+each candidate with it. You cannot write \code{WHERE ctc\_lpa > AVG(ctc\_lpa)} directly: an aggregate cannot appear in WHERE.
+
+\subsection{IN subquery: returns a list}
+\runsql{L3_in_sub}
+
+\subsection{The NOT IN NULL trap}
+``Employees who manage nobody'': their \code{emp\_id} does not appear in the \code{manager\_id} column. The natural query returns \textbf{nothing}:
+\runsql{L3_not_in_null}
+Why? Neha's \code{manager\_id} is NULL, so the list is (NULL, 1, 2, 2, 2, 1, 6, 6, 1, 9, 9). \code{x NOT IN (a, b, NULL)} means
+\code{x <> a AND x <> b AND x <> NULL}. The last part is UNKNOWN for every $x$, and TRUE AND UNKNOWN is UNKNOWN, so no row is ever TRUE. One NULL in the list
+kills the whole query, silently. \code{NOT EXISTS} does not have this problem, because it only asks whether a matching row exists:
+\runsql{L3_not_exists}
+
+\subsection{Correlated subquery: re-evaluated for each outer row}
+A correlated subquery refers to a column of the outer query, so conceptually it runs once per outer row. ``Employees earning more than their own
+department's average'':
+\runsql{L3_correlated}
+For Arjun (DataScience) the inner query computes the DataScience average (45); $60 > 45$, keep. For Sneha (Engineering, 50) it computes the Engineering
+average ($195/3 = 65$); $50 < 65$, drop. Correlated subqueries are easy to read but can be slow on big tables (one inner evaluation per row, unless the
+optimiser rewrites it as a join); the window-function version below avoids that.
+
+\subsection{Derived tables: a subquery in FROM}
+A subquery in FROM acts as a temporary table, which lets you group by a computed column:
+\runsql{L3_derived_table}
+
+\section{CTEs: naming the steps of a query}
+\stuck{SQL CTE (WITH clause) explained, including recursive CTE}{\yts{sql+cte+with+clause+recursive+cte+explained}}
+A \textbf{Common Table Expression} (\code{WITH name AS (...)}) is a derived table with a name, written before the main query. Several CTEs can follow each
+other and each can use the previous ones, so a complicated query reads like the steps of a pandas notebook.
+\runsql{L3_cte}
+Read top-down: count applications per job; attach title and company, with 0 for jobs that have none (job 210); keep jobs at or above the average of 2.3
+applications per job ($23/10$).
+
+\begin{intuition}[: subquery, CTE, view or temp table?]
+\begin{itemize}
+\item \textbf{CTE}: readability; exists only for this one query; can be referenced several times; can be recursive.
+\item \textbf{Subquery}: fine for one small step; nesting three levels deep becomes unreadable.
+\item \textbf{View} (\code{CREATE VIEW}): a saved query that other queries and people reuse; it stores no data (a \emph{materialised view} does, and
+must be refreshed).
+\item \textbf{Temporary table}: materialises an intermediate result for the session; useful when it is reused by many later queries or needs an index.
+\end{itemize}
+\end{intuition}
+
+\subsection{Recursive CTEs: hierarchies and date spines}
+A recursive CTE has two parts joined by \code{UNION ALL}: an \emph{anchor} (the starting rows) and a \emph{recursive part} that refers to the CTE itself and
+produces the next level from the previous one. It stops when the recursive part returns no new rows. Org chart from the top:
+\runsql{L3_recursive_hier}
+Step by step: anchor = Neha (level 0). Iteration 1: employees whose manager is in the previous result: Arjun, Rahul, Pooja (level 1). Iteration 2: their
+reports (level 2). Iteration 3 finds nobody: stop.
+
+The second use is a \textbf{date spine}: a table of every date, so that days with no activity show 0 instead of disappearing.
+\runsql{L3_recursive_dates}
+7 March had no logins. Without the spine, a GROUP BY on \code{logins} alone would simply omit that day, and a chart of DAU (daily active users) would
+draw a straight line across the gap. Note \code{COUNT(DISTINCT l.cand\_id)}: candidate 109 logged in twice on 4 March but is one active user.
+
+\section{Window functions: aggregates that keep every row}
+\stuck{SQL window functions tutorial: OVER, PARTITION BY, ORDER BY, frames}{\yts{sql+window+functions+over+partition+by+tutorial}}
+\subsection{The idea}
+GROUP BY collapses each group into one row:
+\runsql{L3_groupby_vs_window}
+Often you want the group's number \emph{next to every row} (``each employee's salary and their department's average''). A window function does that: it
+computes over a set of rows related to the current row (its \emph{window}) and returns one value per row, without collapsing anything.
+\begin{center}\small
+\code{function(...) OVER (PARTITION BY} \emph{groups} \code{ORDER BY} \emph{order within group} \emph{frame}\code{)}
+\end{center}
+\begin{itemize}
+\item \code{PARTITION BY}: splits rows into groups (like GROUP BY, but nothing is collapsed). Omit it and the whole result is one partition.
+\item \code{ORDER BY}: order inside each partition; needed for ranks, LAG/LEAD and running totals.
+\item \emph{frame} (\code{ROWS BETWEEN ...}): which rows around the current row are included in a running aggregate.
+\end{itemize}
+\runsql{L3_partition}
+Every employee keeps their row, and gets their department's average and their difference from it: Yash earns 10 above the Engineering average of 65.
+Pandas equivalent: \code{df.groupby('dept')['salary'].transform('mean')}.
+
+\subsection{Ranking: ROW\_NUMBER, RANK, DENSE\_RANK}
+The three differ only in how they handle ties (here Kavya and Manav both earn 45):
+\runsql{L3_rownum_rank}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X l}
+\toprule
+Function & Ties & Sequence for 50, 45, 45, 40\\
+\midrule
+\code{ROW\_NUMBER()} & Always different numbers; tied rows ordered arbitrarily (add a tie-breaker!) & 5, 6, 7, 8\\
+\code{RANK()} & Ties share a rank; the next rank \emph{skips} (Olympic medals: two golds, no silver) & 5, 6, 6, 8\\
+\code{DENSE\_RANK()} & Ties share a rank; no gaps & 5, 6, 6, 7\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Which to use: ``the 3rd highest \emph{salary value}'' $\Rightarrow$ DENSE\_RANK; ``exactly one row per group'' (deduplication, latest record) $\Rightarrow$
+ROW\_NUMBER with a deterministic ORDER BY; competition-style ranking $\Rightarrow$ RANK.
+
+\subsection{Window functions cannot go in WHERE}
+Window functions are computed in the SELECT step, after WHERE (Section~\ref{sec:sqlorder}). \code{WHERE DENSE\_RANK() OVER (...) <= 3} fails with
+\emph{``misuse of window function DENSE\_RANK()''} in SQLite (similar errors elsewhere). Compute the rank in a subquery or CTE, then filter outside:
+\runsql{Q_window_in_where}
+(Snowflake, BigQuery and Teradata offer \code{QUALIFY dr <= 3} as a shortcut.)
+
+\subsection{LAG and LEAD: looking at the previous and next row}
+\code{LAG(col)} returns the value of col from the previous row of the partition (NULL for the first row); \code{LEAD(col)} from the next row. They answer
+``time since previous event'' questions:
+\runsql{L3_lag_lead}
+Aarav applied twice on 16 January (the duplicate row), then waited 34 days. \code{LAG(col, 2)} looks two rows back; \code{LAG(col, 1, 0)} gives 0 instead
+of NULL for the first row. Without window functions you would need a self-join that finds, for each row, the latest earlier row:
+\runsql{Q_lag_selfjoin}
+Same answer, but it is quadratic in the number of rows per candidate: one reason window functions exist.
+
+\subsection{Running totals, moving averages and frames}
+With \code{ORDER BY} inside OVER, \code{SUM} becomes a running total. A frame \code{ROWS BETWEEN 2 PRECEDING AND CURRENT ROW} restricts it to the current
+row and the two before it: a 3-row moving average.
+\runsql{L3_running}
+Check 11 February: running total $1 + 1 + 1 + 2 = 5$; moving average of the last three days' counts $(1 + 1 + 2)/3 = 1.33$.
+
+\begin{trap}[: the default frame, and LAST\_VALUE]
+With ORDER BY and no explicit frame, the default frame is \code{RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW}: from the first row up to the current
+row \emph{and its ties}. Hence \code{LAST\_VALUE} returns the current row (or its last tie), not the partition's last row:
+\runsql{L3_frame_trap}
+For Kavya, \code{last\_default} is Manav (her tie), not Arjun. Write the full frame (\code{ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING}) or
+use \code{FIRST\_VALUE} with the opposite order. \code{ROWS} counts physical rows; \code{RANGE} groups rows with equal ORDER BY values; with ties in a
+running sum the two give different answers.
+\end{trap}
+
+\subsection{Share of total, buckets and percentiles}
+A window with an empty \code{OVER ()} spans the whole result, so \code{SUM(COUNT(*)) OVER ()} is the grand total of the grouped counts, which gives a
+percentage in one pass:
+\runsql{L3_pct_total}
+\code{NTILE(4)} splits ordered rows into 4 nearly equal buckets (quartiles); \code{PERCENT\_RANK} $= (\text{rank} - 1)/(n - 1)$; \code{FIRST\_VALUE}
+picks the first row of the window:
+\runsql{L3_ntile_first}
+With 9 rows, NTILE(4) makes buckets of sizes 3, 2, 2, 2 (the first buckets get the extra rows).
+
+\section{Changing data: INSERT, UPDATE, DELETE and DDL}
+\stuck{SQL INSERT UPDATE DELETE CREATE TABLE constraints tutorial}{\yts{sql+insert+update+delete+create+table+constraints+tutorial}}
+\textbf{DML} (data manipulation) changes rows; \textbf{DDL} (data definition) changes structure.
+\runsql{L3_dml}
+Row 24 was inserted then updated to shortlisted; the duplicate row 22 was deleted. \textbf{Always run the WHERE as a SELECT first}: an UPDATE or DELETE
+without WHERE changes every row.
+\runsql{L3_ddl}
+\code{NOT NULL}, \code{CHECK}, \code{PRIMARY KEY} and \code{REFERENCES} make the database reject bad data at the door: inserting level 7 or a second
+(101, python) row would fail. Constraints are cheaper than cleaning data afterwards.
+
+\subsection{Transactions and ACID}
+A \textbf{transaction} groups statements so that they succeed or fail together (\code{BEGIN; ... COMMIT;} or \code{ROLLBACK;}). Moving a candidate's
+application to ``offer'' and inserting an offer-letter row must both happen or neither. Databases guarantee \textbf{ACID}:
+\begin{itemize}
+\item \textbf{Atomicity}: all statements of a transaction or none.
+\item \textbf{Consistency}: a transaction takes the database from one valid state (all constraints satisfied) to another.
+\item \textbf{Isolation}: concurrent transactions do not see each other's half-finished work (levels: read uncommitted, read committed, repeatable read,
+serialisable).
+\item \textbf{Durability}: once committed, the change survives a crash (written to a log on disk).
+\end{itemize}
+
+% ======================================================================
+\section{Interview questions: Level 3}
+\stuck{SQL window functions interview questions}{\yts{sql+window+functions+interview+questions+rank+dense_rank+row_number}}
+
+\begin{qa}{\classic Explain ROW\_NUMBER, RANK and DENSE\_RANK with salaries 90, 75, 70, 60, 50, 45, 45, 40.}
+\oneline{ROW\_NUMBER gives 1--8 with no ties; RANK gives 1, 2, 3, 4, 5, 6, 6, 8 (skips 7); DENSE\_RANK gives 1, 2, 3, 4, 5, 6, 6, 7 (no gap).}
+\why All three number rows in the ORDER BY of the window. ROW\_NUMBER ignores ties (and so is non-deterministic between tied rows unless you add a
+tie-breaker column). RANK = 1 + number of rows strictly better, so ties share a rank and the next rank jumps by the size of the tie. DENSE\_RANK = 1 +
+number of distinct better values.
+\worked Output \code{L3\_rownum\_rank}: Kavya and Manav get row numbers 6 and 7, rank 6 and 6, dense rank 6 and 6; Pooja after them gets rank 8 and dense
+rank 7.
+\pushes \emph{Which for ``3rd highest salary''?} DENSE\_RANK (values, not rows). \emph{Which for deduplication?} ROW\_NUMBER with \code{ORDER BY app\_id}
+so that exactly one row gets 1. \emph{Which for ``top 3 per department including ties''?} DENSE\_RANK $\le 3$ or RANK $\le 3$, depending on whether
+the business wants three values or three positions.
+\pitfall Using ROW\_NUMBER for Nth highest salary (ties give the wrong answer).
+\end{qa}
+
+\begin{qa}{\classic NOT IN vs NOT EXISTS: why can NOT IN return zero rows?}
+\oneline{If the subquery returns any NULL, \code{x NOT IN (list)} evaluates to UNKNOWN for every x, so nothing passes WHERE; NOT EXISTS only checks for
+matching rows and is NULL-safe.}
+\why \code{x NOT IN (a, b, NULL)} expands to \code{x <> a AND x <> b AND x <> NULL}; the last term is UNKNOWN, so the conjunction is at best UNKNOWN.
+NOT EXISTS evaluates \code{EXISTS (SELECT 1 ... WHERE inner.k = outer.k)}, which is TRUE or FALSE, never UNKNOWN.
+\worked ``Employees who manage nobody'': NOT IN on \code{manager\_id} returns 0 rows (Neha's manager\_id is NULL); NOT EXISTS returns the 7 correct
+employees (outputs \code{L3\_not\_in\_null}, \code{L3\_not\_exists}). Fix for NOT IN: add \code{WHERE manager\_id IS NOT NULL} inside the subquery.
+\pushes \emph{Does IN have the same problem?} No: \code{x IN (a, NULL)} is TRUE when \code{x = a}; the NULL only turns ``no match'' from FALSE into
+UNKNOWN, which WHERE drops anyway. \emph{Performance?} Most optimisers plan NOT EXISTS as an anti-join; NOT IN with a nullable column often cannot be.
+\pitfall Believing the two are interchangeable.
+\end{qa}
+
+\begin{qa}{\classic Find each employee's salary next to their department's average, and list those above it. Do it with a window and with a correlated
+subquery.}
+\oneline{\code{AVG(salary) OVER (PARTITION BY dept)} in a CTE, then filter \code{salary > dept\_avg}; or \code{WHERE salary > (SELECT AVG(salary) FROM
+employees x WHERE x.dept = e.dept)}.}
+\why The window computes each department's average once and attaches it to every row; the correlated subquery (logically) recomputes it per row.
+\worked
+\begin{lstlisting}[style=sql]
+WITH t AS (
+  SELECT name, dept, salary, AVG(salary) OVER (PARTITION BY dept) AS dept_avg
+  FROM employees
+)
+SELECT name, dept, salary, dept_avg FROM t WHERE salary > dept_avg;
+\end{lstlisting}
+Both return Arjun (60 > 45), Yash (75 > 65), Rahul (70 > 65), Pooja (40 > 32.5) (output \code{L3\_correlated}). Neha (90 = 90) is not \emph{above} her
+one-person department's average.
+\pushes \emph{What about Zoya (NULL salary)?} \code{NULL > x} is UNKNOWN, so she is never listed; AVG ignored her when computing Sales' 32.5.
+\pitfall \code{WHERE salary > AVG(salary)}: aggregates are illegal in WHERE.
+\end{qa}
+
+\begin{qa}{\classic Compute a running total and a 7-day moving average of daily applications. What changes if some days have no applications?}
+\oneline{\code{SUM(n) OVER (ORDER BY day)} and \code{AVG(n) OVER (ORDER BY day ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)} on a daily-count CTE; if days
+are missing, ROWS counts the last 7 \emph{rows}, not the last 7 \emph{days}, so first left-join to a date spine (filling 0) or use a RANGE frame on dates
+where supported.}
+\why A ``7-row'' window over a table that skips empty days stretches across more than 7 calendar days and averages only active days, overstating the
+average. A recursive CTE (or a calendar table) supplies every day.
+\worked \code{L3\_running} uses a 3-row window over February: the dates jump (2nd, 6th, 7th, 11th, ...), so the ``3-day'' average on 11 February actually
+covers 6--11 February. With a date spine those missing days would contribute zeros.
+\pushes \emph{What does PostgreSQL offer?} \code{RANGE BETWEEN INTERVAL '6 days' PRECEDING AND CURRENT ROW} on a date column. \emph{Running total that
+resets each month?} Add \code{PARTITION BY strftime('\%Y-\%m', day)}.
+\pitfall Calling a row-based window a time-based one.
+\end{qa}
+
+\begin{qa}{What is a correlated subquery, and how would you rewrite one for speed?}
+\oneline{A subquery that references the outer query's columns and so is logically evaluated once per outer row; rewrite as a join to a pre-aggregated
+derived table/CTE or as a window function.}
+\why For $n$ outer rows the naive cost is $n$ inner evaluations. Pre-aggregating (one pass to compute all department averages, then one join) is $O(n)$.
+Many optimisers do this rewrite automatically (``subquery unnesting''), but not always, especially with complex correlations.
+\worked
+\begin{lstlisting}[style=sql]
+SELECT e.name, e.salary, d.dept_avg
+FROM employees e
+JOIN (SELECT dept, AVG(salary) AS dept_avg FROM employees GROUP BY dept) d
+  ON d.dept = e.dept
+WHERE e.salary > d.dept_avg;
+\end{lstlisting}
+\pushes \emph{When is a correlated EXISTS efficient?} When the inner table is indexed on the correlation column: each probe is an index lookup that stops
+at the first match.
+\pitfall Assuming every subquery is correlated (a scalar subquery with no outer reference runs once).
+\end{qa}
+
+\begin{qa}{CTE vs subquery vs temporary table vs view: when do you use which?}
+\oneline{CTEs for readable multi-step logic in one query (and for recursion); subqueries for small inline steps; temporary tables to materialise and reuse
+an intermediate result within a session; views to share a saved query definition; materialised views to cache an expensive result.}
+\why CTEs are usually inlined by the optimiser (PostgreSQL 12+, most engines), so they cost nothing; some engines materialise them, which can help or hurt.
+A temp table can be indexed and its statistics help the optimiser; it lives until the session ends. A view stores only the query text; every use reruns it.
+A materialised view stores the result and must be refreshed, a common pattern for dashboards (``daily applications per company'').
+\worked \code{L3\_cte} names two steps, \code{apps\_per\_job} and \code{job\_info}, and references \code{job\_info} twice (once for the average), which a
+subquery would have had to repeat.
+\pushes \emph{Can a CTE be referenced by a later query?} No, only by the statement it belongs to.
+\pitfall Saying CTEs are always faster than subqueries.
+\end{qa}
+
+\begin{qa}{What are ACID properties? Give a job-portal example of each.}
+\oneline{Atomicity (all or nothing), Consistency (constraints hold before and after), Isolation (concurrent transactions do not see each other's partial
+work), Durability (committed data survives crashes).}
+\why Atomicity: making an offer updates \code{applications.status} and inserts an \code{offers} row; if the second fails, the first is rolled back.
+Consistency: a CHECK that status is one of five values, an FK that the job exists. Isolation: two recruiters closing the last opening at the same moment
+must not both succeed (serialisable isolation or row locks). Durability: after COMMIT, a power cut does not lose the offer (write-ahead log).
+\pushes \emph{What anomalies do weak isolation levels allow?} Dirty reads (seeing uncommitted data), non-repeatable reads (a row changes between two reads),
+phantom reads (new rows appear in a repeated range query). \emph{Do analytics warehouses need full ACID?} Less so; they favour throughput and often use
+eventual consistency, while the OLTP database behind the product needs it fully.
+\pitfall Listing the four words without an example.
+\end{qa}
+
+\begin{qa}{\deep Why does \code{LAST\_VALUE(name) OVER (ORDER BY salary)} not return the highest-paid name?}
+\oneline{Because with ORDER BY and no frame the default frame ends at the current row (and its ties), so ``last value'' means ``the current row'', not the
+partition's last row.}
+\why The default frame is \code{RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW}. This default exists so that \code{SUM(x) OVER (ORDER BY t)} is a
+running total. FIRST\_VALUE looks at the frame's first row, which is the partition's first row, so it behaves as people expect; LAST\_VALUE does not.
+\worked \code{L3\_frame\_trap}: for Tara the default returns Tara; for Kavya it returns Manav (her tie, because RANGE includes peers); with
+\code{ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING} every row gets Arjun.
+\pushes \emph{Simpler fix?} \code{FIRST\_VALUE(name) OVER (ORDER BY salary DESC)}. \emph{When do ROWS and RANGE differ in a running sum?} With ties in the
+ORDER BY: RANGE adds all tied rows at once, ROWS adds them one by one.
+\pitfall Not knowing frames exist.
+\end{qa}
+
+\begin{qa}{\deep Rewrite ``days since the previous login'' without window functions. What does that teach about why window functions exist?}
+\oneline{Self-join each login to all earlier logins of the same candidate and take the MAX earlier date; it works, but it compares every pair of rows per
+candidate ($O(k^2)$), whereas LAG reads the sorted rows once.}
+\runsql{Q_lag_selfjoin}
+\why The self-join produces, for a candidate with $k$ logins, up to $k(k-1)/2$ pairs before grouping. Window functions sort each partition once and
+then stream through it, $O(k \log k)$. They also express ``previous row'' directly, so the query is shorter and less error-prone.
+\pushes \emph{Older MySQL (5.7) has no window functions; what did people do?} Self-joins, correlated subqueries, or user variables. \emph{How would pandas
+do it?} \code{df.sort\_values(['cand\_id','login\_date']).groupby('cand\_id')['login\_date'].shift()}.
+\pitfall Forgetting to deduplicate logins first (two logins on the same day would produce a 0-day gap).
+\end{qa}
+
+\begin{qa}{\deep A data scientist wrote \code{UPDATE applications SET status = 'rejected' WHERE job\_id IN (SELECT job\_id FROM jobs WHERE posted\_date <
+'2026-02-01')} on production at 6 pm. What safeguards should have been in place?}
+\oneline{Run the WHERE as a SELECT and check the row count; wrap the UPDATE in a transaction and verify before COMMIT; have a backup or point-in-time
+recovery; and ideally not have write access to production at all.}
+\why An UPDATE is irreversible after commit without a backup. Analysts should work on replicas or warehouse copies. In a transaction (\code{BEGIN;
+UPDATE ...; SELECT COUNT(*) ...; COMMIT/ROLLBACK}) you can inspect the effect first. Auditing (who changed what) and soft deletes (a \code{deleted\_at}
+column) make mistakes recoverable.
+\worked The subquery selects jobs 201, 202, 203 (posted in January). The SELECT version of the WHERE shows 9 application rows: 201's five (including the
+duplicate 22), 202's one, 203's three. Only after confirming that ``9'' is what the business intended should the UPDATE run.
+\pushes \emph{What is a soft delete?} Marking a row as deleted instead of removing it, so history and joins remain intact.
+\pitfall Treating SQL on production like SQL in a notebook.
+\end{qa}

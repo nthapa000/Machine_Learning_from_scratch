@@ -1,0 +1,4 @@
+employee | salary | manager | manager_salary
+---------+--------+---------+---------------
+Yash     | 75     | Rahul   | 70
+(1 row)

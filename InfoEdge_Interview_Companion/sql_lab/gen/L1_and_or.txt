@@ -1,0 +1,7 @@
+name   | city      | exp_yrs
+-------+-----------+--------
+Aarav  | Bengaluru | 2
+Diya   | Mumbai    | 5
+Meera  | Bengaluru | 7
+Ishaan | Bengaluru | 2
+(4 rows)

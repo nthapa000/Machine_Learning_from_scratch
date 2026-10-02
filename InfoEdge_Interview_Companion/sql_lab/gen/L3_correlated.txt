@@ -1,0 +1,7 @@
+name  | dept        | salary
+------+-------------+-------
+Arjun | DataScience | 60
+Yash  | Engineering | 75
+Rahul | Engineering | 70
+Pooja | Sales       | 40
+(4 rows)

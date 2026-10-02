@@ -1,0 +1,8 @@
+job_id | title          | company  | industry
+-------+----------------+----------+-----------
+201    | Data Scientist | DataNest | IT
+202    | ML Engineer    | DataNest | IT
+203    | Data Analyst   | PayWave  | Fintech
+204    | Data Scientist | PayWave  | Fintech
+205    | Data Analyst   | MediCore | Healthcare
+(5 rows)

@@ -36,9 +36,14 @@
 \item Explain stationarity, ACF/PACF, ARIMA/SARIMAX; compute a one-way ANOVA.
 \item Use Bayes' theorem, PMF/PDF, expectation, variance and the common distributions with examples; explain CLT, CI, p-value vs alpha, paired t-test, A/B test.
 \item Compute rank, null space, eigenvalues and a Markov chain steady state.
+\item SQL: explain the logical order of a query; NULL three-valued logic (\code{= NULL}, \code{<>} dropping NULLs, NOT IN with NULL); COUNT(*) vs COUNT(col).
+\item SQL: predict row counts of INNER/LEFT/FULL/CROSS joins with duplicate keys; fix the LEFT JOIN + WHERE trap and fan-out; WHERE vs HAVING; conditional aggregation for rates.
+\item SQL: ROW\_NUMBER vs RANK vs DENSE\_RANK; Nth highest and top-N per group; LAG/LEAD; running totals and frames; CTEs and recursive CTEs.
+\item SQL: write duplicates, consecutive-days streaks, retention, funnel, MoM growth, median and pivot queries from memory; build a point-in-time feature table; explain indexes, sargability, normalisation, OLTP vs OLAP, ACID.
 \item Walk through two case studies with the ten-step skeleton; answer ``why InfoEdge'' specifically.
 \end{itemize}
 
 \section*{Book statistics}
-This edition contains \textbf{\total{qtotal}} interview questions with full answers, of which \textbf{\total{qpyq}} are reported InfoEdge questions (PYQ) and
+This edition contains \textbf{\total{qtotal}} interview questions with full answers, of which \textbf{\total{qpyq}} are reported InfoEdge questions (PYQ),
+\textbf{\total{qclassic}} are ``Most asked'' standard SQL questions, and
 \textbf{\total{qdeep}} are ``Think deeper'' questions (the thought-provoking or unconventional kind you asked to be at least 15\% of the total).

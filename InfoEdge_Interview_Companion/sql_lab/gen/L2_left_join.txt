@@ -1,0 +1,9 @@
+company   | n_jobs
+----------+-------
+DataNest  | 2
+EduSpark  | 2
+MediCore  | 2
+PayWave   | 2
+ShopKart  | 2
+GreenGrid | 0
+(6 rows)

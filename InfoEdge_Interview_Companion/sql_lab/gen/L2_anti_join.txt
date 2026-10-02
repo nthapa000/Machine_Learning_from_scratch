@@ -1,0 +1,5 @@
+cand_id | name
+--------+------
+106     | Sana
+110     | Priya
+(2 rows)

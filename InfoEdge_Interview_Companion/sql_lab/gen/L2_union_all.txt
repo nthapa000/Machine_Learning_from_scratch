@@ -1,0 +1,8 @@
+source    | city
+----------+----------
+company   | Bengaluru
+company   | Bengaluru
+candidate | Bengaluru
+candidate | Bengaluru
+candidate | Bengaluru
+(5 rows)

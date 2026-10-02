@@ -1,0 +1,12 @@
+city      | title          | n_jobs
+----------+----------------+-------
+Bengaluru | Data Analyst   | 1
+Bengaluru | Data Scientist | 2
+Bengaluru | ML Engineer    | 1
+Hyderabad | ML Engineer    | 1
+Mumbai    | Data Analyst   | 1
+Mumbai    | Data Scientist | 1
+Noida     | Data Scientist | 1
+Noida     | ML Engineer    | 1
+Pune      | Data Analyst   | 1
+(9 rows)

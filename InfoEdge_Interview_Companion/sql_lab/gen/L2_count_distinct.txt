@@ -1,0 +1,4 @@
+applications | candidates_who_applied | jobs_with_applications
+-------------+------------------------+-----------------------
+23           | 8                      | 9
+(1 row)

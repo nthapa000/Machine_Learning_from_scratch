@@ -1,0 +1,8 @@
+candidate | referred_by
+----------+------------
+Diya      | Aarav
+Meera     | Diya
+Rohan     | Aarav
+Vikram    | Meera
+Ishaan    | Rohan
+(5 rows)

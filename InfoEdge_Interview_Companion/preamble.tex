@@ -74,7 +74,7 @@
 \pagestyle{fancy}
 \fancyhf{}
 \renewcommand{\headrulewidth}{0.4pt}
-\fancyhead[L]{\small\color{qframe}InfoEdge DS Interview Companion: ML, DL, Python \& Case Studies}
+\fancyhead[L]{\small\color{qframe}InfoEdge DS Interview Companion: ML, DL, SQL, Python \& Case Studies}
 \fancyhead[R]{\small\color{qframe}\thepage}
 \fancyfoot[C]{\footnotesize\color{qframe}\faYoutube\ \textbf{Stuck on this page?} Watch:
   \href{\stuckurl}{\color{accent}\underline{\stucktitle}}}
@@ -145,6 +145,26 @@
   showstringspaces=false,breaklines=true,columns=fullflexible,keepspaces=true,xleftmargin=8pt,aboveskip=2pt,belowskip=6pt}
 \newcommand{\outlabel}{\par{\scriptsize\color{exframe}\textbf{Output (real run):}}}
 \newcommand{\code}[1]{\texttt{\small #1}}
+
+
+% ---------------- SQL ----------------
+\lstdefinestyle{sql}{language=SQL,basicstyle=\ttfamily\small,backgroundcolor=\color{codebg},
+  keywordstyle=\color{accent}\bfseries,commentstyle=\color{exframe}\itshape,stringstyle=\color{prframe},
+  sensitive=false,morekeywords={WITH,RECURSIVE,OVER,PARTITION,ROW_NUMBER,RANK,DENSE_RANK,LAG,LEAD,NTILE,
+  COALESCE,NULLIF,FULL,OUTER,EXCEPT,INTERSECT,EXPLAIN,QUERY,PLAN,CASE,WHEN,THEN,ELSE,END,LIMIT,OFFSET,ROWS,
+  RANGE,PRECEDING,FOLLOWING,UNBOUNDED,CURRENT,FIRST_VALUE,LAST_VALUE,PERCENT_RANK,REFERENCES,CHECK,EXISTS,
+  INDEX,IF,CAST,ROUND,BETWEEN,LIKE,IS,NULL,DISTINCT,HAVING,UNION,ALL,CROSS,LEFT,RIGHT,INNER,JOIN,ON,
+  VALUES,COUNT,SUM,AVG,MIN,MAX},
+  showstringspaces=false,upquote=true,frame=single,rulecolor=\color{black!15},breaklines=true,
+  columns=fullflexible,keepspaces=true,xleftmargin=4pt,xrightmargin=4pt,aboveskip=6pt,belowskip=4pt}
+% \runsql{id}: print query sql_lab/gen/id.sql and its real SQLite output sql_lab/gen/id.txt
+\newcommand{\runsql}[1]{\lstinputlisting[style=sql]{sql_lab/gen/#1.sql}%
+  \outlabel\lstinputlisting[style=out]{sql_lab/gen/#1.txt}}
+\newcommand{\sqlonly}[1]{\lstinputlisting[style=sql]{sql_lab/gen/#1.sql}}
+\newcommand{\sqlout}[1]{\outlabel\lstinputlisting[style=out]{sql_lab/gen/#1.txt}}
+% \classic: a standard SQL interview question (not a reported InfoEdge question)
+\newtotcounter{qclassic}
+\newcommand{\classic}{\stepcounter{qclassic}\textcolor{exframe}{\faCheckCircle\ \textbf{Most asked}}\ }
 
 % ---------------- maths shortcuts ----------------
 \newcommand{\R}{\mathbb{R}}

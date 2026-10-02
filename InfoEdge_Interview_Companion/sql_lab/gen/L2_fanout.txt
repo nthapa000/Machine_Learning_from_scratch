@@ -1,0 +1,4 @@
+sum_after_join | rows_after_join
+---------------+----------------
+498            | 23
+(1 row)

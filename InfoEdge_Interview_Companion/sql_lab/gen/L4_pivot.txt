@@ -1,0 +1,9 @@
+company   | data_scientist | data_analyst | ml_engineer
+----------+----------------+--------------+------------
+DataNest  | 1              | 0            | 1
+PayWave   | 1              | 1            | 0
+MediCore  | 0              | 1            | 1
+ShopKart  | 1              | 1            | 0
+EduSpark  | 1              | 0            | 1
+GreenGrid | 0              | 0            | 0
+(6 rows)

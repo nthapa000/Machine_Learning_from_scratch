@@ -1,0 +1,323 @@
+\chapter{SQL Level 2: Aggregation, GROUP BY and Joins}
+\companion{Alex The Analyst: SQL Joins, GROUP BY and HAVING (beginner series)}{\yts{alex+the+analyst+sql+joins+group+by+having+beginner}}
+
+Level 1 read one table row by row. Real questions are about \emph{groups} (``offer rate per job'') and about \emph{several tables} (``which company made
+each offer''). This chapter adds the two tools for that: aggregation and joins. Both have exact rules for how many rows come out; most interview traps
+are about getting that row count wrong.
+
+\section{Aggregate functions: many rows in, one number out}
+\stuck{SQL aggregate functions COUNT SUM AVG MIN MAX}{\yts{sql+aggregate+functions+count+sum+avg+min+max+tutorial}}
+An aggregate function collapses a column of many values into one: \code{COUNT}, \code{SUM}, \code{AVG}, \code{MIN}, \code{MAX} (most databases also
+have \code{STDDEV}, \code{VARIANCE}; PostgreSQL has \code{PERCENTILE\_CONT}). The rule to remember: \textbf{every aggregate ignores NULL, except
+\code{COUNT(*)}}.
+\runsql{L2_agg_basic}
+Read it carefully. There are 11 employees but only 10 known salaries. \code{AVG} = $530/10 = 53$ (Zoya ignored). If you wanted unknown salaries to count
+as zero (rarely sensible), you would get $530/11 = 48.18$. Two analysts who ``computed the average salary'' can disagree for this reason alone.
+\runsql{L2_count_distinct}
+23 application rows, but only 8 different candidates and 9 different jobs. ``How many candidates applied?'' is 8, not 23: the difference between
+\code{COUNT(*)} and \code{COUNT(DISTINCT ...)} is the difference between events and entities.
+
+\section{GROUP BY: one result row per group}
+\stuck{SQL GROUP BY explained with examples}{\yts{sql+group+by+explained+with+examples}}
+\code{GROUP BY title} splits the rows into piles, one pile per distinct title, then computes the aggregates \emph{inside each pile}. It is pandas'
+\code{df.groupby('title').agg(...)}: split, apply, combine.
+\runsql{L2_groupby}
+\begin{example}[: do it by hand]
+Jobs by title: ML Engineer max CTCs \{35, 45, 22\} $\Rightarrow$ count 3, average $102/3 = 34$, max 45. Data Scientist \{20, 25, 40, 18\} $\Rightarrow$
+4, $103/4 = 25.75$, 40. Data Analyst \{12, 8, 10\} $\Rightarrow$ 3, 10, 12. That is exactly the output.
+\end{example}
+Grouping by two columns makes one group per \emph{combination}:
+\runsql{L2_groupby_two}
+
+\begin{trap}[: the golden rule of GROUP BY]
+Every column in SELECT must either be in GROUP BY or be inside an aggregate. \code{SELECT dept, name, MAX(salary) FROM employees GROUP BY dept} is
+ambiguous: a department has several names, which one should be shown? PostgreSQL and SQL Server raise an error. SQLite and old MySQL silently return
+\emph{some} name (SQLite happens to return the name on the max row, MySQL an arbitrary one). Never rely on it; to get ``the employee with the top salary per
+department'' use a window function (Chapter 47).
+\end{trap}
+
+\section{HAVING: filtering groups}
+\stuck{SQL HAVING vs WHERE difference}{\yts{sql+having+vs+where+difference+explained}}
+WHERE filters \emph{rows before} grouping; HAVING filters \emph{groups after} aggregation (recall the logical order: WHERE is step 2, HAVING step 4). So a
+condition on \code{COUNT(*)} must be in HAVING.
+\runsql{L2_having}
+Both can appear together: first WHERE keeps only rejected applications, then GROUP BY counts them per candidate, then HAVING keeps candidates with at
+least one.
+\runsql{L2_where_vs_having}
+\begin{intuition}
+If a condition can be checked by looking at one row (status = 'rejected'), put it in WHERE: it shrinks the data before the expensive grouping. Only
+conditions that need the whole group (``at least 3 applications'') belong in HAVING.
+\end{intuition}
+
+\section{Conditional aggregation: the pattern behind every rate}
+\stuck{SQL conditional aggregation SUM CASE WHEN}{\yts{sql+conditional+aggregation+sum+case+when}}
+To count only some rows inside each group, put a CASE inside the aggregate: \code{SUM(CASE WHEN status = 'offer' THEN 1 ELSE 0 END)} counts offers. The
+average of a 0/1 column is the proportion of ones, i.e.\ a rate. This one idea gives offer rates, click-through rates, conversion rates, churn rates.
+\runsql{L2_conditional_agg}
+\runsql{L2_status_counts}
+Job 207 had 3 applications and 1 offer: offer rate $1/3 = 0.33$. Note the \code{1.0} inside the CASE: with integer 1 the AVG would still work in SQLite,
+but writing \code{1.0} protects you from integer division on every database. PostgreSQL also offers \code{COUNT(*) FILTER (WHERE status = 'offer')}.
+
+\section{Joins: combining tables}
+\stuck{SQL joins explained visually (inner, left, right, full)}{\yts{sql+joins+explained+visually+inner+left+right+full}}
+\subsection{The idea, from zero}
+The \code{jobs} table stores \code{company\_id = 2}, not the name ``PayWave''. To show the name, SQL must \emph{match} each job row with the company row
+that has the same id. A join does exactly this: for every pair of rows (one from each table) it checks the \code{ON} condition and keeps the pairs for
+which it is true.
+
+\begin{example}[: a join by hand]
+Left table L: (job 201, company 1), (job 203, company 2), (job 999, company 7). Right table R: (company 1, DataNest), (company 2, PayWave),
+(company 6, GreenGrid). Condition: \code{L.company = R.company}.
+\begin{itemize}
+\item \textbf{INNER JOIN}: only matching pairs: (201, DataNest), (203, PayWave). Job 999 and GreenGrid disappear.
+\item \textbf{LEFT JOIN}: all inner pairs, plus every left row with no match, padded with NULL: adds (999, NULL).
+\item \textbf{RIGHT JOIN}: all inner pairs plus unmatched right rows: adds (NULL, GreenGrid).
+\item \textbf{FULL OUTER JOIN}: inner pairs plus unmatched rows from both sides: 4 rows.
+\item \textbf{CROSS JOIN}: every pair, no condition: $3 \times 3 = 9$ rows.
+\end{itemize}
+\end{example}
+
+\begin{center}
+\begin{tikzpicture}[scale=0.62, every node/.style={font=\scriptsize}]
+\foreach \x/\lab/\fl/\fr/\fm in {0/INNER/white/white/accent!45, 4.6/LEFT/accent!45/white/accent!45, 9.2/RIGHT/white/accent!45/accent!45,
+  13.8/FULL/accent!45/accent!45/accent!45}{
+  \begin{scope}[shift={(\x,0)}]
+  \fill[\fl] (0,0) circle (1); \fill[\fr] (1.2,0) circle (1);
+  \begin{scope}\clip (0,0) circle (1); \fill[\fm] (1.2,0) circle (1);\end{scope}
+  \draw (0,0) circle (1); \draw (1.2,0) circle (1);
+  \node at (-0.45,0) {L}; \node at (1.65,0) {R};
+  \node at (0.6,-1.4) {\textbf{\lab}};
+  \end{scope}}
+\end{tikzpicture}
+\end{center}
+The circles are a memory aid only. A join is \emph{not} a set intersection of rows: if one left row matches three right rows, it appears three times.
+The real rule is ``every matching pair''.
+
+\subsection{INNER JOIN}
+\runsql{L2_inner_join}
+\code{j} and \code{c} are \emph{table aliases}, short names so that \code{j.company\_id} says which table's column you mean (both tables have a
+\code{company\_id} and a \code{city}, so you must qualify them). Joins chain: to describe each offer we need application $\to$ candidate, application
+$\to$ job $\to$ company.
+\runsql{L2_three_join}
+
+\subsection{LEFT JOIN, and counting things that may be zero}
+``How many jobs has each company posted?'' must include GreenGrid with 0. INNER JOIN would drop it, because it has no matching job. LEFT JOIN keeps every
+company:
+\runsql{L2_left_join}
+Why \code{COUNT(j.job\_id)} and not \code{COUNT(*)}? For GreenGrid the LEFT JOIN produced one row whose job columns are all NULL. \code{COUNT(*)} counts that
+row:
+\runsql{L2_left_count_star}
+GreenGrid shows 1 job it does not have. After a LEFT JOIN, always count a column from the right table.
+
+\subsection{Anti-join: rows with no match}
+``Candidates who never applied'': LEFT JOIN, then keep rows where the right side is NULL. (Chapter 47 shows the equivalent \code{NOT EXISTS}.)
+\runsql{L2_anti_join}
+
+\subsection{The WHERE-after-LEFT-JOIN trap}
+We want every candidate with their offer job, or NULL if they have no offer. Putting the status filter in WHERE quietly turns the LEFT JOIN into an INNER
+JOIN:
+\runsql{L2_left_where_trap}
+Only 4 candidates came back. The LEFT JOIN did produce rows for Kabir, Rohan, \dots, but with \code{a.status} NULL, and \code{WHERE a.status = 'offer'}
+is UNKNOWN for them, so WHERE removed them. Put conditions on the right table \emph{inside ON}: they then decide which right rows match, not which result
+rows survive.
+\runsql{L2_left_on_filter}
+
+\subsection{FULL OUTER JOIN}
+Supply and demand by city: jobs per city vs candidates per city, keeping cities that appear on only one side.
+\runsql{L2_full_join}
+Delhi has 2 candidates and no jobs (unmet supply); Hyderabad has a job and no candidates (unmet demand): both are business insights that an inner join
+would hide. \code{COALESCE(j.city, c.city)} picks whichever side has the city. MySQL has no FULL JOIN; emulate it with \code{LEFT JOIN ... UNION ...
+RIGHT JOIN}.
+
+\subsection{SELF JOIN: a table joined to itself}
+\code{employees.manager\_id} points to another row of \code{employees}. Join the table to itself under two aliases, one playing ``employee'' and one
+playing ``manager'':
+\runsql{L2_self_join}
+LEFT JOIN keeps Neha, who has no manager. The same pattern finds referral pairs among candidates:
+\runsql{L2_referral_self}
+
+\subsection{CROSS JOIN and non-equi joins}
+A CROSS JOIN pairs every row with every row. It is useful to build a complete grid (every variant $\times$ every day), so that a later LEFT JOIN can show
+zeros for missing combinations:
+\runsql{L2_cross_join}
+The ON condition does not have to be equality. A \emph{non-equi join} matches candidates to the jobs they are eligible for (enough experience, same city):
+\runsql{L2_join_eligibility}
+This is how a simple rule-based job recommender is written in SQL.
+
+\subsection{How many rows does a join return? Fan-out}
+\begin{itemize}
+\item 1:1 key match: at most one row per left row.
+\item 1:many (one job, many applications): each job row is repeated once per application.
+\item many:many (joining on a non-unique column on both sides): the row count can explode ($m \times n$ per matching key).
+\end{itemize}
+Repetition is correct for row-level output, but \textbf{dangerous for sums}. Total advertised max-CTC across jobs:
+\runsql{L2_fanout_truth}
+The same SUM after joining applications:
+\runsql{L2_fanout}
+498 instead of 235: job 201 (max CTC 20) has 5 applications, so its 20 was added 5 times. Jobs with no application (210) vanished. This is \emph{fan-out}.
+Fix: aggregate each table to the grain you need \emph{before} joining (Chapter 48 builds an ML feature table this way).
+
+\begin{recap}[: joins]
+Row count after a join = number of matching pairs (+ unmatched rows for outer joins). Before writing a join, ask ``what is one row of each table, and is
+the join key unique on each side?'' Count rows before and after; if a SUM suddenly grows, suspect fan-out.
+\end{recap}
+
+\section{Set operations: UNION, UNION ALL, INTERSECT, EXCEPT}
+\stuck{SQL UNION vs UNION ALL, INTERSECT, EXCEPT}{\yts{sql+union+vs+union+all+intersect+except}}
+Joins put tables \emph{side by side}; set operations stack results \emph{on top of each other}. Both queries must return the same number of columns with
+compatible types.
+\begin{itemize}
+\item \code{UNION}: stack and remove duplicates (needs a sort or hash, slower).
+\item \code{UNION ALL}: stack and keep everything (faster; use it unless you need deduplication).
+\item \code{INTERSECT}: rows in both. \code{EXCEPT} (Oracle: \code{MINUS}): rows in the first but not the second.
+\end{itemize}
+\runsql{L2_union}
+\runsql{L2_union_all}
+\runsql{L2_except}
+Candidate cities with no jobs: Delhi, and NULL. Unlike \code{=}, set operations treat two NULLs as the same value, so the NULL city appears once.
+
+% ======================================================================
+\section{Interview questions: Level 2}
+\stuck{SQL joins interview questions and row count puzzles}{\yts{sql+joins+interview+questions+row+count+duplicates+nulls}}
+
+\begin{qa}{\classic Table A has values 1, 1, 2, NULL and table B has 1, 1, 3, NULL (one column \code{x}). How many rows do INNER, LEFT, RIGHT, FULL and
+CROSS joins on \code{A.x = B.x} return?}
+\oneline{INNER 4, LEFT 6, RIGHT 6, FULL 8, CROSS 16.}
+\why A join returns every matching pair. The two 1s in A each match the two 1s in B: $2 \times 2 = 4$ pairs. 2 and 3 match nothing. NULL never equals
+NULL, so the NULLs match nothing. LEFT adds A's unmatched rows (2 and NULL): $4 + 2 = 6$. RIGHT adds B's unmatched (3 and NULL): 6. FULL adds both: $4 + 2
++ 2 = 8$. CROSS: $4 \times 4 = 16$.
+\worked Verified by running it:
+\runsql{Q_join_counts}
+\pushes \emph{What if A had three 1s?} INNER $= 3 \times 2 = 6$. \emph{How do you make NULLs match?} \code{ON A.x IS NOT DISTINCT FROM B.x} (or
+\code{COALESCE(A.x, -1) = COALESCE(B.x, -1)} if $-1$ cannot occur).
+\pitfall Answering ``INNER = 1 row because only the value 1 is common'' (thinking in sets instead of pairs), or matching the NULLs.
+\end{qa}
+
+\begin{qa}{\classic What is the difference between WHERE and HAVING? Can a query have both?}
+\oneline{WHERE filters individual rows before grouping; HAVING filters groups after aggregation; yes, a query can and often does have both.}
+\why Logical order: FROM $\to$ WHERE $\to$ GROUP BY $\to$ HAVING $\to$ SELECT. Aggregates do not exist at WHERE time, so \code{WHERE COUNT(*) > 2} is an
+error. A row-level condition placed in HAVING works (on grouped columns) but wastes effort grouping rows that will be discarded.
+\worked \code{L2\_where\_vs\_having}: WHERE keeps the 5 rejected applications, GROUP BY counts per candidate, HAVING keeps groups with at least one.
+``Candidates with at least 3 applications'' needs \code{HAVING COUNT(*) >= 3}: 101 (4 rows, including the duplicate), 102, 103, 104, 105, 109.
+\pushes \emph{Can HAVING be used without GROUP BY?} Yes; the whole table is then one group (\code{SELECT COUNT(*) FROM jobs HAVING COUNT(*) > 5}).
+\emph{Where do you filter on a window function?} In an outer query, since windows are computed in SELECT, after HAVING.
+\pitfall Saying ``HAVING is just WHERE for GROUP BY queries'' without the before/after distinction.
+\end{qa}
+
+\begin{qa}{\classic Find candidates who never applied to any job, in three different ways.}
+\oneline{LEFT JOIN ... WHERE right.key IS NULL; NOT EXISTS (correlated subquery); NOT IN (subquery), the last only if the subquery cannot return NULL.}
+\why All three express an anti-join. LEFT JOIN/IS NULL keeps unmatched left rows. NOT EXISTS checks, for each candidate, whether any application row
+exists. NOT IN compares against a list; if that list contains NULL, \code{x NOT IN (..., NULL)} is never TRUE, and the query returns nothing.
+\worked
+\begin{lstlisting}[style=sql]
+-- 1
+SELECT c.cand_id, c.name FROM candidates c
+LEFT JOIN applications a ON a.cand_id = c.cand_id WHERE a.app_id IS NULL;
+-- 2
+SELECT c.cand_id, c.name FROM candidates c
+WHERE NOT EXISTS (SELECT 1 FROM applications a WHERE a.cand_id = c.cand_id);
+-- 3 (safe here because applications.cand_id is NOT NULL)
+SELECT cand_id, name FROM candidates
+WHERE cand_id NOT IN (SELECT cand_id FROM applications);
+\end{lstlisting}
+All return Sana (106) and Priya (110). Third option with \code{EXCEPT}: \code{SELECT cand\_id FROM candidates EXCEPT SELECT cand\_id FROM applications}.
+\pushes \emph{Which is fastest?} Modern optimisers turn NOT EXISTS and LEFT JOIN/IS NULL into the same anti-join plan; NOT EXISTS is the safest default.
+Chapter 47 shows NOT IN returning 0 rows on \code{employees.manager\_id}, which contains a NULL.
+\pitfall NOT IN against a nullable column.
+\end{qa}
+
+\begin{qa}{\classic UNION vs UNION ALL: which is faster and when must you use each?}
+\oneline{UNION ALL simply concatenates and is faster; UNION also removes duplicate rows, which costs a sort or hash; use UNION only when duplicates are
+wrong.}
+\why Deduplication must compare all rows, $O(n\log n)$ sort or a hash table. When the two parts cannot overlap (e.g.\ January data UNION February data),
+UNION ALL gives the same result for free. When stacking event logs from two sources where the same event might appear twice, UNION (or explicit
+dedup) is needed.
+\worked \code{L2\_union} returns 5 distinct cities; \code{L2\_union\_all} returns all 5 Bengaluru rows (2 companies + 3 candidates).
+\pushes \emph{Do column names come from the first or second query?} The first. \emph{Can you ORDER BY inside each part?} Only the final result can be
+ordered (wrap a part in a subquery if you need LIMIT inside it).
+\pitfall Using UNION by habit on large tables, or mixing column orders between the two parts (types may line up silently but the meaning is swapped).
+\end{qa}
+
+\begin{qa}{Count jobs per company including companies with zero jobs. Why does \code{COUNT(*)} give the wrong answer?}
+\oneline{\code{companies LEFT JOIN jobs ... GROUP BY company ... COUNT(j.job\_id)}; \code{COUNT(*)} counts the NULL-padded row a LEFT JOIN creates for
+a company with no jobs, so it shows 1 instead of 0.}
+\why A LEFT JOIN keeps an unmatched left row by padding right columns with NULL. That padded row is a real row of the result. \code{COUNT(j.job\_id)}
+skips the NULL, giving 0.
+\worked Outputs \code{L2\_left\_join} (GreenGrid 0) and \code{L2\_left\_count\_star} (GreenGrid 1).
+\pushes \emph{And SUM of a right-table column for GreenGrid?} NULL, not 0; wrap with \code{COALESCE(SUM(...), 0)}.
+\pitfall Using INNER JOIN, which drops GreenGrid entirely.
+\end{qa}
+
+\begin{qa}{Your LEFT JOIN returns fewer rows than the left table has. What happened?}
+\oneline{A WHERE condition on a right-table column filtered out the NULL-padded rows, effectively converting the LEFT JOIN into an INNER JOIN; move the
+condition into ON.}
+\why For unmatched rows the right columns are NULL, so \code{WHERE right.col = 'x'} is UNKNOWN and the row is dropped. Conditions in ON restrict which
+right rows can match, while still keeping every left row.
+\worked \code{L2\_left\_where\_trap} returns 4 rows; \code{L2\_left\_on\_filter} returns all 10 candidates with offer job or NULL.
+\pushes \emph{Is it ever correct to filter the right table in WHERE?} Yes, \code{WHERE right.key IS NULL} for an anti-join, or when you genuinely want
+inner-join semantics (then write INNER JOIN, for clarity). \emph{What about conditions on the left table?} Those belong in WHERE; in ON of a LEFT JOIN
+they would not remove left rows, which surprises people.
+\pitfall Diagnosing ``missing rows'' as a data problem.
+\end{qa}
+
+\begin{qa}{After joining jobs to applications, the total of \code{max\_ctc\_lpa} doubled. Explain and fix.}
+\oneline{Fan-out: each job row is repeated once per matching application, so its value is summed several times; aggregate to the job grain first, or sum
+over the jobs table alone.}
+\why Joining a one-side table (jobs) to a many-side table (applications) produces one row per application. Row-level questions (``list applications with
+job info'') are fine; job-level sums are not.
+\worked True sum 235 over 10 jobs vs 498 after the join over 23 rows (outputs \code{L2\_fanout\_truth}, \code{L2\_fanout}); job 201 alone contributes
+$5 \times 20 = 100$ instead of 20.
+\pushes \emph{How do you detect fan-out in a pipeline?} Assert row counts and key uniqueness before and after each join
+(\code{COUNT(*) = COUNT(DISTINCT job\_id)}). \emph{Is \code{SUM(DISTINCT max\_ctc\_lpa)} a fix?} No: two different jobs with the same value would be
+counted once.
+\pitfall ``Fixing'' it with DISTINCT.
+\end{qa}
+
+\begin{qa}{Write a query for each company's offer rate (offers / applications), keeping companies with no applications.}
+\oneline{LEFT JOIN companies $\to$ jobs $\to$ applications, then \code{1.0 * SUM(CASE WHEN status='offer' THEN 1 ELSE 0 END) / NULLIF(COUNT(app\_id), 0)}.}
+\why Conditional aggregation counts offers; \code{1.0} avoids integer division; \code{NULLIF(x, 0)} turns a zero denominator into NULL, so the rate is
+NULL (undefined) instead of a division-by-zero error. Both joins are LEFT so that GreenGrid survives. The duplicate application 22 is excluded inside
+the ON.
+\runsql{Q_company_offer_rate}
+\pushes \emph{Is EduSpark (1 of 4) really better than PayWave (1 of 6)?} With these counts, no evidence; a Beta-smoothed rate or a confidence interval
+(Chapter 38--39) is needed before ranking companies. \emph{Why put \code{app\_id <> 22} in ON, not WHERE?} In WHERE it would drop GreenGrid's NULL row.
+\pitfall Dividing two integer counts.
+\end{qa}
+
+\begin{qa}{List each candidate's applications to jobs outside their own city. What happens to Sana?}
+\oneline{Join applications to candidates and jobs and keep \code{ca.city <> j.city}; Sana would be dropped by the NULL comparison anyway, but she has no
+applications.}
+\runsql{Q_applied_outside_city}
+\why Ten out-of-city applications: a relocation-willingness signal that a recommender can use. A candidate with NULL city would vanish from this list
+because \code{NULL <> 'Mumbai'} is UNKNOWN; if such candidates existed you would have to decide whether ``unknown city'' counts as outside.
+\pushes \emph{How would you turn this into a feature?} Per candidate: share of applications outside home city, via conditional aggregation.
+\pitfall Not stating how NULL cities are treated.
+\end{qa}
+
+\begin{qa}{\deep The average of the department averages is 58.1, but the company-wide average salary is 53. Which is ``the average salary''?}
+\oneline{53 is the average per employee; 58.1 is the average per department, which gives a one-person department (Leadership, 90) the same weight as a
+four-person one; averages of averages are only equal to the overall average when groups have equal sizes.}
+\runsql{Q_avg_of_avg}
+\why The overall mean is $\sum_g n_g \bar x_g / \sum_g n_g$, a size-weighted mean of group means. The plain average of group means gives each group weight
+1. Here department sizes (known salaries) are 4, 3, 1, 2 with means 45, 65, 90, 32.5: weighted $(180 + 195 + 90 + 65)/10 = 53$; unweighted $(45 + 65 +
+90 + 32.5)/4 = 58.125$.
+\pushes \emph{Where does this bite in analytics?} Averaging daily CTRs instead of total clicks / total impressions; averaging city-level conversion
+rates for a national rate; computing ``average order value'' per store. Always ask what the unit of analysis is. \emph{Related paradox?} Simpson's
+paradox: subgroup trends reversing in the aggregate (Chapter 48, A/B by day).
+\pitfall Averaging pre-aggregated rates in dashboards.
+\end{qa}
+
+\begin{qa}{\deep How does a database physically execute a join? When is each method chosen?}
+\oneline{Three main algorithms: nested-loop (good when one side is tiny or the inner side has an index), hash join (build a hash table on the smaller side,
+probe with the larger; best for large equality joins), and sort-merge join (sort both on the key and walk them together; good when inputs are already
+sorted or for range-like joins).}
+\why Nested loop: for each outer row, find matches in the inner table, $O(n \cdot m)$ without an index, $O(n \log m)$ with one. Hash join: $O(n + m)$
+time but needs memory for the hash table and only works for equality conditions. Sort-merge: $O(n\log n + m\log m)$, cheap if already sorted
+(clustered index), handles inequality joins. The optimiser picks using table statistics (row counts, distinct values); \code{EXPLAIN} shows the choice.
+\worked Joining 23 applications to 10 jobs on \code{job\_id}, the PK: a nested loop with an index lookup per application is trivial. Joining a billion
+impression rows to 10 million jobs in Spark/Hive: a hash join, or a broadcast join if the jobs table fits in memory on every worker.
+\pushes \emph{What is a broadcast join?} In distributed engines (Spark), the small table is copied to every machine so the big table need not be
+shuffled across the network. \emph{Why can stale statistics slow a query?} The optimiser may think a table is tiny and choose a nested loop over millions
+of rows.
+\pitfall Assuming the written join order is the execution order.
+\end{qa}

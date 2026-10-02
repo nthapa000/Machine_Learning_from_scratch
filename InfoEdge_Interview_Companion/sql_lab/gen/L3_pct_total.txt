@@ -1,0 +1,6 @@
+title          | n_jobs | pct_of_jobs
+---------------+--------+------------
+Data Scientist | 4      | 40
+Data Analyst   | 3      | 30
+ML Engineer    | 3      | 30
+(3 rows)

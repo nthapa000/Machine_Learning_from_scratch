@@ -1,0 +1,7 @@
+name
+------
+Aarav
+Diya
+Meera
+Vikram
+(4 rows)

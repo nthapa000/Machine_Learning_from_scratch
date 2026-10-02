@@ -1,0 +1,8 @@
+join_type | n_rows
+----------+-------
+inner     | 4
+left      | 6
+right     | 6
+full      | 8
+cross     | 16
+(5 rows)

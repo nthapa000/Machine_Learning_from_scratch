@@ -1,0 +1,7 @@
+job_id | title          | company  | n_apps
+-------+----------------+----------+-------
+201    | Data Scientist | DataNest | 5
+203    | Data Analyst   | PayWave  | 3
+204    | Data Scientist | PayWave  | 3
+207    | Data Analyst   | ShopKart | 3
+(4 rows)

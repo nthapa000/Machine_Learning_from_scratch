@@ -1,0 +1,7 @@
+app_id | candidate | title          | company  | status
+-------+-----------+----------------+----------+-------
+2      | Aarav     | Data Analyst   | ShopKart | offer
+5      | Diya      | Data Scientist | PayWave  | offer
+10     | Meera     | ML Engineer    | DataNest | offer
+15     | Vikram    | ML Engineer    | EduSpark | offer
+(4 rows)

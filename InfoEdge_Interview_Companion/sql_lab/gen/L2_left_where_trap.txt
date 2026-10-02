@@ -1,0 +1,7 @@
+name   | job_id | status
+-------+--------+-------
+Aarav  | 207    | offer
+Diya   | 204    | offer
+Meera  | 202    | offer
+Vikram | 208    | offer
+(4 rows)

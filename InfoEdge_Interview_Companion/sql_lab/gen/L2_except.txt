@@ -1,0 +1,5 @@
+city
+-----
+NULL
+Delhi
+(2 rows)

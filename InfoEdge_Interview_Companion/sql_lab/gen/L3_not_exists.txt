@@ -1,0 +1,10 @@
+name
+-----
+Kavya
+Manav
+Tara
+Sneha
+Yash
+Dev
+Zoya
+(7 rows)

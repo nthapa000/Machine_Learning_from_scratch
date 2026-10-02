@@ -1,0 +1,9 @@
+company   | wrong_n_jobs
+----------+-------------
+DataNest  | 2
+EduSpark  | 2
+MediCore  | 2
+PayWave   | 2
+ShopKart  | 2
+GreenGrid | 1
+(6 rows)

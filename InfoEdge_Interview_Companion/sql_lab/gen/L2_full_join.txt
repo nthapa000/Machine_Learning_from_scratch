@@ -1,0 +1,9 @@
+city      | n_jobs | n_cands
+----------+--------+--------
+Bengaluru | 4      | 3
+Delhi     | NULL   | 2
+Hyderabad | 1      | NULL
+Mumbai    | 2      | 2
+Noida     | 2      | 1
+Pune      | 1      | 1
+(6 rows)

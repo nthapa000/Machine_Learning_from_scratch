@@ -1,0 +1,7 @@
+name   | ctc_lpa | job_id | max_ctc_lpa
+-------+---------+--------+------------
+Ananya | 15      | 203    | 12
+Diya   | 18      | 203    | 12
+Rohan  | 12      | 205    | 8
+Vikram | 42      | 206    | 40
+(4 rows)

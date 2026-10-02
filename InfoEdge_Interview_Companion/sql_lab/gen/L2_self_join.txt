@@ -1,0 +1,14 @@
+employee | salary | manager | manager_salary
+---------+--------+---------+---------------
+Neha     | 90     | NULL    | NULL
+Arjun    | 60     | Neha    | 90
+Kavya    | 45     | Arjun   | 60
+Manav    | 45     | Arjun   | 60
+Tara     | 30     | Arjun   | 60
+Rahul    | 70     | Neha    | 90
+Sneha    | 50     | Rahul   | 70
+Yash     | 75     | Rahul   | 70
+Pooja    | 40     | Neha    | 90
+Dev      | 25     | Pooja   | 40
+Zoya     | NULL   | Pooja   | 40
+(11 rows)

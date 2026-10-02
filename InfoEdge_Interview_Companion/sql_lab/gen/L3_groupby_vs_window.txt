@@ -1,0 +1,7 @@
+dept        | dept_avg
+------------+---------
+DataScience | 45
+Engineering | 65
+Leadership  | 90
+Sales       | 32.5
+(4 rows)

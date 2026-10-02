@@ -1,0 +1,6 @@
+cand_id | skill  | level
+--------+--------+------
+101     | python | 4
+101     | sql    | 3
+102     | sql    | 5
+(3 rows)

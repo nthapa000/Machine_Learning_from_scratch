@@ -1,0 +1,13 @@
+name   | exp_yrs | band
+-------+---------+--------
+Kabir  | 0       | Fresher
+Sana   | 1       | Junior
+Aarav  | 2       | Junior
+Ishaan | 2       | Junior
+Rohan  | 3       | Junior
+Ananya | 4       | Mid
+Diya   | 5       | Mid
+Priya  | 6       | Mid
+Meera  | 7       | Senior
+Vikram | 10      | Senior
+(10 rows)

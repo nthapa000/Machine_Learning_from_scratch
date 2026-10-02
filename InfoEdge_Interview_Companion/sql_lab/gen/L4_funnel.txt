@@ -1,0 +1,4 @@
+applied | shortlisted | interviewed | offered | apply_to_short | interview_to_offer
+--------+-------------+-------------+---------+----------------+-------------------
+22      | 12          | 8           | 4       | 0.545          | 0.5
+(1 row)
