@@ -140,6 +140,10 @@
   columns=fullflexible,keepspaces=true,xleftmargin=4pt,xrightmargin=4pt,aboveskip=6pt,belowskip=6pt,
   literate={≤}{{$\le$}}1 {≥}{{$\ge$}}1 {→}{{$\to$}}1}
 \lstset{style=py}
+\lstdefinestyle{out}{language={},basicstyle=\ttfamily\scriptsize,backgroundcolor=\color{white},
+  frame=leftline,framerule=1.2pt,rulecolor=\color{exframe},keywordstyle={},commentstyle={},stringstyle={},
+  showstringspaces=false,breaklines=true,columns=fullflexible,keepspaces=true,xleftmargin=8pt,aboveskip=2pt,belowskip=6pt}
+\newcommand{\outlabel}{\par{\scriptsize\color{exframe}\textbf{Output (real run):}}}
 \newcommand{\code}[1]{\texttt{\small #1}}
 
 % ---------------- maths shortcuts ----------------

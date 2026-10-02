@@ -1,0 +1,377 @@
+\chapter{EDA Lab I: The EDA Playbook in Code}
+\companion{Krish Naik: Exploratory Data Analysis with pandas (search)}{\yts{exploratory+data+analysis+pandas+python+complete+tutorial}}
+
+EDA carries heavy weight in the InfoEdge interviews: Round 3 is literally ``clean the data, analyse it, model it, test it'', and the
+successful candidate's first moves (spotting salary leakage, checking ranges before calling anything an outlier) were EDA judgements. This part of the
+book is hands-on. It comes with a \textbf{Colab-ready notebook} that runs every analysis shown here on real data:
+\begin{tcolorbox}[colback=accentlight,colframe=accent,boxrule=0.5pt,arc=2pt]
+\small\faLaptopCode\ \textbf{Notebook:} \code{InfoEdge\_Interview\_Companion/eda\_lab/EDA\_Lab.ipynb} in your repository (branch
+\code{claude/admiring-edison-vd2vbx}). Open it in Google Colab (File $\to$ Open notebook $\to$ GitHub, or upload the file) and run all cells. The real
+datasets (HR job change, Titanic, Pima diabetes) are read directly from your public GitHub repository. For the MBA placement case, upload Kaggle's
+\code{Placement\_Data\_Full\_Class.csv} to the Colab session; without it the notebook builds a simulated replica with the same columns.
+\end{tcolorbox}
+Chapter 41 gives the method and a cookbook of pandas/NumPy recipes, each run on the real HR job-change dataset (19{,}158 data-science candidates; target
+$=1$ if they are looking for a job change: very close to Naukri data). Chapters 42--44 are complete case studies.
+
+\section{The 12-step EDA workflow}
+Say the step, run the code, read the output, state the decision. Every step ends in ``\emph{because I see X, I will do Y}''.
+\begin{center}\small
+\begin{tabularx}{\linewidth}{r l X}
+\toprule
+& Step & Question it answers\\
+\midrule
+1 & Frame & What is one row? What is the target? When is a prediction made?\\
+2 & Load and look & Shape, \code{head}, types, memory; does it look like the description?\\
+3 & Types and parsing & Numbers stored as text? Codes like ``>20'', ``never''? Dates?\\
+4 & Data quality & Duplicates, impossible values, malformed labels, constant columns, disguised missing values (0, $-1$, 999)\\
+5 & Missing values & How much, where, together with what, and does missingness relate to the target?\\
+6 & Target & Balance; base rate; metric implications\\
+7 & Univariate numeric & Centre, spread, skew, outliers (genuine or error?)\\
+8 & Univariate categorical & Levels, rare levels, cardinality\\
+9 & Bivariate with target & Which features separate the classes, linearly or not?\\
+10 & Feature--feature & Correlations, redundancy, multicollinearity\\
+11 & Multivariate & Interactions and segments (does an effect depend on another variable?)\\
+12 & Leakage and summary & Anything ``too good''? Write the findings and the modelling plan\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The reusable toolkit}
+Define these once at the top of any interview notebook (they are cell 3 of \code{EDA\_Lab.ipynb}).
+\begin{lstlisting}
+def overview(df):
+    # One row per column: type, missing %, number of unique values, an example value.
+    return pd.DataFrame({
+        "dtype": df.dtypes.astype(str),
+        "missing": df.isna().sum(),
+        "missing_%": (df.isna().mean() * 100).round(1),
+        "n_unique": df.nunique(),
+        "example": df.apply(lambda s: s.dropna().iloc[0] if s.notna().any() else np.nan)})
+
+def num_summary(df):
+    # describe() + skew, kurtosis, IQR-outlier count and zero count for numeric columns.
+    num = df.select_dtypes("number")
+    q1, q3 = num.quantile(0.25), num.quantile(0.75); iqr = q3 - q1
+    res = num.describe().T
+    res["skew"], res["kurt"] = num.skew(), num.kurt()
+    res["n_iqr_outliers"] = ((num < q1 - 1.5 * iqr) | (num > q3 + 1.5 * iqr)).sum()
+    res["n_zeros"] = (num == 0).sum()
+    return res.round(2)
+
+def rate_by(df, col, target, bins=None, q=None):
+    # Target rate and count per category, or per bin of a numeric column.
+    key = df[col]
+    if bins is not None: key = pd.cut(key, bins)
+    elif q is not None:  key = pd.qcut(key, q, duplicates="drop")
+    key = key.astype(object).where(key.notna(), "MISSING")
+    return df.groupby(key, observed=True)[target].agg(rate="mean", n="size").round(3)
+
+def missing_vs_target(df, target):
+    # Is a column's missingness related to the target? (informative missingness / leakage)
+    rows = []
+    for c in df.columns.drop(target):
+        m = df[c].isna()
+        if 0 < m.sum() < len(df):
+            rows.append((c, m.mean() * 100, df.loc[m, target].mean(), df.loc[~m, target].mean()))
+    return pd.DataFrame(rows, columns=["column", "missing_%", "rate_if_missing", "rate_if_present"]).round(3)
+
+def point_biserial(df, num_cols, target):          # numeric feature vs 0/1 target
+    rows = [(c, *stats.pointbiserialr(df[[c, target]].dropna()[target],
+                                      df[[c, target]].dropna()[c])) for c in num_cols]
+    return pd.DataFrame(rows, columns=["feature", "r_pb", "p_value"]).round(4)
+
+def cramers_v(x, y):                               # categorical vs categorical, 0..1
+    t = pd.crosstab(x, y); chi2 = stats.chi2_contingency(t, correction=False)[0]
+    return np.sqrt(chi2 / (t.values.sum() * (min(t.shape) - 1)))
+
+def vif(df_num):                                   # VIF = 1 / (1 - R^2_j), via numpy least squares
+    X = df_num.dropna().values; out = {}
+    for j, c in enumerate(df_num.columns):
+        y = X[:, j]; A = np.column_stack([np.ones(len(X)), np.delete(X, j, axis=1)])
+        coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+        r2 = 1 - ((y - A @ coef) ** 2).sum() / ((y - y.mean()) ** 2).sum()
+        out[c] = 1 / (1 - r2)
+    return pd.Series(out, name="VIF").round(2)
+\end{lstlisting}
+
+\section{The cookbook: 25 recipes, run on real data}
+All outputs below come from running the code on \code{aug\_train.csv} (HR job change). Load: \code{df = pd.read\_csv("Data\_gathering/dataset/aug\_train.csv")}.
+
+\subsection{Steps 2--4: structure, types, quality}
+\textbf{R1. First look.}
+\begin{lstlisting}
+print(df.shape); print(df.dtypes.value_counts()); print(df.memory_usage(deep=True).sum() / 1e6, "MB")
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+(19158, 14)    10 text columns, 2 int64, 2 float64    12.39 MB
+\end{lstlisting}
+\textbf{R5. Duplicates} (exact, and ignoring the ID column, which hides duplicates):
+\begin{lstlisting}
+df.duplicated().sum(), df.drop(columns="enrollee_id").duplicated().sum(), df["enrollee_id"].is_unique
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+(0, 49, True)      # 49 people identical in every field except their ID
+\end{lstlisting}
+Decision: 49 of 19{,}158 is negligible; check whether they are the same person registered twice (keep one) or coincidence (keep all). In a group split they must
+stay together.
+
+\textbf{R6. Cardinality and constant columns:} \code{df.nunique().sort\_values()} $\to$ \code{relevent\_experience 2, target 2, enrolled\_university 3, gender 3, \dots, city 123,
+enrollee\_id 19158}. ID-like columns (unique per row) are dropped; constant columns carry no information.
+
+\textbf{R8. Parsing numbers stored as text.}
+\begin{lstlisting}
+exp = df["experience"].replace({">20": "21", "<1": "0"})
+df["exp_num"] = pd.to_numeric(exp, errors="coerce")       # unparsable -> NaN, never crash
+df["exp_num"].isna().sum()                                # 65 = exactly the originally missing values
+\end{lstlisting}
+\textbf{R7. Value counts with percentages, including missing.}
+\begin{lstlisting}
+vc = df["education_level"].value_counts(dropna=False)
+pd.concat([vc, (vc / len(df) * 100).round(1)], axis=1, keys=["n", "%"])
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+                     n     %
+Graduate         11598  60.5
+Masters           4361  22.8
+High School       2017  10.5
+NaN                460   2.4
+Phd                414   2.2
+Primary School     308   1.6
+\end{lstlisting}
+\textbf{R9. Grouping rare levels} (cities with $<$0.5\% of rows):
+\begin{lstlisting}
+freq = df["city"].value_counts(normalize=True)
+rare = freq[freq < 0.005].index
+df["city_grp"] = df["city"].where(~df["city"].isin(rare), "Other")   # 89 rare cities -> "Other"; 35 levels left
+\end{lstlisting}
+
+\subsection{Step 5: missing values}
+\textbf{R2. Missing table, sorted.}
+\begin{lstlisting}
+df.isna().agg(["sum", "mean"]).T.sort_values("sum", ascending=False).head()
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+                     sum   mean
+company_type      6140  0.320
+company_size      5938  0.310
+gender            4508  0.235
+major_discipline  2813  0.147
+education_level    460  0.024
+\end{lstlisting}
+\textbf{R3. How many fields are missing per row?} \code{df.isna().sum(axis=1).value\_counts().sort\_index()} $\to$ \code{\{0: 8955, 1: 3718, 2: 3654, 3: 1953, 4: 628,
+5: 176, 6: 62, 7: 12\}}. Only 47\% of rows are complete: dropping rows with any NaN would discard more than half the data.
+
+\textbf{R4. Do fields go missing together?}
+\begin{lstlisting}
+m = df[["company_size", "company_type", "gender"]].isna()
+m.corr()                                    # correlation of the missingness indicators
+pd.crosstab(m.company_size, m.company_type)
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+              company_size  company_type  gender
+company_size          1.00          0.84    0.06
+company_type          0.84          1.00    0.07
+company_type  False  True
+company_size
+False         12440    780
+True            578   5360
+\end{lstlisting}
+Reading: company size and type are usually missing \emph{together} (5{,}360 rows), suggesting one cause: the candidate has no current company.
+
+\textbf{R23. Missingness vs target and a missing indicator.}
+\begin{lstlisting}
+df["company_size_missing"] = df["company_size"].isna().astype(int)
+df.groupby("company_size_missing")["target"].mean()           # {0: 0.179, 1: 0.406}
+\end{lstlisting}
+Blank company size more than doubles the job-change rate: informative missingness. Keep the indicator; never fill with the mode.
+
+\subsection{Steps 6--8: target and univariate}
+\textbf{R10. Percentiles that reveal tails.}
+\begin{lstlisting}
+df["training_hours"].describe(percentiles=[.01, .05, .5, .95, .99])
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+mean 65.4  std 60.1  min 1  1% 3  5% 7  50% 47  95% 188  99% 302  max 336
+\end{lstlisting}
+Mean (65) far above median (47): right skew.
+\textbf{R11. Skew of every numeric column:} \code{df.select\_dtypes("number").skew()} $\to$ \code{city\_development\_index $-1.00$, training\_hours 1.82, exp\_num 0.41}.
+\textbf{R25. Does a log fix it?} \code{np.log1p(df.training\_hours).skew()} $\to$ $-0.35$ (from 1.82).
+
+\textbf{R12. IQR outlier flags.}
+\begin{lstlisting}
+q1, q3 = df.training_hours.quantile([.25, .75]); iqr = q3 - q1
+flag = (df.training_hours < q1 - 1.5 * iqr) | (df.training_hours > q3 + 1.5 * iqr)
+q3 + 1.5 * iqr, flag.sum(), flag.mean() * 100            # (185.5, 984, 5.1 %)
+\end{lstlisting}
+\textbf{R13. z-score flags with NumPy:} \code{z = (x - x.mean()) / x.std(); (np.abs(z) > 3).sum()} $\to$ 450.
+Reading: on a right-skewed variable both rules flag hundreds of \emph{genuine} heavy learners. They are not errors: keep them; log-transform or cap for linear models.
+
+\subsection{Step 9: features vs target}
+\textbf{R14. Rate with counts per category.}
+\begin{lstlisting}
+df.groupby("relevent_experience")["target"].agg(rate="mean", n="size")
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+                          rate      n
+Has relevent experience  0.215  13792
+No relevent experience   0.338   5366
+\end{lstlisting}
+\textbf{R15. Crosstab normalised by row:}
+\begin{lstlisting}
+pd.crosstab(df["enrolled_university"], df["target"], normalize="index")
+\end{lstlisting}
+$\to$ job-change share: full-time course 0.381, part-time 0.252, no enrolment 0.211.
+
+\textbf{R16. Numeric feature in quantile bins vs target.}
+\begin{lstlisting}
+df.groupby(pd.qcut(df["training_hours"], 4))["target"].mean()
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+(0.999, 23.0]    0.250
+(23.0, 47.0]     0.258
+(47.0, 88.0]     0.253
+(88.0, 336.0]    0.237
+\end{lstlisting}
+Flat: training hours carry almost no signal (as point-biserial $r = -0.022$ also says).
+
+\textbf{R18. Group means and a Welch t-test.}
+\begin{lstlisting}
+a = df.loc[df.target == 1, "city_development_index"]; b = df.loc[df.target == 0, "city_development_index"]
+a.mean(), b.mean(), stats.ttest_ind(a, b, equal_var=False).pvalue      # 0.756, 0.853, ~0
+\end{lstlisting}
+\textbf{R19. Chi-square for a categorical feature:}
+\begin{lstlisting}
+stats.chi2_contingency(pd.crosstab(df["company_type"].fillna("Unknown"), df["target"]))[1]   # 4e-204
+\end{lstlisting}
+With 19{,}000 rows almost anything is ``significant''; use Cram\'er's $V$ for strength.
+
+\textbf{R20. Pearson vs Spearman with the target.}
+\begin{lstlisting}
+num = df[["city_development_index", "training_hours", "exp_num", "target"]]
+num.corr()["target"], num.corr(method="spearman")["target"]
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+pearson : CDI -0.342  training_hours -0.022  exp_num -0.177
+spearman: CDI -0.279  training_hours -0.014  exp_num -0.184
+\end{lstlisting}
+
+\subsection{Step 11: interactions and segments}
+\textbf{R17. Two-factor pivot.}
+\begin{lstlisting}
+df.pivot_table(index="education_level", columns="relevent_experience", values="target", aggfunc="mean")
+\end{lstlisting}
+\outlabel
+\begin{lstlisting}[style=out]
+                 Has relevent experience  No relevent experience
+Graduate                          0.23                    0.43
+High School                       0.12                    0.24
+Masters                           0.19                    0.32
+Phd                               0.12                    0.17
+Primary School                    0.15                    0.13
+\end{lstlisting}
+Graduates without relevant experience are the most mobile group (43\%): a candidate segment for targeted job alerts.
+
+\subsection{Feature-engineering recipes that come out of EDA}
+\textbf{R21. Relative-to-group feature with \code{transform}:}
+\begin{lstlisting}
+df["exp_vs_city_avg"] = df["exp_num"] - df.groupby("city")["exp_num"].transform("mean")
+\end{lstlisting}
+\textbf{R22. Frequency encoding:}
+\begin{lstlisting}
+df["city_freq"] = df["city"].map(df["city"].value_counts(normalize=True))     # city_103 -> 0.2273
+\end{lstlisting}
+\textbf{R24. Multi-condition labels with \code{np.select}:}
+\begin{lstlisting}
+df["career_stage"] = np.select([df.exp_num <= 2, df.exp_num <= 10], ["junior", "mid"], default="senior")
+df.groupby("career_stage")["target"].mean()        # junior 0.384, mid 0.284, senior 0.171
+\end{lstlisting}
+
+\section{Plot recipes (Matplotlib/Seaborn)}
+\begin{lstlisting}
+fig, axes = plt.subplots(1, 4, figsize=(15, 3))                       # grid of histograms
+for ax, c in zip(axes, num_cols): sns.histplot(df[c], kde=True, ax=ax); ax.set_title(c)
+sns.boxplot(data=df, x="target", y="city_development_index")          # numeric by class
+sns.kdeplot(data=df, x="city_development_index", hue="target", common_norm=False)  # overlap
+rate_by(df, "company_type", "target")["rate"].plot(kind="barh")       # rate by category
+sns.heatmap(df[num_cols].corr(), annot=True, fmt=".2f", cmap="coolwarm", vmin=-1, vmax=1)
+sns.pointplot(data=df, x="career_stage", y="target", hue="relevent_experience", errorbar=None)  # interaction
+sns.scatterplot(data=df, x="x1", y="x2", hue="target", alpha=0.5)    # two features at once
+\end{lstlisting}
+Rules: \code{common\_norm=False} when comparing distributions of unequal-sized classes; always show $n$ beside rates; sort bar charts; log axes for skewed money.
+
+\section{How to narrate EDA in the interview}
+\begin{enumerate}
+\item Start with the frame: ``One row is a candidate; target is job change; 25\% positive, so I will use PR AUC/F1 and stratified splits.''
+\item Data quality before statistics: types, codes, duplicates, malformed labels.
+\item Missingness with the target, not just counts.
+\item Rank features by separation (point-biserial, Cram\'er's $V$, binned rates) and say which you would expect from domain sense.
+\item Name one interaction and one non-linearity.
+\item Close with a written plan: drops (leaks, IDs), encodings, transforms, imputation, model choice, metric.
+\end{enumerate}
+
+\stuck{pandas User Guide: Group by (split-apply-combine)}{https://pandas.pydata.org/docs/user_guide/groupby.html}
+\section{Interview questions}
+
+\begin{qa}{\pyq{Round 3 Part 1} You get a new CSV in a Colab notebook. What are your first ten lines of code, and why each?}
+\oneline{Load, then shape/head/info, the overview table (types, missing \%, unique counts), duplicates, target balance, \code{describe} with skew and zero counts, value counts of
+categoricals, missingness vs target, and a quick leakage check of any column that perfectly separates the target.}
+\why Each line answers a question that changes a decision (Section 1). Leakage and data quality first, statistics second, plots third, model last.
+\worked
+\begin{lstlisting}
+df = pd.read_csv(path); print(df.shape); df.head()
+overview(df)
+df.duplicated().sum(), df.drop(columns=id_col).duplicated().sum()
+df[target].value_counts(normalize=True)
+num_summary(df)
+for c in df.select_dtypes(exclude="number"): print(df[c].value_counts(dropna=False).head(10))
+missing_vs_target(df, target)
+point_biserial(df, num_cols, target)
+\end{lstlisting}
+\end{qa}
+
+\begin{qa}{\deep \code{isna().sum()} shows zero missing values. Are you done with missing values?}
+\oneline{No: missing values are often disguised as 0, $-1$, 999, empty strings, ``NA'' text or a default date; check zero counts, impossible values, spikes at round numbers and
+value counts of text columns.}
+\worked The Pima diabetes data (Chapter 44) has no NaN but 374 zero Insulin and 35 zero blood-pressure readings: impossible values that are really missing.
+\end{qa}
+
+\begin{qa}{How do you find out whether missing values are informative?}
+\oneline{Compare the target rate (or target mean) for rows where the field is missing vs present, and check what else is missing with it; a big difference means missingness carries
+signal and should be encoded (indicator or ``Unknown''), not imputed away.}
+\worked HR data: job-change rate 0.406 when company size is blank vs 0.179 when present; company size and type are missing together in 5{,}360 rows.
+\end{qa}
+
+\begin{qa}{Why do you print counts next to rates in every group-by?}
+\oneline{Because a rate from a tiny group is unreliable; 100\% from 2 people is noise, while 40\% from 6{,}000 is solid; counts tell the listener how much to trust each number and
+whether to group rare levels.}
+\end{qa}
+
+\begin{qa}{\deep Training hours shows 984 IQR outliers and 450 z-score outliers. Do you remove them?}
+\oneline{No: the variable is right-skewed, so both rules flag many genuine heavy learners; they are valid values, so I keep them and, for linear models, log-transform or cap; tree
+models are unaffected.}
+\why Outlier rules assume a roughly symmetric distribution; on skewed data they flag the long tail by design. Remove only impossible values.
+\end{qa}
+
+\begin{qa}{How do you turn EDA findings into a modelling plan? Give the plan for the HR data.}
+\oneline{Translate each finding into an action: drop the ID; parse experience and last job; fix the \code{10/49} label; keep company missingness as a category; frequency- or
+target-encode city; keep CDI (strongest, non-linear, so a tree model); stratified split; class weights; evaluate with PR AUC and F1.}
+\end{qa}
+
+\begin{qa}{What is the difference between \code{groupby().agg()}, \code{transform()} and \code{pivot\_table()} in EDA?}
+\oneline{\code{agg} gives one summary row per group (rates by city); \code{transform} returns a group statistic aligned to every original row (features relative to the group);
+\code{pivot\_table} lays out a statistic across two grouping variables (interactions).}
+\end{qa}
+
+\begin{qa}{\deep Your target rate by a feature looks almost perfect (0\% vs 100\%). What do you suspect and do?}
+\oneline{Leakage: the feature is probably created by or after the outcome (salary for placement, ``interview scheduled'' for hiring); confirm with domain questions and timing, then drop it
+from the predictive model (it may still be useful for a different question).}
+\end{qa}
