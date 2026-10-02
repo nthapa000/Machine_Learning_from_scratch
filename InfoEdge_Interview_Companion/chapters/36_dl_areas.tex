@@ -1,1 +1,168 @@
-% TODO
+\chapter{The Perceptron and the Four Application Areas: CV, NLP, RL and Federated Learning}
+\companion{3Blue1Brown: But what is a neural network?}{\ytid{aircAruvnKk}}
+
+The checklist asks for the perceptron's structure and for ``basics of computer vision, natural language processing, reinforcement learning and federated
+learning''. Chapter 18 built multilayer networks; this chapter starts one step earlier with the original perceptron and its learning rule, then gives a
+self-contained basic layer for each application area, with the ML ideas each one uses.
+
+\section{The perceptron}
+\subsection{Structure}
+Rosenblatt's perceptron (1958) is a single artificial neuron with a \textbf{step} activation:
+\[ \hat y = \begin{cases}1 & \mathbf w^\top\mathbf x + b > 0\\ 0 & \text{otherwise}\end{cases} \]
+Inputs $x_1,\dots,x_d$ $\to$ multiplied by weights $w_1,\dots,w_d$ $\to$ summed with a bias $b$ $\to$ step function $\to$ output 0/1. Geometrically it is a linear
+classifier: the boundary $\mathbf w^\top\mathbf x + b = 0$ is a hyperplane.
+
+\subsection{The perceptron learning rule}
+For each training example, predict; if wrong, nudge the weights toward the correct side:
+\[ \mathbf w\leftarrow\mathbf w + \eta\,(y - \hat y)\,\mathbf x,\qquad b\leftarrow b + \eta\,(y - \hat y). \]
+If correct, $y - \hat y = 0$ and nothing changes. If a positive was missed ($y = 1$, $\hat y = 0$), $\mathbf w$ moves toward $\mathbf x$; if a negative was wrongly fired, $\mathbf w$
+moves away from $\mathbf x$.
+\begin{example}[: learning the AND gate by hand ($\eta = 1$, start $\mathbf w = (0, 0)$, $b = 0$)]
+Epoch 1: $(0,0)$: score 0 $\to$ predict 0, correct. $(0,1)$: correct. $(1,0)$: correct. $(1,1)$, $y = 1$: score 0 $\to$ predict 0, wrong: $\mathbf w = (1,1)$, $b = 1$.
+Epoch 2: $(0,0)$, $y = 0$: score $1 > 0$ $\to$ predict 1, wrong: $b = 0$. $(0,1)$: score 1, wrong: $\mathbf w = (1, 0)$, $b = -1$. \dots\
+After five epochs with mistakes, epoch 6 has none: $\mathbf w = (2, 1)$, $b = -2$. Check: $(1,1)$: $2 + 1 - 2 = 1 > 0$ $\to$ 1; $(1,0)$: $0\to0$; $(0,1)$: $-1\to0$;
+$(0,0)$: $-2\to0$. AND learned.
+\end{example}
+
+\subsection{Convergence theorem and its limit}
+\textbf{Perceptron convergence theorem}: if the data are linearly separable, the rule finds a separating hyperplane in a finite number of updates (at most $(R/\gamma)^2$,
+with $R$ the largest input norm and $\gamma$ the margin). If the data are \emph{not} separable it never converges. \textbf{XOR} is not linearly separable, so a single
+perceptron cannot learn it; this result (Minsky and Papert, 1969) stalled neural network research until multilayer networks trained with backpropagation, which
+need differentiable activations (sigmoid, ReLU) instead of the step function.
+
+\subsection{Perceptron vs logistic regression vs SVM}
+All three are linear classifiers. The perceptron updates only on mistakes and stops at \emph{any} separating line; logistic regression minimises log loss and gives
+probabilities; the SVM finds the \emph{maximum-margin} line (hinge loss). The perceptron's update is SGD on the loss $\max(0, -y\,\mathbf w^\top\mathbf x)$ with $y\in\{-1,1\}$.
+
+\subsection{From perceptron to MLP}
+Replace the step with a smooth activation, stack layers, and train with backpropagation (Chapter 18): the multilayer perceptron (ANN). One hidden layer suffices to
+represent XOR.
+
+\section{Computer vision basics}
+\begin{itemize}
+\item \textbf{Images as tensors}: height $\times$ width $\times$ channels (RGB), pixel values 0--255, usually scaled to $[0,1]$ or standardised per channel.
+\item \textbf{Tasks}: \emph{classification} (one label per image: kitchen); \emph{object detection} (boxes + labels: where are the windows); \emph{semantic segmentation}
+  (a label per pixel); \emph{instance segmentation} (separate each object); \emph{OCR} (text in images: resume PDFs, ID cards); \emph{image similarity/retrieval}
+  (duplicate listing photos); \emph{face verification}.
+\item \textbf{Models}: CNNs (Chapter 19), Vision Transformers; detection with YOLO or Faster R-CNN; segmentation with U-Net; CLIP for image--text matching.
+\item \textbf{Detection metrics}: \textbf{IoU} (intersection over union) of predicted and true boxes; a detection counts as correct if IoU $\ge0.5$; \textbf{non-maximum
+  suppression} removes overlapping duplicate boxes; \textbf{mAP} averages precision over recall levels and classes.
+\end{itemize}
+\begin{example}[: IoU]
+Predicted box $(0,0)$--$(4,4)$ (area 16), true box $(2,2)$--$(6,6)$ (area 16). Intersection $(2,2)$--$(4,4)$, area 4. Union $16 + 16 - 4 = 28$. IoU $= 4/28 = 0.14$: not a
+correct detection at the 0.5 threshold.
+\end{example}
+\textbf{Augmentation}, \textbf{transfer learning} from ImageNet, and class imbalance handling are the practical essentials.
+
+\section{NLP basics (a map of Chapters 16, 17 and 21)}
+Text $\to$ tokens (words or subwords) $\to$ vectors (BoW/TF-IDF, static embeddings, contextual embeddings) $\to$ model (linear, RNN, Transformer). Core tasks: text
+classification, NER/sequence labelling, semantic similarity and search, question answering, summarisation, translation, generation. Evaluation: accuracy/F1 for
+classification, exact match/F1 for QA, BLEU/ROUGE for generation (with human review), recall@k and NDCG for retrieval.
+
+\section{Reinforcement learning basics}
+\subsection{The setting}
+An \textbf{agent} interacts with an \textbf{environment} over time. At each step it observes a \textbf{state} $s$, takes an \textbf{action} $a$, receives a \textbf{reward} $r$
+and moves to a new state. The goal is a \textbf{policy} $\pi(a\mid s)$ that maximises the expected \textbf{return} $G = r_1 + \gamma r_2 + \gamma^2r_3 + \dots$, where the
+\textbf{discount} $\gamma\in[0,1)$ makes near rewards worth more. Unlike supervised learning, there are no correct labels, only rewards, often delayed.
+This is formalised as a \textbf{Markov decision process} (states, actions, transition probabilities, rewards, $\gamma$): the next state depends only on the current state
+and action (the Markov property, Chapter 40).
+
+\begin{example}[: discounted return]
+Rewards 1, 0, 2 with $\gamma = 0.9$: $G = 1 + 0.9\cdot0 + 0.81\cdot2 = 2.62$.
+\end{example}
+
+\subsection{Value functions and Q-learning}
+$Q(s, a)$ = expected return from taking action $a$ in state $s$ and acting well afterwards. \textbf{Q-learning} learns it from experience:
+\[ Q(s,a)\leftarrow Q(s,a) + \alpha\big[r + \gamma\max_{a'}Q(s',a') - Q(s,a)\big]. \]
+The bracket is the \textbf{temporal-difference error}: how much better or worse things went than expected.
+\begin{example}[: one Q-learning update]
+$Q(s,a) = 0$, reward $r = 1$, $\gamma = 0.9$, best next value $\max_{a'}Q(s',a') = 2$, learning rate $\alpha = 0.5$: target $= 1 + 1.8 = 2.8$;
+$Q(s,a)\leftarrow0 + 0.5(2.8 - 0) = 1.4$.
+\end{example}
+\textbf{Deep Q-networks} approximate $Q$ with a neural network. \textbf{Policy gradient} methods (REINFORCE, PPO) adjust the policy directly to increase the probability of
+actions that led to high return; PPO and GRPO are used to fine-tune LLMs from human or verifiable rewards (Chapter 23).
+
+\subsection{Exploration vs exploitation and bandits}
+Always choosing the current best action (exploitation) may miss better ones; trying others (exploration) costs reward now. \textbf{$\varepsilon$-greedy}: explore at random
+with probability $\varepsilon$. \textbf{Multi-armed bandits} are one-step RL: choose which of several options (e.g. which job-alert template) to show, observe a reward
+(click), update; \textbf{Thompson sampling} samples from Beta posteriors of each option's success rate (Chapter 12); \textbf{contextual bandits} condition on user features.
+Bandits are the most common RL in industry: recommendation exploration, notification timing, ad and creative selection.
+
+\section{Federated learning basics}
+\subsection{The problem}
+Data live on many devices or with many organisations (phones, hospitals, companies) and cannot be centralised because of privacy, regulation or bandwidth.
+\textbf{Federated learning} trains a shared model without moving the raw data.
+
+\subsection{FedAvg}
+\begin{enumerate}
+\item The server sends the current model to a sample of clients.
+\item Each client trains locally on its own data for a few epochs.
+\item Clients send back model updates (weights or gradients), not data.
+\item The server averages them, weighted by each client's number of examples: $\mathbf w = \sum_k\frac{n_k}{n}\mathbf w_k$.
+\item Repeat.
+\end{enumerate}
+\begin{example}[: weighted averaging]
+Client A has 100 examples and local weight 0.2; client B has 300 examples and local weight 0.6. New global weight $= \frac{100\cdot0.2 + 300\cdot0.6}{400} = 0.5$.
+\end{example}
+\textbf{Challenges}: non-IID data (each phone's data differ), communication cost, stragglers, privacy leakage through updates (mitigated by secure aggregation and
+\textbf{differential privacy}: adding calibrated noise), poisoning by malicious clients. Uses: next-word prediction on phone keyboards; cross-hospital models; for a job
+platform, on-device personalisation of a mobile app without uploading private activity.
+
+\begin{practical}[: these four areas at InfoEdge]
+CV: 99acres photo quality and room classification, duplicate-listing detection, Jeevansathi photo moderation. NLP: resume parsing, taxonomy, search, chat agents.
+RL: bandits for notification channel and timing (seeker reactivation), exploration for new jobs in recommendation, RL fine-tuning of LLMs (GRPO on the GenAI slide).
+Federated learning: on-device models in the mobile apps where privacy matters.
+\end{practical}
+
+\stuck{Hugging Face Deep RL course (unit 1)}{https://huggingface.co/learn/deep-rl-course/unit1/introduction}
+\section{Interview questions}
+
+\begin{qa}{Describe the perceptron's structure and learning rule. Will it learn XOR?}
+\oneline{A weighted sum of inputs plus bias passed through a step function, trained by $\mathbf w\leftarrow\mathbf w + \eta(y - \hat y)\mathbf x$ on mistakes; it converges whenever the
+data are linearly separable (AND, OR) but never for XOR, which is not linearly separable.}
+\worked AND from zeros with $\eta = 1$ converges to $\mathbf w = (2,1)$, $b = -2$.
+\end{qa}
+
+\begin{qa}{Perceptron vs logistic regression vs linear SVM.}
+\oneline{All learn linear boundaries; the perceptron stops at any separating hyperplane using mistake-driven updates and has no probabilities; logistic regression minimises log loss and
+outputs calibrated probabilities; the SVM maximises the margin with hinge loss and is the most robust boundary.}
+\end{qa}
+
+\begin{qa}{\deep Why did the step activation have to be replaced for multilayer networks?}
+\oneline{Its derivative is zero everywhere (and undefined at 0), so gradients cannot flow backward through it; backpropagation needs differentiable activations like sigmoid, tanh or ReLU.}
+\end{qa}
+
+\begin{qa}{What are classification, detection and segmentation in computer vision? Compute IoU for boxes $(0,0)$--$(4,4)$ and $(2,2)$--$(6,6)$.}
+\oneline{Classification gives one label per image, detection gives boxes with labels, segmentation labels every pixel; IoU $= 4/28 = 0.14$.}
+\end{qa}
+
+\begin{qa}{What is reinforcement learning and how does it differ from supervised learning?}
+\oneline{An agent learns a policy by acting in an environment and receiving rewards, maximising discounted return; there are no labelled correct actions, feedback is delayed and depends on
+the agent's own choices, so exploration is needed.}
+\end{qa}
+
+\begin{qa}{Write the Q-learning update and compute it for $Q = 0$, $r = 1$, $\gamma = 0.9$, $\max Q' = 2$, $\alpha = 0.5$.}
+\oneline{$Q\leftarrow Q + \alpha[r + \gamma\max Q' - Q] = 0 + 0.5(1 + 1.8) = 1.4$.}
+\end{qa}
+
+\begin{qa}{\deep Where would a job platform use reinforcement learning or bandits?}
+\oneline{Choosing which notification, channel and time to send each seeker (contextual bandits with click/apply rewards), allocating exposure to new jobs in recommendations
+(exploration), sequential recommendations optimising long-term engagement, and fine-tuning LLM agents with reward signals.}
+\why Full RL is rarely needed; bandits capture most value with simpler, safer learning. Always keep a holdout to measure true uplift.
+\end{qa}
+
+\begin{qa}{What is federated learning, and what is FedAvg?}
+\oneline{Training a shared model across many clients without collecting their raw data; FedAvg has clients train locally and the server average their weights, weighted by data size.}
+\worked Clients with 100 and 300 examples and weights 0.2 and 0.6: global weight 0.5.
+\pushes \emph{``Is it fully private?''} Not by itself: updates can leak information; add secure aggregation and differential privacy.
+\end{qa}
+
+\begin{qa}{Explain the exploration--exploitation trade-off and $\varepsilon$-greedy.}
+\oneline{Exploiting the current best option maximises short-term reward but may miss better options; exploring gathers information at a cost; $\varepsilon$-greedy explores a random option with
+probability $\varepsilon$ and exploits otherwise.}
+\end{qa}
+
+\begin{qa}{What is a Markov decision process?}
+\oneline{A formal RL setting of states, actions, transition probabilities, rewards and a discount factor, where the next state and reward depend only on the current state and action (the Markov
+property).}
+\end{qa}

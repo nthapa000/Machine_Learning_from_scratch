@@ -1,1 +1,190 @@
-% TODO
+\chapter{Clustering Variants and the Dimensionality-Reduction Family}
+\companion{StatQuest: t-SNE, Clearly Explained}{\ytid{NEaUSP4YerM}}
+
+Chapter 15 taught K-Means, GMM/EM and DBSCAN; Chapter 14 taught PCA, SVD and t-SNE. The checklist adds the K-Means family (k-medoids, k-modes,
+k-prototypes, k-means++), soft vs hard clustering, the Swiss roll dataset, SNE vs t-SNE, and the classifications ``linear vs non-linear'' and
+``deterministic vs non-deterministic'' dimensionality reduction. This chapter fills those in.
+
+\section{The K-Means family}
+K-Means minimises squared Euclidean distance to cluster \emph{means}. That choice has consequences: it needs numeric data, means are pulled by outliers, and
+a centroid may not be a real data point. The variants change the ``centre'' and the distance.
+
+\subsection{K-Means++ (initialisation)}
+Choose the first centre at random; choose each next centre with probability proportional to $D(x)^2$, the squared distance to the nearest centre already chosen
+(Chapter 15). Spreads initial centres apart; fewer bad local minima; expected cost within $O(\log K)$ of optimal.
+
+\subsection{K-Medoids (PAM)}
+Each cluster's centre must be an actual data point (the \textbf{medoid}: the point with the smallest total distance to the others in its cluster). Works with
+\emph{any} distance (Manhattan, cosine, edit distance between job titles) and is robust to outliers.
+\begin{example}[: mean vs medoid]
+Points 1, 2, 3, 100 in one cluster. Mean $= 26.5$, a value nobody has, dragged by 100. Medoid: total absolute distances from 2 is $1 + 0 + 1 + 98 = 100$ and from 3 is
+also 100 (tie; either is a medoid), far smaller than from 100 ($99 + 98 + 97 = 294$). The medoid stays among the typical points.
+\end{example}
+Algorithm (PAM): assign points to nearest medoid; for each medoid try swapping it with a non-medoid; keep swaps that lower total cost; repeat. Cost is higher than
+K-Means ($O(K(n-K)^2)$ per iteration); CLARA/CLARANS sample to scale.
+
+\subsection{K-Modes (categorical data)}
+For purely categorical records (city, function, education), use \textbf{simple matching dissimilarity}: the number of attributes that differ. The centre of a cluster
+is its \textbf{mode} per attribute.
+\begin{example}[: k-modes]
+Cluster records: (Delhi, IT, Fresher), (Delhi, IT, Mid), (Pune, IT, Fresher). Mode per attribute: (Delhi, IT, Fresher). New record (Pune, Sales, Fresher) differs
+in 2 attributes from this mode.
+\end{example}
+
+\subsection{K-Prototypes (mixed data)}
+Mixed numeric and categorical records: cost $=$ squared Euclidean distance on numeric features $+\ \gamma\times$ number of categorical mismatches; $\gamma$ balances
+the two parts (often around half the average numeric standard deviation). Centre $=$ means for numeric, modes for categorical. Natural for customer data like
+(salary, experience, city, function).
+
+\subsection{Mini-batch K-Means}
+Update centroids from small random batches: much faster on millions of points, slightly worse objective.
+
+\section{Hard vs soft clustering}
+\begin{itemize}
+\item \textbf{Hard}: each point belongs to exactly one cluster: K-Means, k-medoids, k-modes, DBSCAN (or noise), agglomerative.
+\item \textbf{Soft (fuzzy/probabilistic)}: each point has a degree of membership in every cluster: GMM (responsibilities $\gamma_{ik}$, Chapter 15), \textbf{fuzzy
+  c-means}.
+\end{itemize}
+\textbf{Fuzzy c-means} membership with fuzzifier $m > 1$: $u_{ik} = \Big[\sum_j\big(\frac{d_{ik}}{d_{jk}}\big)^{2/(m-1)}\Big]^{-1}$.
+\begin{example}[: fuzzy memberships]
+A point at distance 1 from centre A and 3 from centre B, $m = 2$: $u_A = \frac{1}{1 + (1/3)^2} = 0.9$, $u_B = 0.1$.
+\end{example}
+Soft clustering suits overlapping groups: a candidate who is 60\% ``data analyst'' and 40\% ``business analyst'' should be recommended both kinds of jobs.
+
+\section{The Swiss roll: why ``non-linear'' matters}
+Take a flat 2-D sheet of points coloured by position and roll it up like a Swiss-roll cake in 3-D. Two points on adjacent layers of the roll are close in straight-line
+(Euclidean) distance but far apart \emph{along the sheet} (geodesic distance).
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[width=0.5\linewidth,height=4.6cm,axis lines=none,view={0}{90}]
+\addplot[domain=1.5*pi:4.5*pi,samples=120,very thick,accent]({x*cos(deg(x))},{x*sin(deg(x))});
+\addplot[only marks,mark=*,mark size=1.8pt,prframe] coordinates {(6.283,0) (12.566,0)};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+(Cross-section of a Swiss roll: the two marked points are close in a straight line but far along the curve.)
+\begin{itemize}
+\item \textbf{PCA} (linear) projects the roll flat, overlapping the layers: colours mix.
+\item \textbf{K-Means} with Euclidean distance cuts across layers.
+\item \textbf{Isomap, LLE, UMAP}, which respect local neighbourhoods and geodesic distances, ``unroll'' it into the original sheet.
+\item \textbf{DBSCAN / spectral clustering} follow the sheet's connectivity.
+\end{itemize}
+It is the standard demonstration that data can lie on a low-dimensional curved \textbf{manifold} inside a high-dimensional space.
+
+\section{SNE vs t-SNE}
+\textbf{SNE} (stochastic neighbour embedding): convert distances to conditional probabilities $p_{j|i}$ with a Gaussian around each point (bandwidth from perplexity), do the
+same in low dimension with a Gaussian $q_{j|i}$, and minimise $\sum_i KL(P_i\,\|\,Q_i)$. Two problems: the asymmetric cost is hard to optimise, and the \textbf{crowding problem}:
+in 2-D there is not enough room to place all moderately distant neighbours at moderate distances, so clusters squash together in the middle.
+
+\textbf{t-SNE} fixes both: (1) symmetric joint probabilities $p_{ij} = \frac{p_{j|i} + p_{i|j}}{2n}$ (simpler gradient); (2) in the low-dimensional space use a
+\textbf{Student-$t$ distribution with one degree of freedom} (Cauchy), $q_{ij}\propto(1 + \norm{\mathbf y_i - \mathbf y_j}^2)^{-1}$, whose heavy tails let moderately
+dissimilar points be placed far apart without much penalty, giving well-separated clusters.
+\begin{example}[: why heavy tails help]
+At low-dimensional distance 3, a Gaussian similarity $e^{-9/2}\approx0.011$; the Student-$t$ similarity $1/(1 + 9) = 0.1$, nine times larger. To match a small
+high-dimensional similarity, t-SNE can push such pairs further apart.
+\end{example}
+\textbf{Perplexity} (5--50) $\approx$ effective number of neighbours per point; see Chapter 14 for reading t-SNE plots.
+
+\section{A taxonomy of dimensionality reduction}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l c c c c X}
+\toprule
+Method & Linear? & Deterministic? & Supervised? & New points? & Preserves / idea\\
+\midrule
+PCA & yes & yes & no & yes & global variance\\
+SVD / truncated SVD & yes & yes (exact) & no & yes & low-rank structure\\
+LDA (Fisher) & yes & yes & \textbf{yes} & yes & class separation\\
+Factor analysis, ICA & yes & ICA no & no & yes & latent factors / independent sources\\
+Random projection & yes & \textbf{no} & no & yes & distances approximately (Johnson--Lindenstrauss)\\
+Kernel PCA & no & yes & no & yes (approx.) & variance in kernel feature space\\
+Classical MDS & no* & yes & no & no & pairwise distances\\
+Isomap & no & yes & no & limited & geodesic distances on a neighbour graph\\
+LLE & no & yes & no & limited & local linear reconstructions\\
+SNE / t-SNE & no & \textbf{no} & no & no & local neighbourhoods (probabilities)\\
+UMAP & no & \textbf{no} (seeded) & optional & yes & local + more global topology\\
+Autoencoder & no & \textbf{no} & no & yes & reconstruction through a bottleneck\\
+\bottomrule
+\end{tabularx}
+\end{center}
+(*Classical MDS with Euclidean distances is equivalent to PCA.)
+\begin{itemize}
+\item \textbf{Linear}: new coordinates are linear combinations of the original features ($Z = XW$): projections onto flat subspaces. Fast, interpretable loadings, can
+  transform new points; cannot unroll curved manifolds.
+\item \textbf{Non-linear}: can capture curved structure; usually costlier, harder to interpret, often no simple transform for new points.
+\item \textbf{Deterministic}: the same data always give the same output (PCA solves an eigenproblem exactly; Isomap and LLE given the neighbour graph).
+\item \textbf{Non-deterministic (stochastic)}: depend on random initialisation or sampling (t-SNE gradient descent from random positions, UMAP, random projections,
+  autoencoders, randomised SVD). Set seeds; run several times; do not over-interpret one run.
+\end{itemize}
+
+\subsection{Brief descriptions}
+\textbf{Kernel PCA}: PCA on the kernel matrix (Chapter 9), finding non-linear components (concentric circles become separable).
+\textbf{Isomap}: build a $k$-NN graph, compute shortest-path (geodesic) distances, run classical MDS on them.
+\textbf{LLE}: express each point as a weighted combination of its neighbours, then find low-dimensional points preserving those weights.
+\textbf{UMAP}: builds a fuzzy neighbour graph and optimises a low-dimensional layout; faster than t-SNE, better global structure, supports \code{transform}.
+\textbf{Random projection}: multiply by a random Gaussian matrix; by the Johnson--Lindenstrauss lemma, $O(\log n/\varepsilon^2)$ dimensions preserve all pairwise distances
+within a factor $1\pm\varepsilon$: a cheap first reduction for huge data.
+
+\begin{practical}[: where these are used in ML]
+\begin{itemize}
+\item \textbf{k-prototypes} for segmenting recruiters by (spend, jobs posted, industry, city); \textbf{k-medoids} for picking representative real job descriptions per cluster.
+\item \textbf{Soft clustering} (GMM) for seekers who straddle two career tracks.
+\item \textbf{PCA} to compress 768-dimensional embeddings before an ANN index; \textbf{random projection} or \textbf{product quantisation} for very large indexes.
+\item \textbf{UMAP/t-SNE} to inspect whether resume embeddings separate by job function; \textbf{LDA} for a supervised 2-D view of classes.
+\item \textbf{Autoencoders} for non-linear compression and anomaly detection.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: K-means clustering}{\ytid{4b5d3muPQmA}}
+\section{Interview questions}
+
+\begin{qa}{How do k-medoids, k-modes and k-prototypes differ from K-Means, and when would you use each?}
+\oneline{K-Means uses means and squared Euclidean distance (numeric data); k-medoids uses actual data points as centres and any distance (robust to outliers, custom
+metrics); k-modes uses modes and mismatch counts (categorical data); k-prototypes combines both for mixed numeric and categorical data.}
+\worked Cluster 1, 2, 3, 100: mean 26.5, medoid 2.
+\end{qa}
+
+\begin{qa}{What is k-means++ and why does it help?}
+\oneline{An initialisation that picks each new centre with probability proportional to its squared distance from existing centres, spreading centres out, which reduces bad
+local minima and comes with a guarantee of being within $O(\log K)$ of optimal in expectation.}
+\end{qa}
+
+\begin{qa}{Hard vs soft clustering: definitions and examples.}
+\oneline{Hard clustering assigns each point to exactly one cluster (K-Means, DBSCAN, hierarchical); soft clustering gives each point a membership probability or degree for every
+cluster (GMM, fuzzy c-means).}
+\worked Fuzzy c-means with distances 1 and 3, $m = 2$: memberships 0.9 and 0.1.
+\end{qa}
+
+\begin{qa}{\deep What is the Swiss roll dataset and what does it demonstrate?}
+\oneline{A 2-D sheet rolled up in 3-D; points on neighbouring layers are close in Euclidean distance but far along the sheet, demonstrating that data can lie on a curved
+low-dimensional manifold that linear methods (PCA, Euclidean K-Means) cannot recover, while neighbourhood-based non-linear methods (Isomap, LLE, UMAP) can unroll it.}
+\end{qa}
+
+\begin{qa}{What is the difference between SNE and t-SNE? Why the Student-$t$?}
+\oneline{t-SNE symmetrises SNE's conditional probabilities and replaces the Gaussian in the low-dimensional space with a heavy-tailed Student-$t$ (one degree of freedom), which
+solves the crowding problem by letting moderately distant points spread out, producing clearer clusters and an easier optimisation.}
+\end{qa}
+
+\begin{qa}{Classify these as linear or non-linear and deterministic or not: PCA, LDA, t-SNE, UMAP, kernel PCA, autoencoder, random projection.}
+\oneline{PCA: linear, deterministic; LDA: linear, deterministic, supervised; t-SNE: non-linear, stochastic; UMAP: non-linear, stochastic; kernel PCA: non-linear, deterministic;
+autoencoder: non-linear, stochastic; random projection: linear, stochastic.}
+\end{qa}
+
+\begin{qa}{\deep Why can't you use t-SNE outputs as features for a production classifier?}
+\oneline{t-SNE has no mapping for new points (it optimises positions for the given data only), its output changes between runs, and it distorts global distances; use PCA,
+UMAP (which has a transform) or learned embeddings instead.}
+\end{qa}
+
+\begin{qa}{What is the Johnson--Lindenstrauss lemma and why is it useful?}
+\oneline{Any $n$ points in high dimension can be projected by a random linear map into $O(\log n/\varepsilon^2)$ dimensions while preserving all pairwise distances within a
+factor $1\pm\varepsilon$; it justifies random projections as a fast, data-independent dimensionality reduction for huge datasets.}
+\end{qa}
+
+\begin{qa}{How would you cluster recruiters described by monthly spend, jobs posted, industry and city?}
+\oneline{With k-prototypes (numeric: scaled spend and jobs; categorical: industry and city), choosing $K$ by cost elbow and business usefulness, or by converting categories to
+embeddings or target statistics and using K-Means or GMM.}
+\end{qa}
+
+\begin{qa}{Isomap vs LLE vs kernel PCA: one line each.}
+\oneline{Isomap preserves geodesic distances computed on a neighbour graph; LLE preserves each point's linear reconstruction from its neighbours; kernel PCA performs PCA in a
+kernel-induced feature space.}
+\end{qa}

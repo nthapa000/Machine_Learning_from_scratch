@@ -1,1 +1,178 @@
-% TODO
+\chapter{Time Series: Components, Stationarity, ARIMA, SARIMAX and ANOVA}
+\companion{ritvikmath: Time Series Talk, ARIMA Model (search)}{\yts{ritvikmath+time+series+talk+ARIMA+model}}
+
+The checklist lists ``time series (ANOVA, ARIMA, SARIMAX)'' and warns that what is asked ``completely depends on the projects you put in your resume''.
+Chapter 20 covered deep-learning forecasters. This chapter teaches the classical statistical toolkit from zero, which interviewers expect you to
+compare against any LSTM you mention, plus one-way ANOVA.
+
+\section{What makes time series different}
+Observations are ordered in time and \textbf{depend on the past}: today's applications are related to yesterday's. Two consequences: (1) random train/test
+splits leak the future (always split by time); (2) the ``independent errors'' assumption of ordinary regression fails, so special models are needed.
+
+\section{Components}
+A series is usually viewed as a combination of:
+\begin{itemize}
+\item \textbf{Trend}: long-run increase or decrease (job postings growing year on year).
+\item \textbf{Seasonality}: a pattern repeating with a fixed period (weekly: fewer applications on Sundays; yearly: hiring peaks after appraisals and in campus season).
+\item \textbf{Cycle}: rises and falls without a fixed period (economic cycles, hiring freezes).
+\item \textbf{Noise}: what remains.
+\end{itemize}
+\textbf{Additive}: $y_t = T_t + S_t + R_t$ (seasonal swing constant in size). \textbf{Multiplicative}: $y_t = T_t\times S_t\times R_t$ (seasonal swing grows with the level; take logs to
+make it additive). \code{statsmodels.tsa.seasonal\_decompose} or STL separates them.
+
+\section{Stationarity}
+A series is (weakly) \textbf{stationary} if its mean, variance and autocorrelation structure do not change over time. Most classical models assume it. Trends and
+seasonality make a series non-stationary.
+\begin{itemize}
+\item \textbf{Check}: plot it (moving mean/variance); the \textbf{Augmented Dickey--Fuller (ADF)} test (null hypothesis: non-stationary, has a unit root; small p-value $\Rightarrow$
+  stationary); KPSS (null: stationary).
+\item \textbf{Fix}: \textbf{differencing} $\nabla y_t = y_t - y_{t-1}$ removes a linear trend; seasonal differencing $y_t - y_{t-s}$ removes seasonality of period $s$; log
+  transform stabilises a variance that grows with the level.
+\end{itemize}
+\begin{example}[: differencing]
+Monthly postings 100, 110, 125, 135, 150. First differences: 10, 15, 10, 15 (no trend left, mean 12.5). Second differences: 5, $-5$, 5 (over-differencing introduces
+oscillation, so stop at the first difference here).
+\end{example}
+
+\section{Autocorrelation: ACF and PACF}
+The \textbf{autocorrelation at lag $k$}, $\rho_k$, is the correlation between $y_t$ and $y_{t-k}$.
+\begin{example}[: lag-1 autocorrelation]
+Series 2, 4, 6, 8, 10 (mean 6): deviations $-4,-2,0,2,4$. Lag-1 products: $(-4)(-2) + (-2)(0) + (0)(2) + (2)(4) = 16$; total squares 40; $r_1 = 0.4$.
+A trending series shows slowly decaying positive ACF.
+\end{example}
+\textbf{PACF} at lag $k$: the correlation between $y_t$ and $y_{t-k}$ after removing the effect of the lags in between. Reading them chooses model orders:
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule
+Pattern & ACF & PACF\\
+\midrule
+AR($p$) & decays gradually & cuts off after lag $p$\\
+MA($q$) & cuts off after lag $q$ & decays gradually\\
+ARMA & both decay & both decay\\
+Seasonal & spikes at lags $s, 2s, \dots$ & spikes at $s$\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{The ARIMA family, built up}
+\subsection{AR($p$): autoregression}
+Today is a weighted sum of the last $p$ values plus noise: $y_t = c + \phi_1y_{t-1} + \dots + \phi_py_{t-p} + \varepsilon_t$. A regression on its own past.
+\begin{example}[: AR(1) forecast]
+$y_t = 4 + 0.6y_{t-1} + \varepsilon_t$, last value 15. One step ahead: $4 + 0.6\cdot15 = 13$. Two steps: $4 + 0.6\cdot13 = 11.8$. Long run: the forecasts approach the mean
+$c/(1 - \phi) = 4/0.4 = 10$. Stationarity needs $|\phi| < 1$.
+\end{example}
+
+\subsection{MA($q$): moving average (of past errors)}
+$y_t = \mu + \varepsilon_t + \theta_1\varepsilon_{t-1} + \dots + \theta_q\varepsilon_{t-q}$: today depends on recent \emph{shocks} (surprises). A one-day outage shock affects the
+next few days only. (Not the same as a rolling-mean smoother.)
+
+\subsection{ARMA($p,q$) and ARIMA($p,d,q$)}
+ARMA combines both for stationary series. \textbf{ARIMA} adds \textbf{I}ntegration: difference the series $d$ times first, then fit ARMA($p, q$). ARIMA(0,1,0) is a random
+walk (forecast $=$ last value: the ``naive'' baseline). ARIMA(0,1,1) is equivalent to simple exponential smoothing.
+
+\subsection{Seasonal ARIMA: SARIMA($p,d,q$)($P,D,Q$)$_s$}
+Adds seasonal AR, differencing and MA terms at lags that are multiples of the season length $s$ (7 for daily data with weekly pattern, 12 for monthly data with yearly
+pattern). Example: SARIMA(1,1,1)(1,1,1)$_7$ for daily applications.
+
+\subsection{SARIMAX: adding exogenous variables}
+The \textbf{X} adds external regressors $x_t$: $y_t = \boldsymbol\beta^\top\mathbf x_t + \text{SARIMA errors}$. For applications: number of new job postings, holidays,
+marketing campaigns, campus-season indicator. Caution: at forecast time you must know (or forecast) future values of the exogenous variables.
+\begin{lstlisting}
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+m = SARIMAX(y_train, exog=X_train, order=(1, 1, 1),
+            seasonal_order=(1, 1, 1, 7)).fit(disp=False)
+forecast = m.forecast(steps=14, exog=X_future)
+\end{lstlisting}
+
+\subsection{Choosing orders}
+Make stationary (choose $d$, $D$ via ADF and plots), read ACF/PACF for $p, q, P, Q$, compare candidates by \textbf{AIC/BIC} (lower is better: fit penalised by complexity),
+check residuals are white noise (Ljung--Box test, residual ACF), or use auto-ARIMA. Validate with walk-forward (rolling-origin) evaluation.
+
+\section{Exponential smoothing}
+\textbf{Simple exponential smoothing}: level $\ell_t = \alpha y_t + (1-\alpha)\ell_{t-1}$; forecast $=$ current level. Recent observations weigh more.
+\begin{example}[: SES]
+$\alpha = 0.5$, initial level 10, observations 12, 11, 13: levels 11, 11, 12. Forecast 12.
+\end{example}
+\textbf{Holt} adds a trend; \textbf{Holt--Winters} adds seasonality; the ETS framework unifies them. Prophet (trend + seasonality + holidays) is a popular practical tool.
+
+\section{Evaluating forecasts}
+Walk-forward validation; metrics MAE, RMSE, MAPE (fails near zero), sMAPE, MASE (scaled by the naive forecast's error: $<1$ beats naive). Always compare with the naive and
+seasonal-naive baselines; report prediction intervals, not only point forecasts.
+
+\section{ANOVA (analysis of variance)}
+\subsection{The question}
+Do several groups have the same mean? (Do average applications per job differ between Monday, Wednesday and Saturday postings? Do three email templates give
+different mean click rates?) Running many pairwise $t$-tests inflates false positives; ANOVA tests all at once.
+
+\subsection{The idea}
+Split total variation into \textbf{between-group} variation (how far group means are from the grand mean) and \textbf{within-group} variation (spread inside groups).
+If the group means are really equal, the between-group variation should be about as large as what noise alone produces.
+\[ F = \frac{\text{MSB}}{\text{MSW}} = \frac{\text{SSB}/(k-1)}{\text{SSW}/(N-k)}. \]
+\begin{example}[: one-way ANOVA by hand]
+Applications per job for three posting days: A $= 5, 6, 7$ (mean 6), B $= 8, 9, 10$ (mean 9), C $= 4, 5, 6$ (mean 5). Grand mean $60/9 = 6.67$.
+SSB $= 3[(6 - 6.67)^2 + (9 - 6.67)^2 + (5 - 6.67)^2] = 3(0.444 + 5.444 + 2.778) = 26$. SSW $= (1 + 0 + 1)\times3 = 6$.
+$k = 3$, $N = 9$: MSB $= 26/2 = 13$, MSW $= 6/6 = 1$, $F = 13$, p-value $= 0.0066$. Reject equal means: posting day matters. Post-hoc tests (Tukey HSD) then say which
+pairs differ. Effect size $\eta^2 = 26/32 = 0.81$.
+\end{example}
+\textbf{Assumptions}: independent observations, roughly normal residuals, equal variances across groups (Levene's test; use Welch's ANOVA if unequal); non-parametric
+alternative: Kruskal--Wallis. Two-way ANOVA tests two factors and their interaction. In time series, ANOVA-style comparisons check whether seasonal means (by weekday or
+month) differ, which justifies seasonal terms.
+
+\begin{practical}[: time series at InfoEdge]
+Forecasting daily applications and job postings by category and city (staffing of sales and support teams, inventory of jobs for campaigns); Talent Pulse ``expected
+hike'' trends; anomaly alerts when today's applications fall far below the seasonal forecast (pipeline breakages); A/B tests where ANOVA compares several variants.
+A strong practical recipe: SARIMAX or ETS baselines per series, LightGBM on lag/calendar features across many series, and an LSTM only if it beats both on walk-forward MASE.
+\end{practical}
+
+\stuck{statsmodels: SARIMAX documentation}{https://www.statsmodels.org/stable/generated/statsmodels.tsa.statespace.sarimax.SARIMAX.html}
+\section{Interview questions}
+
+\begin{qa}{What does ARIMA($p,d,q$) mean? Explain each part.}
+\oneline{$p$ autoregressive terms (dependence on the last $p$ values), $d$ rounds of differencing to make the series stationary, and $q$ moving-average terms (dependence on the last $q$
+forecast errors).}
+\worked AR(1) $y_t = 4 + 0.6y_{t-1}$ from 15 forecasts 13, 11.8, \dots\ toward 10.
+\end{qa}
+
+\begin{qa}{What is stationarity, why does it matter and how do you achieve it?}
+\oneline{Constant mean, variance and autocorrelation over time; ARMA-type models and many statistics assume it, otherwise relationships learned on the past do not hold in the future; achieve it
+with differencing (trend), seasonal differencing (seasonality) and log transforms (growing variance), verified with ADF/KPSS tests and plots.}
+\end{qa}
+
+\begin{qa}{How do ACF and PACF help choose $p$ and $q$?}
+\oneline{An AR($p$) process has a PACF that cuts off after lag $p$ and a decaying ACF; an MA($q$) process has an ACF that cuts off after lag $q$ and a decaying PACF; seasonal spikes at lag $s$
+suggest seasonal terms.}
+\end{qa}
+
+\begin{qa}{ARIMA vs SARIMA vs SARIMAX?}
+\oneline{SARIMA adds seasonal AR, differencing and MA terms at multiples of the season length; SARIMAX further adds exogenous regressors (holidays, campaigns, job postings), which must be
+known or forecast for the future.}
+\end{qa}
+
+\begin{qa}{\deep You built an LSTM forecaster for your project. How would you defend it against ``why not ARIMA?''}
+\oneline{Show walk-forward results against naive, seasonal-naive, SARIMAX/ETS and a GBM on lags with a scale-free metric (MASE); argue for the LSTM only where it wins, typically with many related
+series, long histories, non-linear effects or rich exogenous inputs, and acknowledge ARIMA's interpretability and small-data strength.}
+\end{qa}
+
+\begin{qa}{What is one-way ANOVA? Compute $F$ for groups $(5,6,7)$, $(8,9,10)$, $(4,5,6)$.}
+\oneline{A test of whether several group means are equal, comparing between-group to within-group variance; SSB $= 26$, SSW $= 6$, $F = (26/2)/(6/6) = 13$, p $\approx0.007$, so the means differ.}
+\pushes \emph{``Why not three t-tests?''} Each at 5\% gives about a 14\% chance of at least one false positive across three tests; ANOVA controls the overall error rate, then post-hoc tests
+with corrections compare pairs.
+\end{qa}
+
+\begin{qa}{Additive vs multiplicative seasonality?}
+\oneline{Additive: the seasonal swing has a constant size regardless of level; multiplicative: the swing grows proportionally with the level, which a log transform turns into additive.}
+\end{qa}
+
+\begin{qa}{How should you validate a time-series model?}
+\oneline{With walk-forward (rolling or expanding window) validation that always trains on the past and tests on the future, comparing against naive baselines, with MAE/MASE, and checking that
+residuals are white noise.}
+\end{qa}
+
+\begin{qa}{Compute simple exponential smoothing with $\alpha = 0.5$, initial level 10 and observations 12, 11, 13.}
+\oneline{Levels 11, 11, 12; the next forecast is 12.}
+\end{qa}
+
+\begin{qa}{What do AIC and BIC do in model selection?}
+\oneline{They score models by goodness of fit (log-likelihood) penalised by the number of parameters (BIC penalises more for large samples); lower is better, preventing overfitting with too
+many AR/MA terms.}
+\end{qa}
