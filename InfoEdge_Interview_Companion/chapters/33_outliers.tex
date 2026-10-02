@@ -111,7 +111,7 @@ The idea: treat the column with gaps as a \emph{target}, learn it from the other
 \item \textbf{Regression imputation}: linear model from the other columns (add noise for stochastic imputation).
 \item \textbf{MICE / IterativeImputer}: cycle through every incomplete column, modelling each from all the others, for several rounds.
 \item \textbf{MissForest}: IterativeImputer with random forests: handles non-linearity, interactions and mixed types.
-\item \textbf{``XGB imputer''}: the same idea with gradient boosting (XGBoost, LightGBM, \code{HistGradientBoosting}), whose ability to accept NaN in the
+\item \textbf{``XGB imputer''}: the same idea with gradient boosting (XGBoost, LightGBM, scikit-learn's HistGradientBoosting), whose ability to accept NaN in the
   \emph{predictor} columns means rows with several gaps can still be used.
 \end{itemize}
 \begin{lstlisting}

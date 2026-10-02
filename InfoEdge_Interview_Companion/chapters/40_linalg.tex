@@ -1,1 +1,190 @@
-% TODO
+\chapter{Linear Algebra for ML: Vectors, Matrices, Rank, Eigenvectors and Markov Chains}
+\companion{3Blue1Brown: Eigenvectors and eigenvalues (Essence of linear algebra)}{\ytid{PFDu9oVAE-g}}
+
+The InfoEdge hire called linear algebra ``the hardest part'': rank, eigenvalues and eigenvectors, null space (the one he could not answer) and a Markov chain
+question. The checklist repeats eigenvectors, eigenvalues and rank. This chapter teaches them from zero, with many small computations, and shows exactly where
+each appears in ML.
+
+\section{Vectors}
+A \textbf{vector} is an ordered list of numbers: a point or an arrow. A candidate described by (experience, skills matched, expected salary) $= (5, 8, 12)$ is a vector in
+3-D; a word embedding is a vector in 300-D.
+\begin{itemize}
+\item \textbf{Addition and scaling}: $(1,2) + (3,1) = (4,3)$; $2(1,2) = (2,4)$.
+\item \textbf{Dot product}: $\mathbf a\cdot\mathbf b = \sum a_ib_i$. $(3,4)\cdot(4,3) = 12 + 12 = 24$.
+\item \textbf{Norm (length)}: $\norm{\mathbf a} = \sqrt{\mathbf a\cdot\mathbf a}$; $\norm{(3,4)} = 5$. L1 norm $\sum|a_i| = 7$.
+\item \textbf{Angle}: $\cos\theta = \frac{\mathbf a\cdot\mathbf b}{\norm{\mathbf a}\norm{\mathbf b}} = \frac{24}{25} = 0.96$: \textbf{cosine similarity} (search, embeddings). Dot
+  product 0 means perpendicular (\textbf{orthogonal}): no overlap.
+\item \textbf{Projection} of $\mathbf a$ onto $\mathbf b$: $\frac{\mathbf a\cdot\mathbf b}{\mathbf b\cdot\mathbf b}\mathbf b = \frac{24}{25}(4,3) = (3.84, 2.88)$: the shadow of $\mathbf a$ on $\mathbf b$'s
+  line (the core of least squares and PCA).
+\end{itemize}
+
+\section{Matrices as transformations}
+A matrix is a table of numbers, but more usefully a \emph{function} that transforms vectors: $A\mathbf x$ is a linear combination of $A$'s columns weighted by $\mathbf x$.
+\begin{example}[: what a matrix does]
+$A = \begin{pmatrix}2 & 0\\0 & 0.5\end{pmatrix}$ stretches the $x$-axis by 2 and squashes the $y$-axis by half: $(1,1)\mapsto(2, 0.5)$.
+$R = \begin{pmatrix}0 & -1\\1 & 0\end{pmatrix}$ rotates by 90\textdegree: $(1,0)\mapsto(0,1)$.
+\end{example}
+\textbf{Matrix multiplication} $AB$ means ``apply $B$, then $A$''; entry $(i,j)$ is row $i$ of $A$ dot column $j$ of $B$; sizes $(m\times n)(n\times p)\to m\times p$; not commutative.
+In a neural network, a dense layer is $W\mathbf x + \mathbf b$; a batch is $XW$.
+
+\textbf{Transpose} $A^\top$ swaps rows and columns. \textbf{Identity} $I$ leaves vectors unchanged. \textbf{Inverse} $A^{-1}$ undoes $A$: $AA^{-1} = I$. For $2\times2$:
+\[ \begin{pmatrix}a & b\\c & d\end{pmatrix}^{-1} = \frac{1}{ad - bc}\begin{pmatrix}d & -b\\-c & a\end{pmatrix}. \]
+\begin{example}[: inverse and determinant]
+$\begin{pmatrix}3 & 1\\2 & 4\end{pmatrix}$: determinant $12 - 2 = 10$; inverse $\frac{1}{10}\begin{pmatrix}4 & -1\\-2 & 3\end{pmatrix} = \begin{pmatrix}0.4 & -0.1\\-0.2 & 0.3\end{pmatrix}$.
+\end{example}
+The \textbf{determinant} is the factor by which the transformation scales areas (volumes); determinant 0 means space is flattened onto a line or plane: information is lost and
+no inverse exists.
+
+\section{Systems of equations}
+$A\mathbf x = \mathbf b$. $2x + y = 5$, $x + 3y = 10$: $\mathbf x = A^{-1}\mathbf b = (1, 3)$. Linear regression's normal equations $X^\top X\mathbf w = X^\top\mathbf y$ are such a system
+(Chapter 2).
+
+\section{Linear independence, span, rank and null space}
+\subsection{Linear independence}
+Vectors are \textbf{linearly independent} if none is a combination of the others. $(1,2)$ and $(2,4)$ are dependent ($2\times$ the first); $(1,0)$ and $(0,1)$ are independent.
+The \textbf{span} of vectors is everything reachable by combining them.
+
+\subsection{Rank}
+The \textbf{rank} of a matrix is the number of linearly independent columns (equivalently rows): the dimension of its output space (column space).
+\begin{example}[: rank by inspection]
+$B = \begin{pmatrix}1 & 2 & 3\\2 & 4 & 6\\1 & 0 & 1\end{pmatrix}$: row 2 $= 2\times$ row 1, so at most 2 independent rows; rows 1 and 3 are independent. Rank 2,
+determinant 0 (not invertible). In general, rank via row reduction (count non-zero rows of the echelon form) or the number of non-zero singular values (Chapter 14).
+\end{example}
+
+\subsection{Null space}
+The \textbf{null space} of $A$ is the set of vectors $\mathbf x$ with $A\mathbf x = \mathbf 0$: the directions the transformation destroys.
+\begin{example}[: null space]
+For $B$ above, solve $B\mathbf x = 0$: from row 3, $x_1 + x_3 = 0$; from row 1, $x_1 + 2x_2 + 3x_3 = 0$. Setting $x_3 = -1$: $x_1 = 1$, then $1 + 2x_2 - 3 = 0$, $x_2 = 1$.
+Null space $=$ all multiples of $(1, 1, -1)$. Check: $(1 + 2 - 3, 2 + 4 - 6, 1 + 0 - 1) = (0,0,0)$.
+\end{example}
+\textbf{Rank--nullity theorem}: rank $+$ dimension of null space $=$ number of columns ($2 + 1 = 3$).
+\textbf{In ML}: if the feature matrix $X$ has a non-trivial null space (perfect multicollinearity, the dummy variable trap), adding any null-space vector to the weights leaves all
+predictions unchanged, so the coefficients are not unique (Chapters 2, 34). LoRA assumes the weight \emph{update} has low rank (Chapter 23).
+
+\section{Eigenvalues and eigenvectors}
+\subsection{Meaning}
+Most vectors change direction when a matrix acts on them. An \textbf{eigenvector} is a special direction that is only stretched (or flipped): $A\mathbf v = \lambda\mathbf v$; the
+stretch factor $\lambda$ is its \textbf{eigenvalue}.
+
+\subsection{How to compute (2$\times$2)}
+$A\mathbf v = \lambda\mathbf v\iff(A - \lambda I)\mathbf v = 0$ has a non-zero solution $\iff\det(A - \lambda I) = 0$ (the \textbf{characteristic equation}). Solve for $\lambda$,
+then for each $\lambda$ find $\mathbf v$ in the null space of $A - \lambda I$.
+\begin{example}[: eigenvalues and eigenvectors]
+$A = \begin{pmatrix}4 & 1\\2 & 3\end{pmatrix}$. $\det\begin{pmatrix}4 - \lambda & 1\\2 & 3 - \lambda\end{pmatrix} = (4 - \lambda)(3 - \lambda) - 2 = \lambda^2 - 7\lambda + 10 = 0$,
+so $\lambda = 5$ or 2.
+$\lambda = 5$: $\begin{pmatrix}-1 & 1\\2 & -2\end{pmatrix}\mathbf v = 0\Rightarrow\mathbf v = (1,1)$. Check: $A(1,1) = (5,5) = 5(1,1)$.
+$\lambda = 2$: $\begin{pmatrix}2 & 1\\2 & 1\end{pmatrix}\mathbf v = 0\Rightarrow\mathbf v = (1,-2)$. Check: $A(1,-2) = (2,-4) = 2(1,-2)$.
+\end{example}
+\textbf{Shortcuts}: sum of eigenvalues $=$ trace (sum of the diagonal: $4 + 3 = 7$); product $=$ determinant ($12 - 2 = 10$). Diagonal or triangular matrices have their diagonal
+entries as eigenvalues ($\text{diag}(2, 0.5)$: 2 and 0.5). A matrix is invertible iff no eigenvalue is 0.
+
+\subsection{Diagonalisation and symmetric matrices}
+If $A$ has $n$ independent eigenvectors, $A = PDP^{-1}$ ($P$: eigenvectors as columns; $D$: eigenvalues on the diagonal). Then $A^k = PD^kP^{-1}$: powers are easy, and the
+largest $|\lambda|$ dominates long-run behaviour.
+\textbf{Symmetric matrices} (covariance matrices, $X^\top X$, kernel matrices) are especially nice: real eigenvalues and \emph{orthogonal} eigenvectors, $A = Q\Lambda Q^\top$ (the spectral
+theorem). If all eigenvalues are positive the matrix is \textbf{positive definite} ($\mathbf x^\top A\mathbf x > 0$ for all $\mathbf x\ne0$): a bowl-shaped quadratic, a valid covariance, a
+convex loss Hessian.
+\begin{example}[: the PCA matrix]
+Covariance $\begin{pmatrix}2 & 1\\1 & 2\end{pmatrix}$: eigenvalues 3 and 1 (trace 4, determinant 3), eigenvectors $(1,1)/\sqrt2$ and $(1,-1)/\sqrt2$, orthogonal. PC1 explains 75\% of
+variance (Chapter 14).
+\end{example}
+
+\section{Markov chains: eigenvectors in action}
+A \textbf{Markov chain} moves between states with probabilities that depend only on the current state (no memory of the path). It is described by a \textbf{transition matrix} $P$
+where $P_{ij} = P(\text{next} = j\mid\text{now} = i)$; each row sums to 1. Think of it as a finite state machine with probabilities on its arrows (as the InfoEdge candidate did).
+\begin{example}[: an active/dormant seeker chain]
+States: Active (A), Dormant (D). Each week an active seeker stays active with 0.9 and goes dormant with 0.1; a dormant seeker reactivates with 0.5 and stays dormant with 0.5:
+$P = \begin{pmatrix}0.9 & 0.1\\0.5 & 0.5\end{pmatrix}$.
+Start active, $\boldsymbol\pi_0 = (1, 0)$. After one week $\boldsymbol\pi_1 = \boldsymbol\pi_0P = (0.9, 0.1)$; two weeks $(0.86, 0.14)$; three weeks $(0.844, 0.156)$.
+\textbf{Steady state}: $\boldsymbol\pi = \boldsymbol\pi P$ with $\pi_A + \pi_D = 1$. From $\pi_D = 0.1\pi_A + 0.5\pi_D$: $0.5\pi_D = 0.1\pi_A$, $\pi_A = 5\pi_D$, so $\boldsymbol\pi = (5/6, 1/6)
+= (0.833, 0.167)$. In the long run 83\% of seekers are active, whatever the start. The steady state is the eigenvector of $P^\top$ with eigenvalue 1.
+\end{example}
+Two-step probabilities are $P^2$ (Chapman--Kolmogorov). Chains with every state reachable and no periodic cycling converge to a unique steady state.
+\textbf{In ML}: PageRank (steady state of a random surfer; power iteration $\boldsymbol\pi\leftarrow\boldsymbol\pi P$), n-gram language models (next word depends on the last word),
+MDPs in reinforcement learning (Chapter 36), customer journey and churn modelling, MCMC sampling for Bayesian inference, hidden Markov models.
+
+\section{SVD in one paragraph (recap)}
+Every matrix factors as $A = U\Sigma V^\top$: rotate, stretch along axes by the singular values, rotate (Chapter 14). Singular values are the square roots of the eigenvalues of
+$A^\top A$; their count of non-zeros is the rank; truncating gives the best low-rank approximation (recommenders, LSA, compression, PCA).
+
+\begin{practical}[: where linear algebra lives in ML]
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+Concept & ML use\\
+\midrule
+Dot product, cosine & similarity search, attention scores, linear models\\
+Matrix multiplication & every neural network layer, batched computation on GPUs\\
+Inverse, solving systems & normal equations, Gaussian processes, Newton's method\\
+Rank, null space & multicollinearity, dummy trap, low-rank models (LoRA, matrix factorisation)\\
+Eigen-decomposition & PCA, spectral clustering, LDA (generalised eigenproblem), stability of RNNs (largest eigenvalue of $W_{hh}$)\\
+Positive definiteness & valid covariance/kernel matrices (Mercer), convexity of losses\\
+SVD & PCA, LSA, recommenders, pseudo-inverse, compression\\
+Markov chains & PageRank, language models, RL, MCMC\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\end{practical}
+
+\stuck{3Blue1Brown: Inverse matrices, column space and null space}{\ytid{uQhTuRlWMxw}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{reported interview: rank} What is the rank of a matrix? Find the rank of $\begin{pmatrix}1 & 2 & 3\\2 & 4 & 6\\1 & 0 & 1\end{pmatrix}$.}
+\oneline{The number of linearly independent rows or columns (the dimension of the column space); here 2, because row 2 is twice row 1 while rows 1 and 3 are independent.}
+\pushes \emph{``Why does rank matter in ML?''} A feature matrix with rank below its number of columns has redundant features (perfect multicollinearity), making $X^\top X$ singular.
+\end{qa}
+
+\begin{qa}{\pyq{reported interview: null space} What is the null space of a matrix? Find it for the matrix above.}
+\oneline{The set of all vectors the matrix maps to zero; here all multiples of $(1, 1, -1)$; by rank--nullity its dimension is $3 - 2 = 1$.}
+\why In regression, any null-space direction can be added to the weight vector without changing predictions, so coefficients are not identifiable; regularisation or dropping features fixes it.
+\end{qa}
+
+\begin{qa}{\pyq{reported interview: eigenvalues and eigenvectors} Define eigenvalues and eigenvectors and compute them for $\begin{pmatrix}4 & 1\\2 & 3\end{pmatrix}$.}
+\oneline{Eigenvectors are directions a matrix only stretches, $A\mathbf v = \lambda\mathbf v$, with eigenvalue $\lambda$ the stretch factor; here $\lambda = 5$ with $\mathbf v = (1,1)$ and $\lambda = 2$ with
+$\mathbf v = (1,-2)$.}
+\why Characteristic equation $\lambda^2 - 7\lambda + 10 = 0$. Checks: trace $7 = 5 + 2$, determinant $10 = 5\times2$.
+\end{qa}
+
+\begin{qa}{\pyq{reported interview: Markov chain} Seekers move weekly between Active and Dormant with $P = [[0.9, 0.1], [0.5, 0.5]]$. Where is an active seeker after two weeks, and what is the long-run
+split?}
+\oneline{After two weeks $(0.86, 0.14)$; the steady state solves $\boldsymbol\pi = \boldsymbol\pi P$: $(5/6, 1/6)\approx(0.833, 0.167)$, the eigenvector of $P^\top$ for eigenvalue 1.}
+\why Model it as a finite state machine with probabilistic transitions (Markov property: the next state depends only on the current one). Multiply the state vector by $P$ each step.
+\pushes \emph{``How would you estimate $P$ from data?''} Count observed transitions from each state and divide by the row totals (the MLE).
+\end{qa}
+
+\begin{qa}{How are eigenvectors used in PCA?}
+\oneline{The principal components are the eigenvectors of the data's covariance matrix, ordered by eigenvalue, and each eigenvalue is the variance along its component; because the covariance is symmetric,
+the components are orthogonal.}
+\end{qa}
+
+\begin{qa}{What does a zero determinant mean geometrically and for ML?}
+\oneline{The transformation flattens space into a lower dimension, so it is not invertible (some information is lost); in ML it signals singular $X^\top X$ (redundant features) or a degenerate covariance
+(a GMM component collapsing).}
+\end{qa}
+
+\begin{qa}{What are the trace and determinant in terms of eigenvalues?}
+\oneline{The trace equals the sum of the eigenvalues and the determinant equals their product.}
+\end{qa}
+
+\begin{qa}{\deep Why do symmetric matrices matter so much in ML?}
+\oneline{Covariance, $X^\top X$, kernel and Hessian matrices are symmetric, and symmetric matrices have real eigenvalues and orthogonal eigenvectors, so they can be decomposed as $Q\Lambda Q^\top$ (PCA,
+whitening, convexity checks via positive eigenvalues).}
+\end{qa}
+
+\begin{qa}{\deep How does the largest eigenvalue of an RNN's recurrent matrix relate to vanishing and exploding gradients?}
+\oneline{Backpropagation through time multiplies by $W_{hh}$ (times activation derivatives) once per step; if the largest eigenvalue (more precisely singular value) is below 1 the product shrinks
+exponentially (vanishing), above 1 it grows (exploding).}
+\end{qa}
+
+\begin{qa}{Compute the cosine similarity of $(3,4)$ and $(4,3)$ and the projection of the first onto the second.}
+\oneline{Cosine $24/25 = 0.96$; projection $(24/25)(4,3) = (3.84, 2.88)$.}
+\end{qa}
+
+\begin{qa}{What is a positive definite matrix and why does it matter?}
+\oneline{A symmetric matrix with $\mathbf x^\top A\mathbf x > 0$ for every non-zero $\mathbf x$ (all eigenvalues positive); valid covariance matrices are positive semi-definite, Mercer kernels must produce
+positive semi-definite Gram matrices, and a positive definite Hessian means a strict local minimum (convex bowl).}
+\end{qa}
+
+\begin{qa}{Solve $2x + y = 5$, $x + 3y = 10$ using a matrix inverse.}
+\oneline{Determinant $5$; $\mathbf x = \frac15\begin{pmatrix}3 & -1\\-1 & 2\end{pmatrix}\begin{pmatrix}5\\10\end{pmatrix} = (1, 3)$.}
+\end{qa}

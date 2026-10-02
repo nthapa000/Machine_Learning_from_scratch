@@ -1,1 +1,240 @@
-% TODO
+\chapter{Probability from Zero: Events, Random Variables, Moments and Distributions}
+\companion{3Blue1Brown: Bayes theorem, the geometry of changing beliefs}{\ytid{HZGCoVF3YvM}}
+
+Probability is the language in which ML losses, Naive Bayes, MLE/MAP, GMMs, dropout, sampling and A/B tests are written. The checklist asks for PDFs and
+PMFs, expectation, variance, moments, and the common distributions with real-life examples. Your Maths book drills these for the OA; this chapter
+teaches them again from zero with many examples and, for each idea, a short ``where in ML'' note.
+
+\section{Experiments, outcomes and events}
+An \textbf{experiment} is anything with an uncertain outcome (roll a die, show a job to a seeker). The \textbf{sample space} $S$ is the set of all outcomes; an
+\textbf{event} is a subset of outcomes.
+\begin{example}[: counting outcomes]
+One die: $S = \{1,\dots,6\}$. Event ``even'' $= \{2,4,6\}$, probability $3/6 = 0.5$. Two dice: 36 equally likely outcomes; ``sum is 7'' has 6 outcomes: $1/6$.
+\end{example}
+For equally likely outcomes, $P(A) = \frac{|A|}{|S|}$. In general probabilities follow three \textbf{axioms}: $P(A)\ge0$; $P(S) = 1$; for mutually exclusive events
+$P(A\cup B) = P(A) + P(B)$. Everything else follows:
+\begin{itemize}
+\item Complement: $P(\text{not }A) = 1 - P(A)$. Probability of at least one click in 5 independent impressions with CTR 0.1: $1 - 0.9^5 = 0.41$.
+\item Union: $P(A\cup B) = P(A) + P(B) - P(A\cap B)$. If 60\% of seekers know Python, 40\% SQL and 25\% both: $0.6 + 0.4 - 0.25 = 0.75$ know at least one.
+\end{itemize}
+
+\section{Conditional probability, independence and Bayes}
+\subsection{Conditional probability}
+$P(A\mid B) = \frac{P(A\cap B)}{P(B)}$: the probability of $A$ once we know $B$ happened; we restrict attention to the world where $B$ is true.
+\begin{example}[: conditional]
+Of 1{,}000 applicants, 200 have work experience; 120 of those are shortlisted; overall 300 are shortlisted. $P(\text{short}\mid\text{exp}) = 120/200 = 0.6$; $P(\text{short}) = 0.3$.
+Experience doubles the chance.
+\end{example}
+\textbf{Multiplication rule}: $P(A\cap B) = P(A\mid B)P(B)$.
+
+\subsection{Independence}
+$A$ and $B$ are independent if $P(A\cap B) = P(A)P(B)$, i.e. $P(A\mid B) = P(A)$: knowing $B$ tells nothing about $A$. Coin flips are independent; ``knows Python'' and
+``applies to data jobs'' are not. \textbf{Conditional independence} $P(A\cap B\mid C) = P(A\mid C)P(B\mid C)$ is the Naive Bayes assumption (Chapter 10). Independent and
+mutually exclusive are different: exclusive events with positive probability are always \emph{dependent} (if one happens, the other cannot).
+
+\subsection{Law of total probability}
+If $B_1,\dots,B_k$ split the sample space: $P(A) = \sum_iP(A\mid B_i)P(B_i)$.
+\begin{example}[: total probability]
+40\% of applications come from referrals with 30\% shortlist rate, 60\% from the portal with 10\%: $P(\text{short}) = 0.4\cdot0.3 + 0.6\cdot0.1 = 0.18$.
+\end{example}
+
+\subsection{Bayes' theorem}
+\[ P(B\mid A) = \frac{P(A\mid B)P(B)}{P(A)}. \]
+\begin{example}[: the rare-condition trap]
+1\% of recruiter accounts are fraudulent. A detector flags 99\% of frauds and 5\% of genuine accounts. Given a flag, $P(\text{fraud}\mid\text{flag}) =
+\frac{0.99\cdot0.01}{0.99\cdot0.01 + 0.05\cdot0.99} = \frac{0.0099}{0.0594} = 0.167$. Only 1 in 6 flags is fraud: the base rate dominates.
+Continuing the referral example: $P(\text{referral}\mid\text{short}) = 0.12/0.18 = 0.667$.
+\end{example}
+\textbf{In ML}: Naive Bayes, MAP estimation, calibration and precision under imbalance (Chapter 11), Bayesian A/B testing, posterior updating of CTRs.
+
+\section{Random variables}
+A \textbf{random variable} assigns a number to each outcome: $X$ = number of applications a job gets tomorrow; $T$ = time until the next click.
+\begin{itemize}
+\item \textbf{Discrete}: countable values. Described by a \textbf{probability mass function (PMF)} $p(x) = P(X = x)$, with $\sum_xp(x) = 1$.
+\item \textbf{Continuous}: any value in an interval. Described by a \textbf{probability density function (PDF)} $f(x)$: probabilities are \emph{areas} under it,
+  $P(a\le X\le b) = \int_a^bf(x)\,dx$, and $\int f = 1$. $P(X = x) = 0$ for any exact value. A density can exceed 1 (Uniform(0, 0.5) has density 2).
+\item \textbf{Cumulative distribution function (CDF)} $F(x) = P(X\le x)$, for both types; it rises from 0 to 1. Percentiles and medians are read from it.
+\end{itemize}
+\begin{example}[: PMF vs PDF]
+Die: $p(x) = 1/6$ for $x = 1..6$. Uniform(0, 10) waiting time: $f(x) = 0.1$ on $[0,10]$; $P(2 < X < 5) = 3\times0.1 = 0.3$.
+\end{example}
+
+\section{Expectation, variance and moments}
+\subsection{Expectation (mean)}
+The long-run average: $\E[X] = \sum_xx\,p(x)$ (discrete) or $\int x f(x)\,dx$ (continuous).
+\begin{example}[: expectations]
+Die: $\E[X] = (1 + \dots + 6)/6 = 3.5$. A telecall costs Rs.~20 and converts with probability 0.05 to a Rs.~1{,}000 commission: expected profit $= 0.05\cdot1000 - 20 = $
+Rs.~30 per call.
+\end{example}
+\textbf{Linearity}: $\E[aX + bY + c] = a\E[X] + b\E[Y] + c$ always, even for dependent $X, Y$. Expected number of applies from 1{,}000 impressions each with probability $p_i$
+is $\sum p_i$.
+
+\subsection{Variance and standard deviation}
+$\Var(X) = \E[(X - \mu)^2] = \E[X^2] - (\E[X])^2$.
+\begin{example}[: variance of a die]
+$\E[X^2] = (1 + 4 + 9 + 16 + 25 + 36)/6 = 91/6$; $\Var = 91/6 - 3.5^2 = 15.17 - 12.25 = 2.917$.
+\end{example}
+Rules: $\Var(aX + b) = a^2\Var(X)$ (shifts do not change spread); $\Var(X + Y) = \Var(X) + \Var(Y) + 2\Cov(X, Y)$, which is just the sum when independent. Averaging $n$
+independent copies divides the variance by $n$: the root of the CLT and of bagging (Chapter 7).
+
+\subsection{Moments, skewness, kurtosis}
+The $k$-th \textbf{moment} is $\E[X^k]$; the $k$-th \textbf{central moment} is $\E[(X - \mu)^k]$. Mean $=$ 1st moment; variance $=$ 2nd central; \textbf{skewness}
+$= \E[(X - \mu)^3]/\sigma^3$ (asymmetry: positive, negative, zero); \textbf{kurtosis} $= \E[(X - \mu)^4]/\sigma^4$ (tails: mesokurtic 3, leptokurtic $>3$, platykurtic
+$<3$; Chapter 31). The \textbf{moment generating function} $M(t) = \E[e^{tX}]$ packs all moments: its $k$-th derivative at 0 is $\E[X^k]$.
+
+\section{The common distributions}
+\subsection{Bernoulli$(p)$}
+One yes/no trial: $P(1) = p$, $P(0) = 1 - p$. Mean $p$, variance $p(1-p)$. \emph{Real life}: did this seeker click this job. \emph{ML}: label model of logistic regression
+(log loss is its negative log-likelihood); dropout masks.
+
+\subsection{Binomial$(n, p)$}
+Number of successes in $n$ independent Bernoulli trials: $P(X = k) = \binom nkp^k(1-p)^{n-k}$. Mean $np$, variance $np(1-p)$.
+\begin{example}[: binomial]
+A recruiter contacts 10 candidates, each responds with probability 0.3. $P(\text{exactly }2) = \binom{10}{2}0.3^20.7^8 = 45\times0.09\times0.0576 = 0.233$. Mean 3, variance 2.1.
+$P(\text{8 or more heads in 10 fair tosses}) = (45 + 10 + 1)/1024 = 0.055$.
+\end{example}
+\emph{ML}: number of conversions in an A/B arm; binomial GLM for proportions.
+
+\subsection{Geometric$(p)$}
+Number of trials until the first success: $P(X = k) = (1-p)^{k-1}p$, mean $1/p$; \textbf{memoryless}.
+\begin{example}[: geometric]
+Each cold call converts with $p = 0.2$: $P(\text{first conversion on call 3}) = 0.8^2\times0.2 = 0.128$; expected calls until first conversion $= 5$.
+\end{example}
+
+\subsection{Poisson$(\lambda)$}
+Count of events in a fixed interval when they occur independently at a constant average rate: $P(X = k) = e^{-\lambda}\lambda^k/k!$. Mean $=$ variance $= \lambda$.
+\begin{example}[: Poisson]
+A job receives on average $\lambda = 3$ applications per hour. $P(0) = e^{-3} = 0.050$; $P(2) = 0.224$; $P(\text{at least 2}) = 1 - P(0) - P(1) = 0.80$.
+\end{example}
+\emph{Real life}: calls to a support centre per minute, website errors per day. \emph{ML}: Poisson regression for counts (Chapter 4). Binomial with large $n$ and small $p$ is
+approximately Poisson with $\lambda = np$.
+
+\subsection{Uniform$(a, b)$}
+Every value in $[a, b]$ equally likely: density $1/(b-a)$, mean $(a+b)/2$, variance $(b-a)^2/12$. \emph{ML}: random initialisation (Xavier uniform), random search of
+hyperparameters, random numbers for sampling.
+
+\subsection{Normal (Gaussian) $\mathcal N(\mu,\sigma^2)$}
+$f(x) = \frac{1}{\sigma\sqrt{2\pi}}e^{-(x-\mu)^2/(2\sigma^2)}$: the bell curve; symmetric; the 68--95--99.7 rule (Chapter 33). Arises when many small independent effects add up
+(CLT, Chapter 39).
+\begin{example}[: normal]
+MBA scores $\mathcal N(60, 5^2)$: $P(X > 70) = P(Z > 2) = 0.023$; $P(55 < X < 62.5) = P(-1 < Z < 0.5) = 0.533$.
+\end{example}
+\emph{Real life}: heights, measurement errors, averages. \emph{ML}: squared-error loss (Gaussian noise MLE), Gaussian priors (Ridge), GMMs, Gaussian Naive Bayes, weight
+initialisation, VAE latent space, the noise in diffusion models.
+
+\subsection{Exponential$(\lambda)$}
+Waiting time until the next event in a Poisson process: $f(t) = \lambda e^{-\lambda t}$, $t\ge0$; mean $1/\lambda$; $P(T > t) = e^{-\lambda t}$; \textbf{memoryless}
+($P(T > s + t\mid T > s) = P(T > t)$).
+\begin{example}[: exponential]
+Clicks arrive at 0.5 per minute. $P(\text{no click for 4 minutes}) = e^{-2} = 0.135$ (the same as Poisson $P(0)$ with $\lambda = 0.5\times4 = 2$). Mean wait 2 minutes.
+\end{example}
+\emph{Real life}: time between arrivals, lifetimes of components. \emph{ML}: survival/time-to-event modelling, queueing for serving systems.
+
+\subsection{Gamma$(k,\theta)$}
+Sum of $k$ independent exponential waiting times (for integer $k$); positive and right-skewed; mean $k\theta$, variance $k\theta^2$.
+\begin{example}[: gamma]
+Time until the 3rd application when applications arrive every 2 hours on average: Gamma($k = 3$, $\theta = 2$): mean 6 hours, variance 12.
+\end{example}
+\emph{Real life}: claim sizes, rainfall, time to complete multi-step tasks, salaries (roughly). \emph{ML}: Gamma GLM (Chapter 4), conjugate prior for a Poisson rate (Chapter 12).
+
+\subsection{Beta$(\alpha,\beta)$}
+A distribution over probabilities on $[0,1]$; mean $\alpha/(\alpha+\beta)$.
+\begin{example}[: beta]
+Beta(2, 8): mean 0.2, variance 0.0145: a belief that a CTR is around 20\% with some uncertainty. After 3 clicks in 10 views, posterior Beta(5, 15), mean 0.25.
+\end{example}
+\emph{ML}: conjugate prior for Bernoulli/binomial (CTR smoothing), Thompson sampling.
+
+\subsection{Others to recognise}
+\textbf{Negative binomial} (overdispersed counts), \textbf{log-normal} ($\log X$ normal: incomes, prices, session lengths), \textbf{chi-square} (sum of squared standard
+normals: variance tests, $\chi^2$ test), \textbf{Student-$t$} (heavier tails than normal: small-sample means, t-SNE), \textbf{categorical/multinomial} (softmax outputs, word counts),
+\textbf{Dirichlet} (prior over probability vectors: topic models).
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l l l l X}
+\toprule
+Distribution & Type & Mean & Variance & Typical example\\
+\midrule
+Bernoulli$(p)$ & discrete & $p$ & $p(1-p)$ & click / no click\\
+Binomial$(n,p)$ & discrete & $np$ & $np(1-p)$ & responses out of 10 contacts\\
+Geometric$(p)$ & discrete & $1/p$ & $(1-p)/p^2$ & calls until first conversion\\
+Poisson$(\lambda)$ & discrete & $\lambda$ & $\lambda$ & applications per hour\\
+Uniform$(a,b)$ & continuous & $\frac{a+b}{2}$ & $\frac{(b-a)^2}{12}$ & random initialisation\\
+Normal$(\mu,\sigma^2)$ & continuous & $\mu$ & $\sigma^2$ & test scores, errors\\
+Exponential$(\lambda)$ & continuous & $1/\lambda$ & $1/\lambda^2$ & time between clicks\\
+Gamma$(k,\theta)$ & continuous & $k\theta$ & $k\theta^2$ & time to $k$-th event, claim sizes\\
+Beta$(\alpha,\beta)$ & continuous on $[0,1]$ & $\frac{\alpha}{\alpha+\beta}$ & $\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$ & uncertainty about a CTR\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{practical}[: probability inside ML, in one list]
+Loss functions are negative log-likelihoods (Bernoulli $\to$ log loss, Gaussian $\to$ MSE, Poisson $\to$ Poisson deviance); classifiers output probability distributions (softmax);
+generative models (GMM, VAE, LLMs) model $P(x)$; Bayes' theorem drives Naive Bayes and MAP; expectation underlies expected-value decisions (who to call); variance underlies
+bias--variance and confidence; sampling (bootstrap, dropout, SGD mini-batches, Thompson sampling) is probabilistic.
+\end{practical}
+
+\stuck{Seeing Theory: Probability Distributions}{https://seeing-theory.brown.edu/probability-distributions/index.html}
+\section{Interview questions}
+
+\begin{qa}{What is the difference between a PMF and a PDF? Can a PDF value exceed 1?}
+\oneline{A PMF gives probabilities of exact values of a discrete variable; a PDF gives density for a continuous variable, whose areas (not heights) are probabilities, so a PDF can exceed 1
+(Uniform(0, 0.5) has density 2) while still integrating to 1.}
+\end{qa}
+
+\begin{qa}{1\% of accounts are fraudulent; a detector catches 99\% of fraud and flags 5\% of genuine accounts. What is the probability an account is fraudulent given it was flagged?}
+\oneline{$0.0099/(0.0099 + 0.0495) = 0.167$.}
+\why Bayes' theorem; the low base rate means most flags are false alarms. Precision depends on prevalence, sensitivity and specificity together.
+\end{qa}
+
+\begin{qa}{What is the difference between independent and mutually exclusive events?}
+\oneline{Independent events do not affect each other's probability ($P(A\cap B) = P(A)P(B)$); mutually exclusive events cannot happen together ($P(A\cap B) = 0$); two exclusive events with positive
+probabilities are therefore dependent.}
+\end{qa}
+
+\begin{qa}{Define expectation and variance; compute them for a fair die.}
+\oneline{Expectation is the probability-weighted average $\sum xp(x)$; variance is $\E[X^2] - \E[X]^2$; for a die, 3.5 and $91/6 - 12.25 = 2.917$.}
+\end{qa}
+
+\begin{qa}{A recruiter contacts 10 candidates; each responds with probability 0.3 independently. Probability exactly 2 respond? Expected number?}
+\oneline{$\binom{10}{2}0.3^20.7^8 = 0.233$; expected $np = 3$.}
+\end{qa}
+
+\begin{qa}{A job gets 3 applications per hour on average. Probability of none in an hour? At least 2?}
+\oneline{Poisson: $e^{-3} = 0.050$; $1 - e^{-3}(1 + 3) = 0.80$.}
+\end{qa}
+
+\begin{qa}{Clicks arrive at 0.5 per minute. Probability of waiting more than 4 minutes for the next click? What is ``memoryless''?}
+\oneline{$e^{-0.5\times4} = 0.135$; memoryless means that having already waited $s$ minutes does not change the distribution of the remaining wait.}
+\end{qa}
+
+\begin{qa}{Give a real-life example and an ML use for each: Bernoulli, binomial, Poisson, normal, exponential, gamma, beta.}
+\oneline{Bernoulli: a click (logistic regression's label model); binomial: conversions in an A/B arm (tests); Poisson: applications per hour (Poisson regression); normal: measurement errors (MSE,
+Gaussian priors, GMMs); exponential: time between clicks (survival models); gamma: claim sizes or salaries (Gamma GLM, Poisson-rate prior); beta: uncertainty about a CTR (smoothing,
+Thompson sampling).}
+\end{qa}
+
+\begin{qa}{State linearity of expectation and use it: 1{,}000 impressions with click probabilities $p_i$. Expected clicks?}
+\oneline{$\E[\sum X_i] = \sum\E[X_i] = \sum p_i$, regardless of dependence between impressions.}
+\end{qa}
+
+\begin{qa}{\deep Why is the variance of an average of $n$ independent variables $\sigma^2/n$, and where does ML rely on this?}
+\oneline{$\Var(\frac1n\sum X_i) = \frac1{n^2}\sum\Var(X_i) = \frac{\sigma^2}{n}$ for independent variables; it underlies bagging and random forests, mini-batch gradient noise, the standard error of metrics,
+and A/B test sample sizes.}
+\end{qa}
+
+\begin{qa}{What are moments, and how do skewness and kurtosis relate to them?}
+\oneline{Moments are expectations of powers; the mean is the first moment, variance the second central moment, skewness the third standardised moment (asymmetry) and kurtosis the fourth (tail
+heaviness).}
+\end{qa}
+
+\begin{qa}{\deep When is a binomial well approximated by a Poisson, and by a normal?}
+\oneline{By a Poisson with $\lambda = np$ when $n$ is large and $p$ small (rare events); by a normal with mean $np$ and variance $np(1-p)$ when $np$ and $n(1-p)$ are both reasonably large (say $\ge10$).}
+\end{qa}
+
+\begin{qa}{A Beta(2, 8) prior on a CTR; you observe 3 clicks in 10 views. Posterior and its mean?}
+\oneline{Beta$(2 + 3, 8 + 7) = $ Beta(5, 15), mean 0.25.}
+\end{qa}
+
+\begin{qa}{Compute $P(X > 70)$ and $P(55 < X < 62.5)$ for $X\sim\mathcal N(60, 25)$.}
+\oneline{$P(Z > 2) = 0.023$; $P(-1 < Z < 0.5) = 0.533$.}
+\end{qa}

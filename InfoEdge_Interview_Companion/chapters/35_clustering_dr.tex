@@ -56,7 +56,7 @@ Take a flat 2-D sheet of points coloured by position and roll it up like a Swiss
 (Euclidean) distance but far apart \emph{along the sheet} (geodesic distance).
 \begin{center}
 \begin{tikzpicture}
-\begin{axis}[width=0.5\linewidth,height=4.6cm,axis lines=none,view={0}{90}]
+\begin{axis}[width=0.42\linewidth,axis equal image,axis lines=none]
 \addplot[domain=1.5*pi:4.5*pi,samples=120,very thick,accent]({x*cos(deg(x))},{x*sin(deg(x))});
 \addplot[only marks,mark=*,mark size=1.8pt,prframe] coordinates {(6.283,0) (12.566,0)};
 \end{axis}
