@@ -1,1 +1,222 @@
-% TODO 21_transformers
+\chapter{Transformers and Attention}
+\companion{3Blue1Brown: Attention in transformers, step-by-step}{\ytid{eMlx5fFNoYc}}
+
+An IIT Kharagpur candidate reported that Round 2 ``tested your ability to explain the architecture of ML and DL models'' on pen and paper,
+and advised knowing Transformers in depth. Glassdoor InfoEdge reports list Transformers; the pre-placement talk mentioned Transformers in
+production. This chapter builds attention from a toy lookup, computes it by hand, and assembles the full architecture.
+
+\section{The idea of attention, in plain words}
+When you read ``The recruiter rejected the candidate because \emph{she} lacked Python'', to understand ``she'' you look back at ``candidate''.
+Attention lets every word build its new representation as a \emph{weighted average of all words' information}, with weights saying how relevant
+each word is.
+
+\subsection{A soft dictionary lookup}
+A Python dict returns the value whose key exactly matches the query. Attention is a soft version:
+\begin{itemize}
+\item Each position emits a \textbf{query} $\mathbf q$ (``what am I looking for?''), a \textbf{key} $\mathbf k$ (``what do I contain?'') and a
+  \textbf{value} $\mathbf v$ (``what will I hand over?'').
+\item The relevance of position $j$ to position $i$ is the dot product $\mathbf q_i^\top\mathbf k_j$.
+\item Softmax turns relevances into weights that sum to 1.
+\item The output for $i$ is the weighted sum of values.
+\end{itemize}
+
+\section{Scaled dot-product attention}
+Stack queries, keys and values as matrices $Q, K, V$ (one row per position):
+\[ \boxed{\text{Attention}(Q, K, V) = \text{softmax}\Big(\frac{QK^\top}{\sqrt{d_k}}\Big)V.} \]
+$Q = XW_Q$, $K = XW_K$, $V = XW_V$ are learned linear projections of the input $X$.
+
+\begin{example}[: attention by hand]
+One query $\mathbf q = (1, 0)$; keys $\mathbf k_1 = (1, 0)$, $\mathbf k_2 = (0, 1)$; values $\mathbf v_1 = (10, 0)$, $\mathbf v_2 = (0, 10)$; $d_k = 2$.
+Scores: $\mathbf q\cdot\mathbf k_1 = 1$, $\mathbf q\cdot\mathbf k_2 = 0$; scaled: $1/\sqrt2 = 0.707$, 0.
+Softmax: $e^{0.707} = 2.028$, $e^0 = 1$; weights $0.670$ and $0.330$.
+Output: $0.670(10, 0) + 0.330(0, 10) = (6.70, 3.30)$. The query mostly retrieves the first value.
+\end{example}
+
+\subsection{Why divide by $\sqrt{d_k}$?}
+If $\mathbf q$ and $\mathbf k$ have $d_k$ independent components with mean 0 and variance 1, their dot product has variance $d_k$ (standard deviation
+$\sqrt{d_k}$). With $d_k = 64$, scores of size $\pm8$ to $\pm16$ are common; softmax of such scores is almost one-hot, so its gradient is nearly zero
+(saturation). Dividing by $\sqrt{d_k}$ restores unit variance.
+
+\subsection{Each row of attention weights is a probability distribution}
+Non-negative and summing to 1 (softmax). If two keys are identical (same score), they get equal weight: with scores 3 and 3 and scalar values 4 and 8, the
+output is 6.
+
+\section{Multi-head attention}
+One attention can focus on one kind of relationship. \textbf{Multi-head attention} runs $h$ attentions in parallel, each with its own smaller projections
+($d_k = d_{model}/h$), concatenates their outputs and projects back with $W_O$:
+\[ \text{MHA}(X) = \text{Concat}(\text{head}_1,\dots,\text{head}_h)W_O. \]
+Different heads learn different patterns (syntax, coreference, position, ``skill--seniority'' links). With $d_{model} = 768$ and 12 heads, each head has 64
+dimensions; total cost similar to one full-width head.
+Parameters: four $d\times d$ matrices plus biases: $4(d^2 + d)$. For $d = 512$: $1{,}050{,}624$.
+
+\section{The Transformer block}
+\begin{enumerate}
+\item \textbf{Multi-head self-attention} (each position attends to all positions in the same sequence).
+\item \textbf{Add \& LayerNorm}: residual connection then layer normalisation: $\mathbf x\leftarrow\text{LN}(\mathbf x + \text{MHA}(\mathbf x))$.
+\item \textbf{Position-wise feed-forward network}: the same 2-layer MLP applied to each position independently, usually $d\to4d\to d$ with ReLU/GELU:
+  parameters $2d\cdot d_{ff} + d_{ff} + d$; for $d = 512$, $d_{ff} = 2048$: $2{,}099{,}712$.
+\item \textbf{Add \& LayerNorm} again.
+\end{enumerate}
+Attention mixes information \emph{across} positions; the FFN processes each position's information (and is where much of the ``knowledge'' is stored).
+A rule of thumb: about $12d^2$ parameters per layer ($4d^2$ attention $+ 8d^2$ FFN); 12 layers with $d = 768$: $12\cdot12\cdot768^2\approx85$M (BERT-base's 110M
+adds embeddings). Modern models put LayerNorm before each sublayer (\textbf{pre-LN}), which trains more stably.
+
+\section{Positional information}
+Self-attention is \emph{permutation-equivariant}: shuffle the input tokens and the outputs are shuffled the same way; it has no notion of order. We add
+position information:
+\begin{itemize}
+\item \textbf{Sinusoidal} (original): $PE(pos, 2i) = \sin(pos/10000^{2i/d})$, $PE(pos, 2i+1) = \cos(\dots)$; deterministic, can extrapolate; relative offsets are
+  linear functions. Position 1, dimension 0: $\sin(1) = 0.841$.
+\item \textbf{Learned absolute} embeddings (BERT, GPT-2): limited to the trained maximum length (512 for BERT).
+\item \textbf{Relative} / \textbf{RoPE} (rotary, used in LLaMA, Qwen) and \textbf{ALiBi}: encode relative distance directly in attention; better length generalisation.
+\end{itemize}
+
+\section{Masks}
+\begin{itemize}
+\item \textbf{Padding mask}: ignore pad tokens (set their scores to $-\infty$ before softmax so their weight is 0).
+\item \textbf{Causal (look-ahead) mask}: in decoders, position $i$ may attend only to positions $\le i$, so the model cannot peek at the token it must predict. For 4
+  tokens: $1 + 2 + 3 + 4 = 10$ allowed pairs.
+\end{itemize}
+
+\section{Three families}
+\begin{itemize}
+\item \textbf{Encoder-only} (BERT, RoBERTa): bidirectional; understanding tasks: classification, NER, retrieval embeddings.
+\item \textbf{Decoder-only} (GPT, LLaMA, Qwen): causal; trained to predict the next token; generation, chat, and (with scale) most tasks via prompting.
+\item \textbf{Encoder--decoder} (original Transformer, T5, BART): the encoder reads the input; the decoder generates with \textbf{cross-attention}, whose queries come from
+  the decoder and keys/values from the encoder output. Translation, summarisation.
+\end{itemize}
+
+\section{Cost and efficiency}
+Self-attention computes an $n\times n$ score matrix per head: $O(n^2d)$ time and $O(n^2)$ memory in sequence length $n$. Going from 1{,}024 to 4{,}096 tokens multiplies
+attention memory by 16. Sequence length 512 with 12 heads: $12\cdot512^2 = 3.1$M scores per layer. Remedies: \textbf{FlashAttention} (exact attention computed in tiles
+in fast on-chip memory, never materialising the full matrix), sparse/local attention, linear-attention approximations, \textbf{KV cache} during generation (store keys
+and values of previous tokens so each new token costs $O(n)$ instead of recomputing everything), grouped-query attention, quantisation.
+
+\section{Training and generation}
+\begin{itemize}
+\item \textbf{Training}: AdamW, warmup then decay, dropout, label smoothing (original paper), large batches, mixed precision.
+\item \textbf{Decoding}: greedy (always the top token), beam search (keep the top $B$ partial sequences; good for translation), \textbf{temperature} sampling
+  (divide logits by $T$: $T<1$ sharper, $T>1$ flatter; logits $(2, 0)$ at $T = 2$ give $\sigma(1) = 0.731$ for the first token), top-$k$ and nucleus (top-$p$) sampling.
+\end{itemize}
+
+\section{Transformers beyond text}
+\textbf{Vision Transformers} (patches as tokens), speech (Whisper), recommendation (sequences of user actions: SASRec, BERT4Rec), tabular (FT-Transformer), multimodal
+(CLIP aligns images and text).
+
+\begin{practical}[: Transformers at InfoEdge]
+\begin{itemize}
+\item \textbf{Search}: BERT-style bi-encoders for dense retrieval, cross-encoders for re-ranking (PremiumX ``contextual match'').
+\item \textbf{Naukri foundational models} (GenAI slide): ``Naukri Ls'', 7B/9B series fine-tuned for search and recommendation; distilled small models (0.6B--4B)
+  for cheap serving.
+\item \textbf{JD generator}, free-text search, chat agents for job discovery: decoder-only LLMs.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: Transformer Neural Networks, ChatGPT's foundation, Clearly Explained}{\ytid{zxQyTK8quyY}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{INT: explain the Transformer architecture (pen and paper)} Explain the Transformer end to end.}
+\oneline{Tokens become embeddings plus positional information; each layer applies multi-head self-attention (every token gathers information from all tokens with learned
+weights), then a position-wise feed-forward network, each wrapped in a residual connection and layer normalisation; encoders stack these layers, decoders add causal masking
+and cross-attention to the encoder; a final linear layer and softmax predict tokens.}
+\why I would draw: input tokens $\to$ embedding $+$ position $\to$ [MHA $\to$ Add\&Norm $\to$ FFN $\to$ Add\&Norm] $\times N$ $\to$ output. Then expand MHA:
+$Q = XW_Q$, $K = XW_K$, $V = XW_V$; per head $\text{softmax}(QK^\top/\sqrt{d_k})V$; concat; $W_O$. Explain why each piece exists: attention for context mixing,
+FFN for per-token transformation, residuals for gradient flow, LayerNorm for stable scales, positions because attention is order-blind, masks for padding and causality.
+\worked Attention example: output $(6.70, 3.30)$.
+\pushes \emph{``Complexity?''} $O(n^2d)$ per layer for attention, $O(nd^2)$ for the FFN. \emph{``Why did it replace RNNs?''} Parallelism and constant path length between
+any two tokens.
+\end{qa}
+
+\begin{qa}{\pyq{INT: compute attention} For $\mathbf q = (1,0)$, keys $(1,0)$ and $(0,1)$, values $(10,0)$ and $(0,10)$, compute scaled dot-product attention.}
+\oneline{Scores $1$ and $0$, scaled $0.707$ and $0$, weights $0.670$ and $0.330$, output $(6.70, 3.30)$.}
+\end{qa}
+
+\begin{qa}{\pyq{INT: why scale by $\sqrt{d_k}$} Why divide by $\sqrt{d_k}$?}
+\oneline{Because dot products of $d_k$-dimensional random vectors have variance $d_k$, so large $d_k$ gives huge scores that saturate the softmax into near one-hot outputs with
+vanishing gradients; dividing by $\sqrt{d_k}$ keeps the variance at 1.}
+\worked $d_k = 64$: standard deviation 8; after scaling, 1.
+\end{qa}
+
+\begin{qa}{\pyq{INT: multi-head attention} Why use multiple heads?}
+\oneline{Each head has its own projections and can attend to a different kind of relationship (syntax, coreference, position) in a different subspace; together they capture more than
+a single attention of the same total width, at about the same cost.}
+\why A single softmax produces one weighted average per position, which blends different relations; several heads keep them separate. Some heads can be pruned after training
+with little loss, showing redundancy.
+\end{qa}
+
+\begin{qa}{\pyq{INT: encoder vs decoder} What is the difference between encoder and decoder blocks, and between BERT and GPT?}
+\oneline{Encoder blocks use bidirectional self-attention; decoder blocks use causally masked self-attention (and, in encoder--decoder models, cross-attention to the encoder); BERT is
+encoder-only for understanding, GPT is decoder-only for generation.}
+\end{qa}
+
+\begin{qa}{\pyq{INT: positional encodings} Why do Transformers need positional encodings, and what are the options?}
+\oneline{Self-attention treats its input as a set (permutation-equivariant), so order must be injected; options are sinusoidal, learned absolute, and relative schemes like RoPE and ALiBi.}
+\why Without positions, ``recruiter rejected candidate'' and ``candidate rejected recruiter'' look identical.
+\end{qa}
+
+\begin{qa}{\pyq{INT: why Transformers beat RNNs} Give the advantages of self-attention over recurrence.}
+\oneline{Parallel computation across positions (fast training on GPUs), a path length of 1 between any two positions (long-range dependencies), and flexible, content-based mixing; the
+cost is quadratic memory in sequence length.}
+\end{qa}
+
+\begin{qa}{How is the causal mask implemented? How many pairs are allowed for 4 tokens?}
+\oneline{Add $-\infty$ to scores above the diagonal before softmax so future positions get zero weight; 10 pairs.}
+\end{qa}
+
+\begin{qa}{Count the parameters of one multi-head attention layer and one FFN with $d = 512$, $d_{ff} = 2048$.}
+\oneline{MHA: $4(512^2 + 512) = 1{,}050{,}624$; FFN: $2\cdot512\cdot2048 + 2048 + 512 = 2{,}099{,}712$.}
+\end{qa}
+
+\begin{qa}{What is the KV cache?}
+\oneline{During autoregressive generation, keys and values of past tokens do not change, so they are stored and reused; each new token computes only its own query, key and value and
+attends to the cache, making each step linear instead of quadratic in length.}
+\why Memory cost: layers $\times$ 2 $\times$ sequence length $\times d$ per sequence: the main memory bottleneck in LLM serving; reduced by grouped-query attention and quantised caches.
+\end{qa}
+
+\begin{qa}{\deep Is attention a kernel smoother?}
+\oneline{Yes: the output is a weighted average of values with weights given by a normalised similarity $\exp(\mathbf q^\top\mathbf k/\sqrt{d})$, which is exactly a Nadaraya--Watson kernel
+regression with a learned, asymmetric exponential kernel.}
+\why Nadaraya--Watson: $\hat f(x) = \sum_iK(x, x_i)y_i/\sum_iK(x, x_i)$. Replace $x$ by the query, $x_i$ by keys, $y_i$ by values. This links Chapter 9 (kernels) to Transformers and explains
+why attention is a similarity-based lookup.
+\end{qa}
+
+\begin{qa}{\deep What does the feed-forward sublayer do, if attention already mixes information?}
+\oneline{Attention only moves and averages information between positions (a linear combination of values); the FFN applies a learned non-linear transformation to each position's vector,
+providing most of the model's capacity, and acts somewhat like a key--value memory storing facts.}
+\end{qa}
+
+\begin{qa}{Why does attention cost $O(n^2)$, and how do long-context models cope?}
+\oneline{Every position compares itself with every other, giving an $n\times n$ score matrix per head; long-context models use FlashAttention (exact but memory-efficient), sparse or sliding-
+window attention, linear approximations, and positional schemes that extrapolate (RoPE scaling).}
+\worked 1{,}024 to 4{,}096 tokens: 16 times more score memory.
+\end{qa}
+
+\begin{qa}{Explain temperature, top-$k$ and top-$p$ sampling.}
+\oneline{Temperature divides logits by $T$ (lower $T$ more deterministic, higher more random); top-$k$ samples from the $k$ most likely tokens; top-$p$ samples from the smallest set whose
+probability mass exceeds $p$.}
+\worked Logits $(2, 0)$: $T = 1$ gives 0.881 for the first token; $T = 2$ gives 0.731.
+\end{qa}
+
+\begin{qa}{What is cross-attention?}
+\oneline{Attention where queries come from one sequence (the decoder) and keys and values from another (the encoder output), letting the generated text consult the input; also used to fuse
+modalities (text queries over image features).}
+\end{qa}
+
+\begin{qa}{\deep Why are residual connections and LayerNorm critical in Transformers? What changed with pre-LN?}
+\oneline{Residuals give gradients a direct path through dozens of layers and let each sublayer learn a refinement; LayerNorm keeps activations well scaled; placing LayerNorm before each
+sublayer (pre-LN) keeps the residual stream un-normalised, which makes deep Transformers train stably with less warmup.}
+\end{qa}
+
+\begin{qa}{How would you use a Transformer for Resdex candidate ranking under a 100 ms budget?}
+\oneline{Use a bi-encoder Transformer to embed recruiter queries and profiles for fast retrieval from a vector index, and apply a small distilled cross-encoder only to the top 100 candidates,
+combined with structured features in a GBM ranker; cache embeddings and quantise models.}
+\end{qa}
+
+\begin{qa}{What is a ViT's sequence length for a $224\times224$ image with $16\times16$ patches?}
+\oneline{$14\times14 = 196$ patches, plus a [CLS] token: 197.}
+\end{qa}
+
+\begin{qa}{\deep Self-attention is permutation-equivariant. Could that ever be an advantage?}
+\oneline{Yes, for inputs that are sets rather than sequences (a candidate's unordered skills, items in a basket, points in a cloud): omitting positional encodings gives a model that naturally
+ignores order (Set Transformer).}
+\end{qa}

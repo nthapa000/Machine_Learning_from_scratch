@@ -1,1 +1,212 @@
-% TODO 22_generative
+\chapter{Generative Models: GANs, Autoencoders and VAEs}
+\companion{Computerphile: Generative Adversarial Networks (GANs)}{\yts{Computerphile+Generative+Adversarial+Networks+GANs}}
+
+GANs are in the syllabus's architectures list. The InfoEdge hire had worked on GANs, so expect interviewers to push beyond the slogan
+``a forger and a detective'' into the objective, the optimal discriminator, mode collapse and alternatives. Autoencoders and VAEs complete
+the picture of how neural networks learn to \emph{generate}.
+
+\section{Discriminative vs generative, once more}
+A discriminative model learns $P(y\mid\mathbf x)$: ``is this profile photo real?''. A \textbf{generative model} learns the data distribution $P(\mathbf x)$
+itself, so it can \emph{create} new samples: a realistic face, a property photo, a job description. Explicit models give a density (GMMs, VAEs
+approximately, autoregressive LLMs); implicit models (GANs) only give a sampler.
+
+\section{GANs: the forger and the detective}
+\begin{itemize}
+\item The \textbf{generator} $G$ takes random noise $\mathbf z$ (e.g. 100 numbers from a Gaussian) and outputs a fake sample $G(\mathbf z)$.
+\item The \textbf{discriminator} $D$ takes a sample and outputs the probability it is real.
+\item They are trained against each other: $D$ learns to tell real from fake; $G$ learns to fool $D$. As $D$ gets better, $G$ is forced to produce more
+  realistic samples, until (ideally) fakes are indistinguishable.
+\end{itemize}
+
+\subsection{The minimax objective}
+\[ \min_G\max_D\ V(D, G) = \E_{\mathbf x\sim p_{data}}[\log D(\mathbf x)] + \E_{\mathbf z\sim p_z}[\log(1 - D(G(\mathbf z)))]. \]
+$D$ maximises: high $D(\mathbf x)$ on real data, low $D(G(\mathbf z))$ on fakes. This is exactly binary cross-entropy with real $=1$, fake $=0$.
+$G$ minimises the second term: it wants $D(G(\mathbf z))$ high.
+
+\subsection{The optimal discriminator}
+For a fixed $G$ whose samples have density $p_g$, at each point $\mathbf x$ the discriminator maximises $p_{data}\log D + p_g\log(1 - D)$. Setting the derivative to zero:
+\[ D^*(\mathbf x) = \frac{p_{data}(\mathbf x)}{p_{data}(\mathbf x) + p_g(\mathbf x)}. \]
+\begin{example}[: optimal discriminator]
+$p_{data}(\mathbf x) = 0.6$, $p_g(\mathbf x) = 0.2$: $D^* = 0.75$. At the global optimum $p_g = p_{data}$: $D^* = 0.5$ everywhere (the detective is reduced to guessing), and
+$V(D^*, G^*) = \log0.5 + \log0.5 = -2\log2 = -1.386$.
+\end{example}
+Plugging $D^*$ in, $G$ minimises $-\log4 + 2\cdot\text{JSD}(p_{data}\,\|\,p_g)$: the \textbf{Jensen--Shannon divergence} between real and generated distributions
+(maximum value $\log2 = 0.693$ when they do not overlap). So in the ideal case, training a GAN minimises JSD.
+
+\subsection{Training loop}
+Alternate: (1) update $D$ on a batch of real (label 1) and fake (label 0) samples; (2) update $G$ through $D$ (backprop through $D$ into $G$; $D$'s weights frozen in this
+step). Discriminator loss for one real with $D = 0.9$ and one fake with $D = 0.2$: $-\ln0.9 - \ln0.8 = 0.105 + 0.223 = 0.328$.
+
+\subsection{Non-saturating generator loss}
+Early in training fakes are obviously fake: $D(G(\mathbf z))\approx0$, so $\log(1 - D(G(\mathbf z)))$ is flat and gives $G$ almost no gradient. In practice $G$ instead
+\emph{maximises} $\log D(G(\mathbf z))$ (minimises $-\log D(G(\mathbf z))$): same fixed point, strong gradients when $G$ is losing. With $D(G(\mathbf z)) = 0.1$:
+loss $= -\ln0.1 = 2.303$.
+
+\section{Why GANs are hard to train}
+\begin{itemize}
+\item \textbf{Non-convergence}: two players with opposing objectives can oscillate rather than settle (a game, not a minimisation).
+\item \textbf{Mode collapse}: $G$ produces only a few kinds of samples (all faces look alike) that currently fool $D$, ignoring the diversity of the data.
+\item \textbf{Vanishing gradients}: a too-strong $D$ (accuracy 100\%) gives $G$ no useful signal; when real and fake distributions do not overlap, JSD is constant
+  ($\log2$) and uninformative.
+\item \textbf{Sensitivity} to architecture and hyperparameters; no single loss value tracks quality (both losses can look flat while samples improve).
+\end{itemize}
+\textbf{Remedies}: DCGAN guidelines (strided convolutions instead of pooling, BatchNorm, ReLU in $G$ with \textbf{tanh} output for pixels in $[-1, 1]$, LeakyReLU in $D$,
+Adam with $\eta = 2\times10^{-4}$, $\beta_1 = 0.5$); \textbf{one-sided label smoothing} (real targets 0.9); \textbf{WGAN} (below); \textbf{spectral normalisation} of $D$
+(controls its Lipschitz constant); gradient penalty; minibatch discrimination; two-timescale learning rates; progressive growing.
+
+\subsection{Wasserstein GAN}
+Replace JSD with the \textbf{Wasserstein (earth mover's) distance}: the minimum ``work'' to move probability mass from $p_g$ to $p_{data}$. Unlike JSD, it decreases smoothly
+as distributions move closer even when they do not overlap, so $G$ always gets useful gradients. The discriminator becomes a \textbf{critic} outputting an unbounded score
+(no sigmoid), constrained to be 1-Lipschitz (weight clipping in the original, gradient penalty in WGAN-GP); the critic is updated several times (e.g. 5) per generator
+step. The critic's loss correlates with sample quality.
+
+\section{Important variants}
+\begin{itemize}
+\item \textbf{DCGAN}: convolutional GAN; generator starts from a $4\times4$ map and doubles resolution with transposed convolutions (kernel 4, stride 2, padding 1):
+  $4\to8\to16\to32\to64$.
+\item \textbf{Conditional GAN}: feed a label or condition $y$ to both $G$ and $D$ to control what is generated (``generate a 2BHK living-room photo'').
+\item \textbf{pix2pix}: paired image-to-image translation (sketch $\to$ photo) with an L1 loss plus adversarial loss.
+\item \textbf{CycleGAN}: unpaired translation (day $\leftrightarrow$ night) using a \textbf{cycle-consistency} loss: translating there and back should recover the original.
+\item \textbf{StyleGAN}: style-based generator, photorealistic faces; the source of many fake profile pictures.
+\end{itemize}
+
+\section{Evaluating generative models}
+\begin{itemize}
+\item \textbf{Inception Score (IS)}: high when each generated image is confidently classified (quality) and the classes are diverse (diversity). Ignores real data.
+\item \textbf{Fr\'echet Inception Distance (FID)}: fit Gaussians to Inception features of real and generated images and compute the Fr\'echet distance between them;
+  lower is better; captures quality and diversity; standard metric.
+\item Precision/recall for generative models; human evaluation.
+\end{itemize}
+
+\section{Autoencoders}
+An \textbf{autoencoder} compresses an input to a small code and reconstructs it: encoder $\mathbf z = f(\mathbf x)$, decoder $\hat{\mathbf x} = g(\mathbf z)$, trained to
+minimise reconstruction error. The bottleneck forces it to keep the important structure. A linear autoencoder with squared error learns the PCA subspace; non-linear ones
+learn curved manifolds.
+Variants: \textbf{denoising} (reconstruct clean input from a corrupted one), \textbf{sparse}, \textbf{contractive}. Uses: compression, feature learning, \textbf{anomaly
+detection} (normal data reconstruct well; anomalies have high reconstruction error), pre-training.
+A plain autoencoder is a poor \emph{generator}: its code space has holes; random codes decode to garbage.
+
+\section{Variational autoencoders (VAEs)}
+\begin{itemize}
+\item The encoder outputs a \emph{distribution} over codes, $q(\mathbf z\mid\mathbf x) = \mathcal N(\boldsymbol\mu(\mathbf x),\text{diag}\,\boldsymbol\sigma^2(\mathbf x))$.
+\item Sample $\mathbf z = \boldsymbol\mu + \boldsymbol\sigma\odot\boldsymbol\epsilon$, $\boldsymbol\epsilon\sim\mathcal N(0, I)$: the \textbf{reparameterisation trick}, which moves
+  the randomness into $\boldsymbol\epsilon$ so gradients flow through $\boldsymbol\mu$ and $\boldsymbol\sigma$.
+\item Loss (negative ELBO) $=$ reconstruction error $+$ $KL(q(\mathbf z\mid\mathbf x)\,\|\,\mathcal N(0, I))$. The KL term pulls all codes toward a standard normal, filling the
+  latent space without holes, so sampling $\mathbf z\sim\mathcal N(0, I)$ and decoding gives plausible new data.
+\end{itemize}
+VAEs train stably and give a latent space with meaningful interpolation, but samples tend to be blurrier than GANs'.
+
+\section{GANs vs VAEs vs diffusion vs autoregressive}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X X}
+\toprule
+& Training & Samples & Notes\\
+\midrule
+GAN & adversarial, unstable & sharp, fast (one pass) & mode collapse; no likelihood\\
+VAE & stable (ELBO) & blurrier & meaningful latent space; approximate likelihood\\
+Diffusion & stable (denoising) & best quality and diversity & slow sampling (many steps); powers modern image generators\\
+Autoregressive & stable (next-token) & excellent for text & sequential sampling; exact likelihood; LLMs\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\textbf{Diffusion models} learn to reverse a gradual noising process: add Gaussian noise over $T$ steps until the image is pure noise; train a network to predict the noise at
+each step; generate by starting from noise and denoising step by step.
+
+\begin{practical}[: generative models at InfoEdge]
+\begin{itemize}
+\item \textbf{Defensive}: detecting GAN/diffusion-generated profile photos on Jeevansathi and fake recruiter profiles (artefact detectors, reverse image search, behaviour
+  signals). Fraud is adversarial too: as detectors improve, generators adapt.
+\item \textbf{Data augmentation}: synthetic tabular data (CTGAN) or images for rare classes; must be validated on real data.
+\item \textbf{Anomaly detection}: autoencoder reconstruction error on recruiter behaviour.
+\item \textbf{Text generation} (JD generator, content feed's ``content manifestation agent''): autoregressive LLMs, not GANs.
+\end{itemize}
+\end{practical}
+
+\stuck{Google ML: GAN training}{https://developers.google.com/machine-learning/gan/training}
+\section{Interview questions}
+
+\begin{qa}{Explain how a GAN works, including the objective.}
+\oneline{A generator maps random noise to samples and a discriminator classifies samples as real or fake; they play a minimax game where the discriminator maximises binary
+cross-entropy on real vs fake and the generator tries to make the discriminator label its samples real; at the optimum the generator's distribution matches the data and the
+discriminator outputs 0.5.}
+\why Objective $\min_G\max_D\E[\log D(\mathbf x)] + \E[\log(1 - D(G(\mathbf z)))]$. Training alternates gradient steps. In practice $G$ uses the non-saturating loss
+$-\log D(G(\mathbf z))$. With the optimal $D$, the generator minimises the Jensen--Shannon divergence.
+\pushes \emph{``What does $G$ never see?''} Real data directly: it learns only through $D$'s gradients.
+\end{qa}
+
+\begin{qa}{Derive the optimal discriminator and compute it for $p_{data} = 0.6$, $p_g = 0.2$.}
+\oneline{$D^* = p_{data}/(p_{data} + p_g) = 0.75$.}
+\why Maximise $f(D) = a\log D + b\log(1 - D)$; $f'(D) = a/D - b/(1 - D) = 0\Rightarrow D = a/(a + b)$.
+\end{qa}
+
+\begin{qa}{What is the value of the GAN objective at the global optimum, and what divergence is being minimised?}
+\oneline{$V = -\log4 = -1.386$, with $D^* = 0.5$ everywhere; the generator minimises the Jensen--Shannon divergence between data and generated distributions.}
+\end{qa}
+
+\begin{qa}{Why is the non-saturating generator loss used?}
+\oneline{Because early on the discriminator easily rejects fakes, making $\log(1 - D(G(\mathbf z)))$ flat with tiny gradients; maximising $\log D(G(\mathbf z))$ has the same fixed point but
+large gradients exactly when the generator is doing badly.}
+\worked At $D(G(\mathbf z)) = 0.1$: gradient of $\log(1 - D)$ w.r.t.\ $D$ is $-1/0.9 = -1.11$; of $-\log D$ is $-10$.
+\end{qa}
+
+\begin{qa}{What is mode collapse and how do you mitigate it?}
+\oneline{The generator produces only a narrow set of outputs that fool the current discriminator, ignoring other modes of the data; mitigations include WGAN/WGAN-GP, minibatch
+discrimination, unrolled GANs, spectral normalisation, feature matching and diversity-promoting losses.}
+\why The generator is rewarded for any sample that fools $D$, not for covering the data; $D$ then learns to reject that mode, $G$ jumps to another, and they cycle.
+\end{qa}
+
+\begin{qa}{Why are GANs unstable, and what did WGAN change?}
+\oneline{They solve a two-player game rather than a minimisation, and with non-overlapping distributions the JS divergence gives no useful gradient; WGAN uses the Wasserstein distance with a
+Lipschitz-constrained critic, which provides smooth, informative gradients and a loss that tracks quality.}
+\end{qa}
+
+\begin{qa}{\deep If the discriminator reaches 100\% accuracy early and stays there, what is wrong and what do you do?}
+\oneline{The discriminator overpowers the generator, so the generator receives vanishing or uninformative gradients; weaken or regularise $D$ (fewer updates, label smoothing, noise on inputs,
+spectral norm, dropout), use the non-saturating or Wasserstein loss, or strengthen $G$.}
+\end{qa}
+
+\begin{qa}{How are GANs evaluated?}
+\oneline{With FID (distance between Gaussian fits of Inception features of real and generated images; lower is better), Inception Score (confident and diverse classifications), precision/recall
+for generative models, and human judgement.}
+\end{qa}
+
+\begin{qa}{Conditional GAN, pix2pix and CycleGAN: what does each do?}
+\oneline{A conditional GAN conditions both networks on extra information to control outputs; pix2pix does paired image-to-image translation with adversarial plus L1 loss; CycleGAN does unpaired
+translation using cycle-consistency between two generators.}
+\end{qa}
+
+\begin{qa}{What is an autoencoder, and how can it detect anomalies?}
+\oneline{A network that compresses an input to a low-dimensional code and reconstructs it; trained only on normal data, it reconstructs normal inputs well and anomalies poorly, so high reconstruction
+error flags anomalies.}
+\why Example: recruiter behaviour vectors; the top 0.1\% reconstruction errors go to the trust-and-safety queue. Choose the threshold on validation data with known incidents.
+\end{qa}
+
+\begin{qa}{\deep Why can a VAE generate new data but a plain autoencoder usually cannot?}
+\oneline{A VAE's KL term forces codes to fill a known prior (a standard normal), so random draws from the prior decode to plausible samples; a plain autoencoder's codes occupy an irregular region
+with gaps, so random codes decode to nonsense.}
+\end{qa}
+
+\begin{qa}{What is the reparameterisation trick?}
+\oneline{Writing a random sample as a deterministic function of the parameters and independent noise, $\mathbf z = \boldsymbol\mu + \boldsymbol\sigma\odot\boldsymbol\epsilon$, so gradients can flow
+through $\boldsymbol\mu$ and $\boldsymbol\sigma$ during backpropagation.}
+\end{qa}
+
+\begin{qa}{\deep GAN vs VAE vs diffusion: which would you pick to generate realistic synthetic property photos for augmentation?}
+\oneline{A diffusion model (or fine-tuned pre-trained one) for the best quality and diversity, accepting slower sampling; a GAN if real-time sampling matters and you can manage training instability;
+a VAE if you need a smooth latent space more than sharpness.}
+\why For augmentation also ask whether synthetic images help at all: validate on real held-out photos; synthetic data can teach artefacts.
+\end{qa}
+
+\begin{qa}{Why does a DCGAN generator use tanh at the output?}
+\oneline{Because images are scaled to $[-1, 1]$, and tanh produces outputs in exactly that range with zero-centred, non-saturating behaviour near the middle.}
+\end{qa}
+
+\begin{qa}{\deep How would you detect AI-generated fake profile photos on a matrimonial platform?}
+\oneline{Combine an image classifier trained on real vs generated faces (with continual updates as generators change), artefact checks (eyes, backgrounds, frequency patterns), reverse image search
+and duplicate detection, and behavioural signals (new account, many messages, copied bio text), routing high scores to human review.}
+\why A single detector is brittle (adversarial adaptation); metadata and behaviour are harder to fake. Measure precision at the review queue's capacity; monitor drift.
+\end{qa}
+
+\begin{qa}{In one GAN training iteration, which network's weights change during the generator step?}
+\oneline{Only the generator's; gradients flow through the discriminator to reach the generator, but the discriminator is not updated in that step.}
+\end{qa}
