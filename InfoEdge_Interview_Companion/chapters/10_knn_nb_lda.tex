@@ -1,1 +1,286 @@
-% TODO 10_knn_nb_lda
+\chapter{Three Classic Classifiers: $k$-NN, Naive Bayes and Fisher's LDA}
+\companion{StatQuest: Naive Bayes, Clearly Explained}{\ytid{O2L2Uv9pdDA}}
+
+The InfoEdge hire was asked to build Naive Bayes up from Bayes' theorem ``with intuition, not formulas'', and to explain
+Fisher's linear discriminant (``push class means apart, shrink the variance within each class''). $k$-nearest neighbours
+is the simplest possible learner and a standard warm-up question. Each is a different philosophy: $k$-NN memorises,
+Naive Bayes models how data are generated, LDA finds the best projection.
+
+\section{$k$-nearest neighbours}
+
+\subsection{The idea}
+To classify a new point, find the $k$ training points closest to it and take a majority vote (or average their targets
+for regression). No training at all: the model \emph{is} the data. This is called a \textbf{lazy} or
+\textbf{instance-based} learner.
+
+\begin{example}[: 3-NN by hand]
+Training points (experience, skills matched) with labels ``shortlisted'' (S) or not (N): $A(1,2)$ N, $B(2,3)$ N,
+$C(5,8)$ S, $D(6,7)$ S, $E(4,6)$ S. New candidate $Q = (4, 5)$. Euclidean distances: $A$: $\sqrt{9+9} = 4.24$; $B$:
+$\sqrt{4+4} = 2.83$; $C$: $\sqrt{1+9} = 3.16$; $D$: $\sqrt{4+4} = 2.83$; $E$: $1$. Nearest three: $E$ (S), $B$ (N), $D$ (S).
+Vote: S wins, 2 to 1.
+\end{example}
+
+\subsection{Choosing $k$}
+\begin{itemize}
+\item $k = 1$: the boundary follows every training point; zero training error; high variance (one mislabelled point
+  creates an island).
+\item Large $k$: smooth boundary; high bias; with $k = n$ it always predicts the majority class.
+\item Choose $k$ by cross-validation; odd $k$ avoids ties in binary problems; distance-weighted voting ($1/d$) gives
+  closer neighbours more say.
+\end{itemize}
+
+\subsection{Distances and scaling}
+Euclidean $\sqrt{\sum(x_j - z_j)^2}$, Manhattan $\sum|x_j - z_j|$, cosine (for text and embeddings), Hamming (for
+categorical). \textbf{Scaling is essential}: a feature measured in rupees will dominate one measured in years.
+
+\subsection{The curse of dimensionality}
+In high dimensions almost all points are far from each other and distances become similar: the nearest neighbour is barely
+nearer than the farthest. Example: to capture 10\% of uniformly spread data in 10 dimensions, a cube around the query must span
+$0.1^{1/10} = 79\%$ of each axis: ``local'' is no longer local. $k$-NN therefore needs dimensionality reduction or learned
+embeddings to work in high dimensions.
+
+\subsection{Cost}
+Training $O(1)$; prediction $O(nd)$ per query by brute force. Speed-ups: KD-trees and ball trees (good up to about 20
+dimensions), and \textbf{approximate nearest neighbour} indexes (HNSW, IVF, product quantisation; libraries FAISS, ScaNN)
+for millions of embeddings. The PremiumX slide's ``vector index'' is exactly this.
+
+\section{Naive Bayes, built from Bayes' theorem}
+
+\subsection{Bayes' theorem in words}
+We want $P(\text{class}\mid\text{evidence})$. Bayes' theorem turns it around:
+\[ P(C\mid x) = \frac{P(x\mid C)\,P(C)}{P(x)}. \]
+\begin{itemize}
+\item $P(C)$, the \textbf{prior}: how common the class is before looking at the evidence (2\% of messages are spam).
+\item $P(x\mid C)$, the \textbf{likelihood}: how typical this evidence is for that class (``free offer'' appears in 30\% of
+  spam and 1\% of normal mail).
+\item $P(x)$, the \textbf{evidence}: the same for every class, so for choosing a class we can ignore it and compare
+  $P(x\mid C)P(C)$ across classes.
+\item $P(C\mid x)$, the \textbf{posterior}: the updated belief.
+\end{itemize}
+
+\subsection{The problem: too many combinations}
+The evidence is many features at once: thousands of words. Estimating $P(x_1, x_2, \dots, x_d\mid C)$ directly would need
+data for every combination of words, impossible.
+
+\subsection{The naive assumption}
+Assume the features are \textbf{conditionally independent given the class}: once you know it is spam, knowing it contains
+``free'' tells you nothing extra about whether it contains ``offer''. Then the joint likelihood factorises:
+\[ P(x_1,\dots,x_d\mid C) = \prod_{j=1}^dP(x_j\mid C), \qquad \hat C = \argmax_C\ P(C)\prod_jP(x_j\mid C). \]
+Now each $P(x_j\mid C)$ is a simple count. The assumption is almost always false (``free'' and ``offer'' co-occur), but the
+\emph{ranking} of classes is often still right, which is all classification needs.
+
+\begin{example}[: spam by hand]
+Prior: $P(S) = 0.3$, $P(H) = 0.7$. Word probabilities: $P(\text{free}\mid S) = 0.4$, $P(\text{free}\mid H) = 0.05$;
+$P(\text{meeting}\mid S) = 0.05$, $P(\text{meeting}\mid H) = 0.3$. Message: ``free meeting''.
+Spam score: $0.3\times0.4\times0.05 = 0.006$. Ham score: $0.7\times0.05\times0.3 = 0.0105$.
+Normalise: $P(S\mid\text{msg}) = 0.006/0.0165 = 0.36$. Classified as ham. ``Meeting'' outweighed ``free''.
+\end{example}
+
+\subsection{Variants}
+\begin{itemize}
+\item \textbf{Multinomial NB}: features are word counts; $P(w\mid C) = \frac{\text{count}(w, C) + \alpha}{\text{total words in }C + \alpha|V|}$.
+\item \textbf{Bernoulli NB}: features are word presence/absence; also penalises the absence of words typical of a class.
+\item \textbf{Gaussian NB}: numeric features modelled as a normal distribution per class.
+\item \textbf{Complement NB}: estimates from the complement of each class; better with imbalanced text.
+\end{itemize}
+
+\subsection{Laplace smoothing: the zero-frequency problem}
+If ``lottery'' never appeared in ham training mail, $P(\text{lottery}\mid H) = 0$, and one occurrence makes the whole ham
+product 0, whatever else the message says. Add $\alpha$ (usually 1) to every count:
+\begin{example}[: smoothing]
+Spam class has 20 word tokens in total, vocabulary size 10, ``offer'' appears 3 times in spam.
+Unsmoothed: $3/20 = 0.15$. Laplace ($\alpha = 1$): $(3+1)/(20+10) = 4/30 = 0.133$. A word never seen in spam:
+$1/30 = 0.033$ instead of 0.
+\end{example}
+Smoothing is a MAP estimate with a Dirichlet (uniform-ish) prior (Chapter 12).
+
+\subsection{Log space}
+Multiplying hundreds of probabilities like 0.001 underflows to 0 in floating point. Use sums of logs:
+$\log P(C) + \sum_j\log P(x_j\mid C)$. The argmax is unchanged because $\log$ is increasing.
+
+\subsection{Why it works surprisingly well}
+Very few parameters (one per word per class), so low variance: excellent with little data and huge vocabularies; trains in one
+pass; predicts fast. Its probabilities are poorly calibrated (the independence assumption double-counts correlated evidence, so
+outputs are pushed toward 0 and 1), but its rankings are often good.
+
+\section{Fisher's Linear Discriminant Analysis}
+
+\subsection{The goal}
+Project data onto a single direction $\mathbf w$ (a line) such that, along that line, the two classes are as separated as
+possible. ``Separated'' means two things at once: the class \textbf{means} far apart, and each class \textbf{tightly bunched}.
+
+\begin{intuition}[: why means alone are not enough]
+Imagine two cigar-shaped clouds lying side by side, parallel. The direction joining their means may run along the cigars'
+length, where each cloud is very spread out, so the projections overlap heavily. A slightly rotated direction, across the
+cigars, separates them cleanly even though the means are a bit closer along it. Fisher's criterion finds that rotation.
+\end{intuition}
+
+\subsection{The criterion}
+For a direction $\mathbf w$, the projected class means are $\tilde m_k = \mathbf w^\top\mathbf m_k$ and the projected within-class
+scatters are $\tilde s_k^2 = \sum_{i\in k}(\mathbf w^\top\mathbf x_i - \tilde m_k)^2$. Fisher maximises
+\[ J(\mathbf w) = \frac{(\tilde m_1 - \tilde m_2)^2}{\tilde s_1^2 + \tilde s_2^2} = \frac{\mathbf w^\top S_B\mathbf w}{\mathbf w^\top S_W\mathbf w}, \]
+with between-class scatter $S_B = (\mathbf m_1 - \mathbf m_2)(\mathbf m_1 - \mathbf m_2)^\top$ and within-class scatter
+$S_W = \sum_k\sum_{i\in k}(\mathbf x_i - \mathbf m_k)(\mathbf x_i - \mathbf m_k)^\top$. Setting the derivative to zero gives the solution
+\[ \boxed{\mathbf w\propto S_W^{-1}(\mathbf m_1 - \mathbf m_2).} \]
+In words: start from the direction joining the means, then ``undo'' the shape of the clouds by multiplying by the inverse of the
+within-class scatter.
+
+\begin{example}[: Fisher direction in 2-D]
+Class means $\mathbf m_1 = (2, 2)$, $\mathbf m_2 = (4, 3)$, so $\mathbf m_1 - \mathbf m_2 = (-2, -1)$. Suppose
+$S_W = \begin{pmatrix}4 & 0\\0 & 1\end{pmatrix}$ (each class spread out along $x_1$). $S_W^{-1} = \text{diag}(0.25, 1)$.
+$\mathbf w\propto(-0.5, -1)$. Joining the means suggests weighting $x_1$ twice as much as $x_2$; Fisher weights $x_2$ twice as much as
+$x_1$, because along $x_1$ the classes are noisy.
+\end{example}
+
+\subsection{More than two classes, and LDA as a classifier}
+With $K$ classes, LDA finds up to $K - 1$ directions: the top eigenvectors of $S_W^{-1}S_B$. It is a \textbf{supervised}
+dimensionality reduction, in contrast to PCA (unsupervised, maximises total variance, ignores labels).
+LDA is also a probabilistic classifier: assume each class is Gaussian with a \emph{shared} covariance $\Sigma$; then the Bayes
+decision boundary is linear, and its direction is exactly Fisher's $\Sigma^{-1}(\mathbf m_1 - \mathbf m_2)$. With class-specific
+covariances the boundary is quadratic: \textbf{QDA}.
+
+\subsection{Limits}
+Linear boundaries only; assumes roughly Gaussian classes with similar covariance for optimality; $S_W$ must be invertible
+(regularise with shrinkage when $d$ is large); at most $K-1$ dimensions.
+
+\begin{practical}[: these three at InfoEdge]
+\begin{itemize}
+\item \textbf{$k$-NN / vector search}: ``similar jobs'', ``similar candidates'' and the dense half of PremiumX's hybrid retrieval
+  are nearest-neighbour search over embeddings with an ANN index.
+\item \textbf{Naive Bayes}: a strong, instant baseline for classifying job titles, routing support tickets, or spam/abuse detection in
+  Jeevansathi messages.
+\item \textbf{LDA}: a quick supervised projection to visualise how separable ``placed'' vs ``not placed'' students are, and a
+  well-behaved linear classifier for small datasets.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: K-nearest neighbors, Clearly Explained}{\ytid{HVXime0nQeI}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{INT: Naive Bayes from Bayes' theorem} Build Naive Bayes from Bayes' theorem. What assumption does it make, why is it
+needed, and how is it used in practice?}
+\oneline{Naive Bayes applies Bayes' theorem to get $P(\text{class}\mid\text{features})\propto P(\text{class})\prod_jP(x_j\mid\text{class})$,
+which requires assuming the features are independent given the class; that assumption turns an impossible joint estimate into
+simple per-feature counts.}
+\why
+Start: $P(C\mid\mathbf x) = P(\mathbf x\mid C)P(C)/P(\mathbf x)$. The denominator is the same for all classes, so we compare numerators.
+The hard part is $P(\mathbf x\mid C)$ for a high-dimensional $\mathbf x$: with 10{,}000 binary word features there are $2^{10000}$
+combinations, and we would need data for each. Conditional independence lets us write it as a product of 10{,}000 one-word
+probabilities, each estimated by counting. Note the independence is \emph{conditional on the class}, not overall: ``free'' and
+``offer'' are clearly correlated overall because both are spammy; the assumption is that within spam they occur independently.
+In practice: Multinomial NB on word counts with Laplace smoothing, computed in log space, as a fast baseline for text.
+\worked The ``free meeting'' example: spam score 0.006, ham 0.0105, posterior spam 0.36.
+\pushes \emph{``Why does it work when the assumption is false?''} Classification needs only the correct argmax, not correct
+probabilities; errors from correlated features often affect all classes similarly. Also, its low variance beats more flexible models
+when data are scarce. \emph{``What about the probabilities?''} Over-confident; calibrate if needed.
+\pitfall Saying the features must be ``independent'' without ``given the class'', or calling it a discriminative model (it is generative:
+it models $P(\mathbf x\mid C)P(C)$).
+\end{qa}
+
+\begin{qa}{\pyq{INT: Fisher's LDA} Explain Fisher's linear discriminant: the formulation and the intuition.}
+\oneline{Find a projection direction that maximises the squared distance between projected class means divided by the total
+within-class variance along that direction; the solution is $\mathbf w\propto S_W^{-1}(\mathbf m_1 - \mathbf m_2)$.}
+\why
+Projecting onto a line reduces each point to one number. A good line keeps the classes apart (numerator: between-class separation) and
+each class compact (denominator: within-class spread). Maximising the ratio $J(\mathbf w) = \frac{\mathbf w^\top S_B\mathbf w}{\mathbf w^\top
+S_W\mathbf w}$: since only the direction matters, set the gradient to zero, giving $S_B\mathbf w = \lambda S_W\mathbf w$, a generalised
+eigenproblem. Because $S_B\mathbf w$ always points along $\mathbf m_1 - \mathbf m_2$, the answer is $S_W^{-1}(\mathbf m_1 - \mathbf m_2)$. For a
+classifier, threshold the projection (e.g. at the midpoint of projected means, adjusted for priors).
+\worked See the 2-D example: means difference $(-2,-1)$ becomes Fisher direction $(-0.5,-1)$ after whitening by $S_W^{-1}$.
+\pushes \emph{``How is it different from PCA?''} PCA ignores labels and keeps directions of maximum total variance, which may be useless
+for classification (the cigars example); LDA uses labels. \emph{``How many components?''} At most $K-1$. \emph{``When does it
+fail?''} Non-linear class structure, multimodal classes, very unequal covariances (use QDA), $d > n$ (use shrinkage).
+\end{qa}
+
+\begin{qa}{How does $k$-NN work, and how do you choose $k$?}
+\oneline{It predicts by majority vote (or average) of the $k$ closest training points; small $k$ gives low bias and high variance, large
+$k$ the reverse, so choose $k$ by cross-validation.}
+\why Worked example above: 3-NN classifies $Q$ as S. With $k=1$ the decision boundary is the Voronoi tessellation of training points.
+\pushes \emph{``Training and prediction cost?''} Training free; prediction $O(nd)$ brute force; use KD-trees or ANN indexes.
+\end{qa}
+
+\begin{qa}{\deep Why does $k$-NN suffer from the curse of dimensionality? Give a number.}
+\oneline{In high dimensions volumes grow so fast that a neighbourhood holding a fixed fraction of data must span most of each axis, and all
+pairwise distances become nearly equal, so ``nearest'' neighbours are not similar.}
+\why To contain 1\% of uniform data in $d = 100$ dimensions, a sub-cube needs side $0.01^{1/100} = 0.955$ of the full range. Also the ratio
+(farthest $-$ nearest)/nearest distance tends to 0 as $d$ grows for many distributions. Remedies: feature selection, PCA, learned
+embeddings (where the meaningful structure is low-dimensional), and metric learning.
+\end{qa}
+
+\begin{qa}{Why must features be scaled for $k$-NN, and does it matter for Naive Bayes?}
+\oneline{$k$-NN uses distances, so unscaled features with large ranges dominate; Naive Bayes models each feature separately per class,
+so scaling does not change its decisions (Gaussian NB just rescales its means and variances).}
+\end{qa}
+
+\begin{qa}{Compute the Laplace-smoothed probability of ``offer'' in spam if spam has 20 tokens, vocabulary size 10, and ``offer'' appears
+3 times. Why is smoothing needed?}
+\oneline{$(3+1)/(20+10) = 0.133$; without smoothing, a word never seen in a class would give probability 0 and wipe out the whole product.}
+\end{qa}
+
+\begin{qa}{Why do we compute Naive Bayes in log space?}
+\oneline{Products of many small probabilities underflow to 0 in floating point; summing logs is numerically stable and preserves the argmax.}
+\worked 200 words each with probability 0.001: product $10^{-600}$, below double precision's $10^{-308}$; log sum $-1381.6$ is fine.
+\end{qa}
+
+\begin{qa}{\deep Naive Bayes vs logistic regression: they are both linear for text. What is the difference?}
+\oneline{Multinomial Naive Bayes gives a linear decision rule in word counts, just like logistic regression, but NB estimates the weights
+generatively from class-conditional counts (fast, low variance, good with little data) while logistic regression fits them
+discriminatively to maximise conditional likelihood (better with more data, handles correlated features).}
+\why NB's log-odds $=\log\frac{P(S)}{P(H)} + \sum_jx_j\log\frac{P(w_j\mid S)}{P(w_j\mid H)}$: linear in counts $x_j$. Ng and Jordan showed
+NB reaches its (higher) asymptotic error faster; logistic regression reaches a lower error with enough data. Generative--discriminative pair.
+\end{qa}
+
+\begin{qa}{\deep If two features are exact duplicates, what happens to Naive Bayes? To logistic regression?}
+\oneline{Naive Bayes counts the same evidence twice, so its posterior becomes more extreme (over-confident); logistic regression splits the
+weight between the duplicates and its predictions are unchanged.}
+\why NB multiplies $P(x_1\mid C)P(x_1\mid C)$, squaring the likelihood ratio. Logistic regression's predictions depend on $w_1 + w_2$, which
+the fit learns correctly (with L2 it splits evenly). This is the clearest demonstration of what the naive assumption costs.
+\end{qa}
+
+\begin{qa}{What is the difference between generative and discriminative classifiers? Classify NB, LDA, logistic regression, SVM, $k$-NN.}
+\oneline{Generative models learn how data are produced, $P(\mathbf x\mid y)P(y)$ (Naive Bayes, LDA/QDA, GMM classifiers, GANs and VAEs as
+generators); discriminative models learn $P(y\mid\mathbf x)$ or a boundary directly (logistic regression, SVM, trees, neural nets);
+$k$-NN is a non-parametric discriminative method.}
+\why Generative models can generate samples, handle missing features naturally, and do well with little data; discriminative models usually
+win on accuracy with enough data.
+\end{qa}
+
+\begin{qa}{LDA vs PCA: when would PCA's first component be useless for classification?}
+\oneline{When the direction of largest total variance is unrelated to the class difference, for example two parallel elongated clusters
+separated across their narrow direction.}
+\why PCA picks the long axis (where both clusters spread); projecting on it mixes the classes completely. LDA picks the narrow axis.
+\end{qa}
+
+\begin{qa}{\deep Under what assumptions is LDA the Bayes-optimal classifier, and what changes with QDA?}
+\oneline{If each class is Gaussian with the same covariance, the log-posterior ratio is linear in $\mathbf x$ and LDA is optimal; with
+different covariances the quadratic terms no longer cancel and the optimal boundary is quadratic (QDA).}
+\why $\log\frac{P(1\mid\mathbf x)}{P(2\mid\mathbf x)} = \mathbf x^\top\Sigma^{-1}(\boldsymbol\mu_1 - \boldsymbol\mu_2) + \text{const}$ when the
+$\mathbf x^\top\Sigma^{-1}\mathbf x$ terms cancel. QDA needs a covariance per class: $Kd(d+1)/2$ parameters, more variance; regularised DA
+interpolates.
+\end{qa}
+
+\begin{qa}{How would you speed up nearest-neighbour search over 50 lakh job embeddings?}
+\oneline{Use an approximate nearest-neighbour index such as HNSW or IVF with product quantisation (FAISS/ScaNN), trading a little recall for
+orders-of-magnitude speed, and pre-filter by hard constraints like location.}
+\why HNSW builds a navigable small-world graph; search hops greedily toward the query in $O(\log n)$. IVF clusters vectors and searches only
+the nearest clusters; PQ compresses vectors to bytes. Measure recall@k against brute force on a sample.
+\end{qa}
+
+\begin{qa}{\deep Can $k$-NN be used for regression and for imputation? What are the risks?}
+\oneline{Yes: average the neighbours' targets for regression, and fill a missing value with the neighbours' values for imputation; risks are
+scaling, irrelevant features dominating distances, high dimensions, and leakage if the imputer is fitted on test data.}
+\worked Neighbours with value 10 at distance 1 and 20 at distance 2, weights $1/d$: $(10 + 10)/(1 + 0.5) = 13.3$.
+\end{qa}
+
+\begin{qa}{Gaussian Naive Bayes: how would it classify a candidate with test score 70 if passers have mean 75, sd 5 and failers mean 60,
+sd 10, with equal priors?}
+\oneline{Compare normal densities: passers $\phi(-1)/5 = 0.0484$, failers $\phi(1)/10 = 0.0242$; predict ``pass'' with posterior $0.667$.}
+\why $\phi(1) = 0.242$. Passers: $z = (70-75)/5 = -1$, density $0.242/5 = 0.0484$. Failers: $z = 1$, $0.242/10 = 0.0242$. Ratio 2:1.
+\end{qa}
+
+\begin{qa}{\deep Is $k$-NN with $k = 1$ ever a good model?}
+\oneline{Yes, when classes are well separated, labels are clean and the distance is meaningful (e.g. near-duplicate detection, or embeddings
+trained for similarity); its asymptotic error is at most twice the Bayes error.}
+\why The Cover--Hart result: as $n\to\infty$, 1-NN error $\le 2\times$ Bayes error. With good embeddings, 1-NN retrieval is the basis of
+duplicate-resume detection and ``find the canonical skill for this raw string'' in taxonomy normalisation.
+\end{qa}

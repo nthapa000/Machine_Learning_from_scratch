@@ -1,1 +1,349 @@
-% TODO 06_trees
+\chapter{Decision Trees}
+\companion{StatQuest: Decision and Classification Trees, Clearly Explained}{\ytid{_L39rN6gz7Y}}
+
+Decision trees are the building block of random forests, gradient boosting, XGBoost and LightGBM, which together win
+most tabular problems, including most at InfoEdge. Glassdoor reports for InfoEdge include ``pseudo-code a decision
+tree''; the experience notes include reducing overfitting in trees. Be able to compute impurity by hand and write the
+algorithm from memory.
+
+\section{A tree is a game of twenty questions}
+To guess whether a seeker will apply to a job, ask a sequence of yes/no questions:
+\begin{center}
+\begin{tikzpicture}[level distance=1.25cm,sibling distance=4.2cm,
+  every node/.style={draw,rounded corners,font=\small,align=center,fill=accentlight},
+  edge from parent/.style={draw,-{Stealth}}]
+\node {Job in preferred city?}
+  child {node {Salary $\ge$ expected?}
+    child {node[fill=exbg] {Apply: 72\%}}
+    child {node[fill=trbg] {Apply: 18\%}}}
+  child {node {Remote?}
+    child {node[fill=exbg] {Apply: 40\%}}
+    child {node[fill=trbg] {Apply: 4\%}}};
+\end{tikzpicture}
+\end{center}
+\begin{itemize}
+\item Each internal \textbf{node} tests one feature against a threshold (``experience $\le 3.5$'') or a category set.
+\item Each \textbf{branch} is an answer; each \textbf{leaf} holds a prediction: the majority class (or class proportions)
+  for classification, the mean target for regression.
+\item A prediction walks from the root to one leaf. Depth $D$ means at most $D$ questions.
+\end{itemize}
+In feature space, each split cuts along one axis, so a tree partitions the space into axis-aligned rectangles (boxes),
+each with a constant prediction.
+
+\section{How to choose a question: impurity}
+At each node we want the question that makes the two children as \emph{pure} as possible (each child mostly one class).
+We need a number for impurity.
+
+\subsection{Gini impurity}
+\[ \text{Gini} = 1 - \sum_k p_k^2, \]
+where $p_k$ is the fraction of class $k$ in the node. Interpretation: the probability that two items picked at random
+(with replacement) from the node have different classes. Pure node: 0. Two classes 50/50: $1 - 0.25 - 0.25 = 0.5$
+(the maximum for two classes).
+
+\subsection{Entropy}
+\[ H = -\sum_k p_k\log_2 p_k. \]
+Interpretation: the average number of yes/no questions (bits) needed to identify the class of a random item. Pure: 0;
+50/50: 1 bit; four equally likely classes: 2 bits.
+
+\begin{example}[: impurities of one node]
+8 positives, 2 negatives: $p = (0.8, 0.2)$.
+Gini $= 1 - 0.64 - 0.04 = 0.32$. Entropy $= -0.8\log_2 0.8 - 0.2\log_2 0.2 = 0.8(0.322) + 0.2(2.322) = 0.258 + 0.464 = 0.722$ bits.
+\end{example}
+
+\subsection{Information gain}
+The quality of a split is how much it reduces impurity, weighting each child by its share of the rows:
+\[ \text{Gain} = I(\text{parent}) - \sum_{c}\frac{n_c}{n}I(c). \]
+
+\begin{example}[: compare two splits]
+Parent: 6 apply, 6 do not. Entropy $=1$.
+\textbf{Split A} (``preferred city?''): left (5 yes, 1 no), right (1 yes, 5 no). Each child: $p = (5/6, 1/6)$, entropy
+$= 0.650$. Weighted: $0.650$. Gain $= 1 - 0.650 = 0.350$.
+\textbf{Split B} (``remote?''): left 8 rows (6 yes, 2 no), right 4 rows (0 yes, 4 no). Left entropy $= 0.811$, right $= 0$.
+Weighted $= \frac{8}{12}0.811 = 0.541$. Gain $= 0.459$. \textbf{Split B wins}, even though its left child is not pure, because
+the right child is perfectly pure and holds a third of the data.
+With Gini: parent $0.5$; A: each child $1 - (25+1)/36 = 0.278$, gain $0.222$; B: left $1 - (0.5625 + 0.0625) = 0.375$,
+weighted $0.25$, gain $0.25$. Same winner.
+\end{example}
+
+\subsection{Regression trees: variance reduction}
+For a numeric target, impurity is the variance (or the sum of squared errors around the node mean). The leaf predicts the
+mean.
+\begin{example}[: one regression split]
+Targets in a node: 2, 4, 6, 20. Mean 8; SSE $= 36 + 16 + 4 + 144 = 200$. Split ``$\{2,4,6\}$ vs $\{20\}$'': left mean 4, SSE $=
+4 + 0 + 4 = 8$; right SSE $= 0$. Reduction $= 192$. The outlier gets its own leaf.
+\end{example}
+
+\subsection{How thresholds are searched}
+For a numeric feature, sort the node's values; candidate thresholds are midpoints between consecutive distinct values
+($m - 1$ candidates for $m$ distinct values). Evaluate the gain for every feature and every threshold; pick the best. With
+running sums, all thresholds of one sorted feature can be scored in one pass. Histogram methods (LightGBM, XGBoost
+\code{hist}) bucket values into about 256 bins first, making this much faster.
+
+\section{The algorithm (pseudo-code)}
+\begin{lstlisting}
+def build_tree(rows, depth):
+    # stopping rules
+    if depth == MAX_DEPTH or len(rows) < MIN_SAMPLES_SPLIT or is_pure(rows):
+        return Leaf(prediction(rows))           # majority class / mean
+    best = None
+    for feature in features:
+        for threshold in candidate_thresholds(rows, feature):
+            left, right = split(rows, feature, threshold)
+            if len(left) < MIN_SAMPLES_LEAF or len(right) < MIN_SAMPLES_LEAF:
+                continue
+            gain = impurity(rows) - (len(left)*impurity(left) + len(right)*impurity(right)) / len(rows)
+            if best is None or gain > best.gain:
+                best = Split(feature, threshold, gain, left, right)
+    if best is None or best.gain < MIN_GAIN:
+        return Leaf(prediction(rows))
+    return Node(best.feature, best.threshold,
+                build_tree(best.left, depth + 1),
+                build_tree(best.right, depth + 1))
+
+def predict(node, x):
+    while not node.is_leaf:
+        node = node.left if x[node.feature] <= node.threshold else node.right
+    return node.prediction
+\end{lstlisting}
+\textbf{Complexity.} Training: with pre-sorting, about $O(d\,n\log n)$ per level, so $O(d\,n\log n\cdot\text{depth})$ overall.
+Prediction: $O(\text{depth})$, independent of $n$: very fast.
+
+\subsection{Greedy, not optimal}
+The algorithm picks the best split \emph{now}, never reconsidering. Finding the globally optimal tree is NP-hard. Greedy
+choice can miss splits that look useless alone but are powerful together (XOR: neither $x_1$ nor $x_2$ alone reduces
+impurity, but both together separate perfectly).
+
+\section{The classic algorithms}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X X}
+\toprule
+& ID3 & C4.5 & CART\\
+\midrule
+Criterion & information gain (entropy) & gain ratio & Gini (classification), MSE (regression)\\
+Splits & multiway on categoricals & multiway; handles numeric thresholds & binary only\\
+Tasks & classification & classification & classification and regression\\
+Missing values & no & fractional instances & surrogate splits\\
+Pruning & no & error-based & cost-complexity\\
+\bottomrule
+\end{tabularx}
+\end{center}
+scikit-learn implements an optimised CART.
+
+\subsection{The bias toward many-valued features, and gain ratio}
+A feature like \code{customer\_id} with a unique value per row splits the data into pure singletons: maximum information
+gain, zero generalisation. \textbf{Gain ratio} divides gain by the split information $-\sum\frac{n_c}{n}\log_2\frac{n_c}{n}$,
+which is large for many small children.
+
+\section{Overfitting and how to stop it}
+A tree grown until every leaf is pure memorises the training data: training accuracy 100\%, high variance (change a few
+rows and the whole structure changes, because an early split change cascades).
+
+\textbf{Pre-pruning (early stopping)}: \code{max\_depth}, \code{min\_samples\_split}, \code{min\_samples\_leaf},
+\code{max\_leaf\_nodes}, \code{min\_impurity\_decrease}, \code{max\_features}.
+
+\textbf{Post-pruning}: grow a full tree, then cut back. \textbf{Cost-complexity pruning} (CART) minimises
+\[ R_\alpha(T) = R(T) + \alpha|T|, \]
+training error plus $\alpha$ times the number of leaves. Each $\alpha$ gives a nested subtree; choose $\alpha$ by cross-validation
+(scikit-learn: \code{ccp\_alpha}, and \code{cost\_complexity\_pruning\_path}).
+\begin{example}[: is pruning worth it?]
+$\alpha = 0.02$. Subtree $T_1$: error 0.10, 5 leaves: $R = 0.10 + 0.10 = 0.20$. Pruned $T_2$: error 0.13, 2 leaves:
+$R = 0.13 + 0.04 = 0.17$. Prune.
+\end{example}
+Post-pruning sees the whole tree, so it avoids the ``horizon effect'' of pre-pruning (stopping before a weak split that
+enables strong later ones).
+
+\section{Strengths and weaknesses}
+\textbf{Strengths}: interpretable (a small tree is a flowchart a recruiter can read); handles numeric and categorical
+features; no scaling needed (only the order of values matters, so any monotone transform leaves the tree unchanged);
+captures interactions and non-linearity automatically; fast predictions; some implementations handle missing values.
+
+\textbf{Weaknesses}: high variance and instability; axis-aligned boundaries approximate diagonal boundaries with
+staircases; piecewise-constant predictions, so \textbf{no extrapolation} beyond the training range; greedy; biased
+toward high-cardinality features; poorly calibrated probabilities from pure leaves.
+
+\section{Feature importance}
+\textbf{Impurity-based (MDI)}: sum, over all nodes splitting on feature $j$, of the weighted impurity decrease; normalise
+to sum to 1. Fast, but biased toward high-cardinality and continuous features and computed on training data.
+\textbf{Permutation importance}: shuffle feature $j$ in validation data and measure how much the metric drops. Model
+agnostic, uses held-out data, but splits credit between correlated features. \textbf{SHAP} values give per-prediction
+attributions with consistency guarantees (TreeSHAP is exact and fast for trees).
+
+\begin{practical}[: trees at InfoEdge]
+Single trees are rarely the production model, but they are (1) the unit inside every GBM ranking and lead-scoring model;
+(2) a great \textbf{explanation tool}: fit a depth-3 tree to a black-box model's predictions to describe its logic to the
+99acres sales team (``high intent = viewed $\ge$5 listings in one locality in 7 days and price band within 20\%'');
+(3) quick \textbf{segment discovery} for the case-study round.
+\end{practical}
+
+\stuck{StatQuest: Entropy (for data science), Clearly Explained}{\ytid{YtebGVx-Fxw}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{Glassdoor, InfoEdge: pseudo-code a decision tree} Write the training algorithm for a classification tree and
+state its complexity.}
+\oneline{Recursively, for each node, try every feature and every candidate threshold, pick the split with the largest
+impurity decrease, and recurse on the two children until a stopping rule fires; training costs about
+$O(d\,n\log n)$ per depth level and prediction costs $O(\text{depth})$.}
+\why I would write the pseudo-code above and narrate four design decisions:
+\begin{enumerate}
+\item \textbf{Impurity}: Gini (default, slightly faster, no logarithm) or entropy.
+\item \textbf{Candidate thresholds}: midpoints between sorted distinct values; for categorical features either one-hot
+  or, for binary classification, sort categories by positive rate and treat as ordinal (provably optimal for Gini).
+\item \textbf{Stopping}: max depth, min samples per split/leaf, pure node, min gain.
+\item \textbf{Leaf value}: majority class and class proportions (for \code{predict\_proba}).
+\end{enumerate}
+Complexity: sorting each feature costs $O(n\log n)$; scanning thresholds with running class counts is $O(n)$ per feature;
+at each depth level the nodes partition the $n$ rows, so total per level is $O(d\,n\log n)$ (or $O(d\,n)$ with pre-sorting
+or histograms).
+\pushes \emph{``How would you make it a regression tree?''} Replace Gini with variance (SSE) and the leaf value with the mean.
+\emph{``How do you handle a missing value at prediction time?''} Send it down a learned default direction (XGBoost), use
+surrogate splits (CART), or impute.
+\end{qa}
+
+\begin{qa}{\pyq{INT: reducing overfitting in trees} How do you stop a decision tree from overfitting?}
+\oneline{Constrain growth (max depth, min samples per leaf, max leaf nodes, min impurity decrease), post-prune with
+cost-complexity pruning tuned by cross-validation, or replace the single tree by an ensemble (random forest or boosting).}
+\why A tree can always reach zero training error by giving every point its own leaf, which memorises noise. Each control limits
+how finely the space can be cut: \code{min\_samples\_leaf=50} means no prediction is based on fewer than 50 rows, so
+leaf estimates are stable. Cost-complexity pruning penalises leaves with $\alpha|T|$. Ensembles attack variance directly by
+averaging (bagging) or by building in many small, shrunk steps (boosting).
+\worked Shiksha lead data: unlimited depth 100\% train / 71\% val; \code{max\_depth=8, min\_samples\_leaf=40}: 83\% / 80\%;
+random forest: 88\% / 85\%.
+\pushes \emph{``Which is better, pre- or post-pruning?''} Post-pruning is usually better because it sees later useful splits;
+pre-pruning is cheaper. In practice, tune \code{min\_samples\_leaf} and \code{max\_depth} by CV.
+\end{qa}
+
+\begin{qa}{\pyq{OA: entropy and information gain} A node has 8 positives and 2 negatives. Compute its entropy and Gini. Then
+compute the information gain of splitting a 6/6 parent into (5,1) and (1,5).}
+\oneline{Entropy $0.722$ bits, Gini $0.32$; information gain $1 - 0.650 = 0.350$ bits.}
+\why As in the worked examples: $H(5/6,1/6) = -\frac56\log_2\frac56 - \frac16\log_2\frac16 = 0.219 + 0.431 = 0.650$; both
+children have equal size and entropy, so the weighted child entropy is 0.650.
+\end{qa}
+
+\begin{qa}{Gini or entropy: does it matter?}
+\oneline{Rarely: they choose the same split in the vast majority of cases; Gini is slightly cheaper (no logarithm), entropy
+is slightly more sensitive to changes in small class probabilities.}
+\why Both are concave, zero for pure nodes and maximal for uniform ones; Gini is roughly a scaled second-order approximation
+of entropy. Empirical studies find them disagreeing on about 2\% of splits. Mention \textbf{misclassification error}
+$1 - \max_kp_k$ as a third option that is a poor splitting criterion: it is not strictly concave, so it often sees zero gain
+for useful splits.
+\end{qa}
+
+\begin{qa}{\deep A regression tree is trained on flats priced 20 to 90 lakh. What does it predict for a mansion that is far
+larger than anything in training? Can a random forest or gradient boosting do better?}
+\oneline{It predicts the mean of whichever leaf the mansion falls into, at most about 90 lakh: trees cannot extrapolate beyond
+the range of training targets, and forests and GBMs (sums or averages of such leaves) cannot either.}
+\why Each leaf predicts a training-data average, and every split beyond the largest training value sends the mansion to the
+rightmost leaf. Random forest predictions are averages of leaf means (bounded by the target range). Gradient boosting
+sums many trees' leaf values; in practice it also saturates. For trend extrapolation (prices rising over time, sales growing),
+detrend first and model residuals with the tree, use linear models or linear trees (LightGBM \code{linear\_tree}), or add a
+linear component.
+\worked Training max price 90 lakh. A 5{,}000 sq ft villa: tree says 88 lakh (the mean of the largest-flat leaf). A linear model
+on log price extrapolates to about 3 crore.
+\pushes \emph{``Where does this bite in practice?''} Forecasting with time trends: a GBM trained on 2023--2025 application
+counts cannot predict 2026 values above the historic maximum. Use differencing or a ratio target.
+\end{qa}
+
+\begin{qa}{\deep Why do decision trees not need feature scaling? Which preprocessing \emph{can} change a tree?}
+\oneline{Splits depend only on the order of values, so any strictly increasing transform (scaling, log) leaves the tree unchanged;
+changes that alter order or grouping (one-hot vs ordinal encoding of categories, binning, combining features) do change it.}
+\why A threshold $x\le t$ on $x$ is identical to $\log x \le \log t$. But ordinal-encoding ``city'' as 1, 2, 3, \dots\ imposes an
+arbitrary order, so the tree can only split cities into contiguous blocks of that order. One-hot gives one city versus the rest per
+split. Creating a ratio feature (price per sq ft) can let one split do what needed many.
+\end{qa}
+
+\begin{qa}{Why do trees prefer features with many unique values, and how is it fixed?}
+\oneline{More unique values offer more candidate splits, so by chance alone one of them looks good, and an ID-like feature can
+produce pure singleton leaves; gain ratio, minimum leaf sizes, permutation importance and dropping IDs fix it.}
+\why With $m$ distinct values there are $m-1$ thresholds to try; the maximum of many noisy gains is optimistic (multiple comparisons).
+ID3 with \code{customer\_id} gives maximum information gain and zero generalisation. Fixes: C4.5 gain ratio, conditional inference
+trees (statistical tests), \code{min\_samples\_leaf}, and never feeding IDs.
+\end{qa}
+
+\begin{qa}{\deep Can a decision tree learn XOR? What does this tell you about greedy splitting?}
+\oneline{A depth-2 tree can represent XOR, but a greedy learner may not find it, because no single first split reduces impurity
+on its own; with real data's noise it usually finds it, but in pure form the first split's gain is zero.}
+\why Four points $(0,0)\to0$, $(0,1)\to1$, $(1,0)\to1$, $(1,1)\to0$: splitting on $x_1$ gives children (0,1) and (1,0), each
+50/50: zero gain. Same for $x_2$. A greedy algorithm with a ``min gain $> 0$'' rule stops at the root. Without that rule it splits
+anyway (ties broken arbitrarily) and the second level separates perfectly. Lesson: greedy, one-step look-ahead misses
+interactions whose components are individually useless; ensembles with random feature choices and deeper trees mitigate it.
+\end{qa}
+
+\begin{qa}{How does a decision tree handle categorical features?}
+\oneline{CART-style implementations need numeric input, so categories are one-hot or ordinal encoded; some libraries split
+categories natively by grouping them into two subsets, using the trick of sorting categories by target mean.}
+\why For binary classification or regression, sorting the $k$ categories by mean target and treating them as ordered finds the best
+two-way partition among $2^{k-1}-1$ possibilities in $O(k\log k)$. LightGBM and CatBoost do native categorical splits; recent
+scikit-learn also supports them in \code{HistGradientBoosting}. One-hot with many levels makes deep, unbalanced trees.
+\end{qa}
+
+\begin{qa}{How does a tree compute \code{predict\_proba}, and why are those probabilities poorly calibrated?}
+\oneline{It returns the class proportions of the training rows in the leaf; deep trees have small, pure leaves that output 0 or 1,
+so probabilities are overconfident.}
+\why A leaf with 3 positives out of 3 says $p = 1.0$, but the true rate for such inputs might be 0.7. Remedies: larger
+\code{min\_samples\_leaf}, Laplace smoothing $(k+1)/(n+2)$, ensembling (averages are smoother), and post-hoc calibration
+(isotonic/Platt).
+\end{qa}
+
+\begin{qa}{What is cost-complexity pruning? Work an example.}
+\oneline{It chooses the subtree that minimises training error plus $\alpha$ times the number of leaves, with $\alpha$ tuned by
+cross-validation.}
+\why Increasing $\alpha$ from 0 gives a sequence of nested subtrees (weakest-link pruning): at each stage prune the internal node
+whose removal increases error least per leaf removed. Worked example in the theory section: $0.20$ vs $0.17$ means prune.
+\end{qa}
+
+\begin{qa}{Explain impurity-based vs permutation feature importance. Which would you trust?}
+\oneline{Impurity importance sums each feature's split gains on training data and is biased toward high-cardinality features;
+permutation importance measures the validation metric drop when a feature is shuffled and is usually more trustworthy, though
+it splits credit among correlated features.}
+\why A random ID column gets high MDI importance (many splits that fit noise) but near-zero permutation importance (shuffling it
+does not hurt validation). Correlated features: shuffling one leaves its twin intact, so both look unimportant. Fix by grouping
+correlated features or using SHAP with care.
+\end{qa}
+
+\begin{qa}{\deep Why are single decision trees called unstable, and why is that a good thing for ensembles?}
+\oneline{A small change in the data can change an early split and therefore the whole tree below it; that high variance means
+different trees make different errors, which averaging cancels.}
+\why Bagging's variance reduction is $\rho\sigma^2 + \frac{1-\rho}{B}\sigma^2$: it needs models that individually have high
+variance $\sigma^2$ and are not too correlated ($\rho$ small). Deep trees have low bias and high variance: ideal for bagging.
+Stable models like linear regression gain little from bagging.
+\end{qa}
+
+\begin{qa}{What does a decision boundary of a tree look like in 2D? What kind of boundary is hard for it?}
+\oneline{A set of axis-aligned rectangles; diagonal or curved boundaries need many small steps (a staircase), requiring a deep tree.}
+\why A boundary like $x_1 = x_2$ is approximated by a staircase; with limited depth the approximation is coarse. Fixes: add a
+feature $x_1 - x_2$ (one split then suffices), use oblique trees, or use ensembles (many staircases averaged look smoother).
+\end{qa}
+
+\begin{qa}{How many leaves can a binary tree of depth 10 have? How many candidate thresholds for a feature with 100
+distinct values?}
+\oneline{At most $2^{10} = 1024$ leaves; 99 candidate thresholds.}
+\end{qa}
+
+\begin{qa}{\deep You fit a depth-3 tree to explain a complex model's predictions to a business team. What is this called and what
+are its risks?}
+\oneline{A global surrogate model; the risk is that it explains the surrogate, not the original, so you must report its fidelity
+(how often it agrees with the black box) and keep it shallow enough to read.}
+\why Fit the tree to the black-box predictions (not the true labels). If fidelity is 92\%, say so; regions of disagreement deserve
+local explanations (SHAP). Useful for case-study rounds: ``this is the logic the lead scorer learned''.
+\end{qa}
+
+\begin{qa}{Compute the Gini impurity of a node with class counts (2, 3, 5) and the entropy of one with counts (3, 3, 6).}
+\oneline{Gini $= 1 - (0.04 + 0.09 + 0.25) = 0.62$; entropy $= 1.5$ bits.}
+\why Entropy: $p = (0.25, 0.25, 0.5)$; $-2(0.25\log_20.25) - 0.5\log_20.5 = 2(0.5) + 0.5 = 1.5$.
+\end{qa}
+
+\begin{qa}{How do trees handle missing values?}
+\oneline{Options: impute first; CART surrogate splits (use a correlated feature when the split feature is missing); C4.5 sends the
+row down all branches with fractional weights; XGBoost/LightGBM learn a default direction for missing values at each split.}
+\why XGBoost tries sending all missing rows left, then right, and keeps the better gain; this also captures ``missingness is
+informative'' (salary blank often means fresher). scikit-learn's \code{DecisionTreeClassifier} supports NaN in recent versions;
+\code{HistGradientBoosting} always has.
+\end{qa}
+
+\begin{qa}{\deep A tree's top split is on ``days since last login''. The product manager concludes recent login causes applying.
+How do you respond?}
+\oneline{A split shows predictive association, not causation; recent login may simply mark already-active job seekers, so I would
+propose an experiment (re-engagement nudges with a holdout) to measure the causal effect.}
+\why Trees pick the most predictive feature, and the most predictive feature is often a proxy for intent. Causal questions need
+interventions or causal designs. This is a common case-study trap.
+\end{qa}

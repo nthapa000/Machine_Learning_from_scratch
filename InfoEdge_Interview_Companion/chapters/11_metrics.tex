@@ -1,1 +1,283 @@
-% TODO 11_metrics
+\chapter{Evaluation Metrics and the Confusion Matrix}
+\companion{StatQuest: The Confusion Matrix}{\ytid{Kdsp6soqA7o}}
+
+At the 2026--27 pre-placement talk, the panel used a spam example to explain what they look for: ``do you look at
+recall, not just accuracy; can you create the right dataframe; do you frame it properly as classification or
+regression''. The Round 3 task asked for a confusion matrix, precision, recall, F1 and accuracy. The OA asked what a false
+negative means. Metrics are where business sense meets ML, so interviewers use them to judge maturity.
+
+\section{The confusion matrix}
+For a binary classifier, every prediction falls into one of four boxes. Call the class we care about (spam, fraud,
+``will buy'') \textbf{positive}.
+\begin{center}
+\begin{tabular}{l|cc}
+& \textbf{Predicted positive} & \textbf{Predicted negative}\\\hline
+\textbf{Actually positive} & TP (true positive) & FN (false negative)\\
+\textbf{Actually negative} & FP (false positive) & TN (true negative)\\
+\end{tabular}
+\end{center}
+Read the names as: \emph{was the prediction right (True/False)} + \emph{what did we predict (Positive/Negative)}.
+A \textbf{false negative} is a positive we called negative: a spam message that reached the inbox, a fraud we missed, a
+high-intent buyer we did not call. A \textbf{false positive} is a false alarm: a genuine mail sent to spam.
+
+In statistics language: FP is a \textbf{Type I error} (rejecting a true null ``this is normal''), FN is a \textbf{Type II
+error}.
+
+\section{The metrics, each answering one question}
+Running example: a spam filter on 1{,}000 messages, 100 actually spam. It flags 90 messages, of which 80 are spam.
+So TP $= 80$, FP $= 10$, FN $= 20$, TN $= 890$.
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l l X c}
+\toprule
+Metric & Formula & Question it answers & Example\\
+\midrule
+Accuracy & $\frac{TP + TN}{\text{all}}$ & What fraction of all predictions were right? & $970/1000 = 0.97$\\
+Precision & $\frac{TP}{TP + FP}$ & Of what I flagged, how much was really positive? & $80/90 = 0.889$\\
+Recall (sensitivity, TPR) & $\frac{TP}{TP + FN}$ & Of all real positives, how many did I catch? & $80/100 = 0.80$\\
+Specificity (TNR) & $\frac{TN}{TN + FP}$ & Of all real negatives, how many did I leave alone? & $890/900 = 0.989$\\
+FPR & $\frac{FP}{FP + TN} = 1 - $ spec. & How often do negatives raise a false alarm? & $10/900 = 0.011$\\
+F1 & $\frac{2PR}{P + R}$ & Single balance of precision and recall & $0.842$\\
+NPV & $\frac{TN}{TN + FN}$ & Of what I cleared, how much was really negative? & $890/910 = 0.978$\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Why accuracy misleads on imbalanced data}
+If only 1\% of messages are spam, a model that says ``not spam'' to everything is 99\% accurate and completely useless:
+recall 0. With rare positives, accuracy is dominated by the easy negatives. This is exactly the point the panel made.
+
+\subsection{Precision vs recall: which matters?}
+\begin{itemize}
+\item \textbf{Recall matters} when missing a positive is costly: disease screening, fraud, safety, and (for the panel's spam
+  example) letting dangerous phishing through. Also lead generation: a missed high-intent buyer is lost revenue.
+\item \textbf{Precision matters} when false alarms are costly: moving a recruiter's genuine mail to spam, auto-banning a
+  user, sending a telecaller to a cold lead (caller time is limited).
+\item Usually both matter, and the threshold sets the balance.
+\end{itemize}
+
+\subsection{F1 and F-beta}
+F1 is the \textbf{harmonic mean} of precision and recall. The harmonic mean is dragged down by the smaller value, so a model
+cannot score well by being excellent at one and terrible at the other.
+\begin{example}[: harmonic vs arithmetic]
+$P = 0.9$, $R = 0.1$: arithmetic mean 0.5 (looks fine), F1 $= 2(0.09)/1.0 = 0.18$ (reveals the problem).
+\end{example}
+$F_\beta = (1 + \beta^2)\frac{PR}{\beta^2P + R}$ weights recall $\beta$ times as much as precision. $F_2$ for recall-heavy tasks,
+$F_{0.5}$ for precision-heavy.
+\begin{example}[: F-beta]
+$P = 0.5$, $R = 0.8$: $F_2 = \frac{5\times0.4}{4\times0.5 + 0.8} = \frac{2}{2.8} = 0.714$. $F_{0.5} = \frac{1.25\times0.4}{0.125 + 0.8} = 0.541$.
+\end{example}
+
+\subsection{Matthews correlation coefficient and Cohen's kappa}
+MCC $= \frac{TP\cdot TN - FP\cdot FN}{\sqrt{(TP+FP)(TP+FN)(TN+FP)(TN+FN)}}$ uses all four cells, ranges from $-1$ to $1$, and stays
+informative under imbalance. Kappa compares accuracy with the accuracy expected by chance agreement.
+
+\section{Thresholds and threshold-free metrics}
+
+\subsection{The threshold moves the trade-off}
+A probabilistic classifier outputs a score; we choose a cut-off $t$. Raising $t$: fewer positives predicted; precision
+usually up, recall down. Lowering $t$: the opposite. The model did not change, only the decision.
+
+\subsection{ROC curve and AUC}
+Plot TPR (recall) against FPR for every threshold. A random model is the diagonal; a perfect model goes straight up to (0, 1).
+The \textbf{area under the ROC curve (AUC)} has a beautiful meaning:
+\[ \text{AUC} = P(\text{a random positive gets a higher score than a random negative}). \]
+\begin{example}[: AUC by counting pairs]
+Scores: positives $0.8, 0.4$; negatives $0.5, 0.3, 0.1$. Pairs: 6. Positive 0.8 beats all 3 negatives; positive 0.4 beats 0.3 and
+0.1 but not 0.5. Correctly ordered pairs $= 5$; AUC $= 5/6 = 0.833$. Ties count half.
+\end{example}
+AUC is threshold-free and insensitive to class balance (both axes are rates within a class), and invariant to any monotone transform
+of scores (it only looks at order).
+
+\subsection{Precision--recall curve}
+Plot precision against recall over thresholds. With rare positives it is far more revealing than ROC: a model can have ROC AUC 0.95
+while precision is terrible, because a small FPR on a huge negative class is still many false positives. The baseline of the PR curve
+is the positive rate (a random model's precision), not 0.5.
+\begin{example}[: why ROC can look great while precision is poor]
+1{,}000{,}000 negatives, 1{,}000 positives. TPR 0.9 at FPR 0.01 looks excellent on ROC. But FP $= 10{,}000$ and TP $= 900$: precision
+$= 900/10{,}900 = 8\%$.
+\end{example}
+
+\subsection{Precision from sensitivity, specificity and prevalence}
+Bayes' theorem links them: $\text{precision} = \frac{\text{sens}\cdot\pi}{\text{sens}\cdot\pi + (1 - \text{spec})(1 - \pi)}$.
+\begin{example}[: a ``95\% accurate'' fraud test]
+Sensitivity 0.9, specificity 0.95, prevalence 2\%: $\frac{0.018}{0.018 + 0.049} = 0.269$. Only 27\% of flags are real fraud.
+\end{example}
+
+\section{Multiclass averaging}
+Compute per-class precision/recall/F1 by treating each class as positive in turn, then:
+\begin{itemize}
+\item \textbf{Macro average}: plain mean over classes. Every class counts equally, so rare classes matter.
+\item \textbf{Weighted average}: mean weighted by class frequency (support).
+\item \textbf{Micro average}: pool all TP, FP, FN, then compute. For single-label multiclass, micro F1 $=$ accuracy.
+\end{itemize}
+
+\section{Calibration metrics}
+\textbf{Brier score} $=\frac1n\sum(p_i - y_i)^2$ (lower is better). \textbf{Log loss}. \textbf{Reliability diagram}: bucket
+predictions (0--0.1, 0.1--0.2, \dots) and plot mean prediction vs actual positive rate; a calibrated model lies on the diagonal.
+\textbf{Expected calibration error} averages the gaps.
+
+\section{Regression and ranking metrics (summary)}
+Regression: MAE, RMSE, MAPE, $R^2$ (Chapter 2); RMSLE for skewed targets; pinball loss for quantiles.
+Ranking: \textbf{Precision@k}, \textbf{Recall@k}, \textbf{MRR} (mean of $1/\text{rank}$ of the first relevant result),
+\textbf{MAP}, \textbf{NDCG@k}: $\text{DCG@k} = \sum_{i=1}^k\frac{2^{rel_i} - 1}{\log_2(i+1)}$, divided by the ideal DCG.
+\begin{example}[: MRR]
+First relevant result at ranks 1, 3, 2 for three queries: MRR $= (1 + 1/3 + 1/2)/3 = 0.611$.
+\end{example}
+
+\section{Offline metrics vs business metrics}
+Offline metrics are proxies. The real question is the business outcome: applies per job, recruiter response rate, calls converted
+per caller-hour, time to hire. A model that wins offline should be confirmed with an \textbf{online A/B test}; guardrail metrics
+(complaints, unsubscribes, latency) must not degrade.
+
+\begin{practical}[: picking the metric at InfoEdge]
+\begin{itemize}
+\item \textbf{Spam/abuse}: recall at a fixed high precision (or the reverse), never accuracy.
+\item \textbf{Telecalling} (99acres): callers can make, say, 200 calls/day: precision@200 and conversions per call.
+\item \textbf{Resdex search}: NDCG@10 or recruiter actions (views, contacts) on the first page.
+\item \textbf{AI REX screening agent}: recall of genuinely fit candidates (do not drop good people) with a precision floor
+  (recruiter time).
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: ROC and AUC, Clearly Explained}{\ytid{4jRBRDbJemM}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{OA: what a false negative means} In a fraud model where positive means fraud, what is a false negative, and
+which error type is it?}
+\oneline{A fraudulent transaction that the model called legitimate, i.e. a missed fraud; it is a Type II error.}
+\why ``False'' because the prediction was wrong, ``negative'' because the prediction was negative. The null hypothesis is ``this
+transaction is normal''; failing to reject it when it is false is Type II. Its rate is $1 - $ recall.
+\end{qa}
+
+\begin{qa}{\pyq{Round 3 coding round} Given TP $=40$, FP $=10$, FN $=20$, TN $=130$, compute accuracy, precision, recall, F1 and
+specificity, and say which you would report for a placement model.}
+\oneline{Accuracy 0.85, precision 0.80, recall 0.667, F1 0.727, specificity 0.929; I would report the full confusion matrix plus
+precision, recall and F1 for the class the decision is about, and ROC AUC.}
+\why Total 200; accuracy $170/200$. Precision $40/50$. Recall $40/60$. F1 $= 2(0.8)(0.667)/1.467 = 0.727$. Specificity $130/140$.
+For a placement model, which error matters depends on use: if it is used to target students for extra coaching, recall of the
+``not placed'' class matters most (do not miss students who need help), so I would treat ``not placed'' as the positive class.
+\pushes \emph{``MCC?''} $(40\cdot130 - 10\cdot20)/\sqrt{50\cdot60\cdot140\cdot150} = 5000/7937 = 0.63$.
+\end{qa}
+
+\begin{qa}{\pyq{2026--27 talk: the spam example} You are building a spam classifier. Walk me through framing, data and
+evaluation; why is accuracy not enough?}
+\oneline{It is binary classification with rare positives, so I would build a labelled message dataframe with features from text and
+sender behaviour, split by time, and evaluate with precision, recall, PR AUC and the confusion matrix at a chosen threshold, because
+accuracy is dominated by the majority class.}
+\why
+\textbf{Framing.} Target: spam (1) vs ham (0). Not regression (there is no quantity to predict), unless we predict a ``spamminess''
+score, which is still a classifier's probability.
+\textbf{Dataframe.} One row per message: text, sender ID, sender account age, messages sent in the last hour, fraction of recipients
+who replied, links count, label. Avoid leakage: features must be computable at send time (``number of users who reported this
+message'' is a post-hoc signal, fine only if the model runs later).
+\textbf{Split.} By time (spam evolves), and by sender (so the model is not just memorising known spammers).
+\textbf{Model.} TF-IDF + logistic regression baseline; then GBM on combined text and behaviour features.
+\textbf{Metrics.} If 2\% is spam, an ``all ham'' model is 98\% accurate. Report recall (spam caught) and precision (genuine mail not
+lost) at the operating threshold, and PR AUC. Choose the threshold with business costs: losing a recruiter's interview invite to the
+spam folder is worse than letting one promotional spam through, so precision of the spam label must be high; for phishing,
+recall must be high. Possibly two thresholds: block above 0.98, spam-folder above 0.8.
+\pushes \emph{``Recall went up but users complain. Why?''} Precision fell: more genuine mails are being hidden. Check FP examples by
+segment (new recruiters with templated messages look spammy).
+\end{qa}
+
+\begin{qa}{\pyq{INT: imbalanced data} 1\% of your data is positive. How do you train and evaluate?}
+\oneline{Evaluate with precision, recall, F1, PR AUC (and ROC AUC) on a stratified, untouched test set; train with class weights or
+resampling (undersample, oversample, SMOTE) only on training folds, and tune the threshold.}
+\why Class weights multiply the loss for positives (scikit-learn \code{class\_weight="balanced"}: weight $n/(2n_c)$). Undersampling
+negatives speeds training; oversampling/SMOTE add positives. Resampling distorts probabilities (Chapter 3 correction). Never resample the
+test set. Often the simplest effective approach is a well-tuned GBM with \code{scale\_pos\_weight} and a tuned threshold. Also consider
+anomaly detection if positives are extremely rare and diverse.
+\end{qa}
+
+\begin{qa}{Compute ROC AUC for positive scores $0.8, 0.4$ and negative scores $0.5, 0.3, 0.1$, and explain what AUC means.}
+\oneline{AUC $= 5/6 = 0.833$; it is the probability that a randomly chosen positive is scored above a randomly chosen negative.}
+\why Counting pairs as shown. Equivalent to the normalised Mann--Whitney U statistic. 0.5 is random; below 0.5 means the scores are
+inverted.
+\end{qa}
+
+\begin{qa}{\deep A model has ROC AUC 0.95 but PR AUC 0.08 with 0.1\% positives. Is it good?}
+\oneline{It ranks positives above negatives very well on average, but because negatives are so numerous, even a tiny false-positive rate
+produces many false alarms, so precision at useful recall is poor; whether that is ``good'' depends on whether the use case can tolerate
+low precision.}
+\why PR AUC's baseline is 0.001, so 0.08 is 80 times better than random, yet only about 8\% of flags would be real at typical
+operating points. For human review queues with capacity limits, report precision@k. For a retrieval stage feeding a better
+second-stage model, high recall with modest precision is fine.
+\end{qa}
+
+\begin{qa}{Why is F1 a harmonic mean rather than an arithmetic mean?}
+\oneline{Because the harmonic mean is dominated by the smaller of precision and recall, so a model must be good at both; also F1 is
+naturally a harmonic mean because $1/F1$ is the average of $1/P$ and $1/R$, which treats precision and recall as rates over different
+denominators.}
+\why $P = 0.9$, $R = 0.1$: arithmetic 0.5, F1 0.18. Another view: F1 $= \frac{2TP}{2TP + FP + FN}$: it ignores TN entirely, which is
+appropriate when negatives are abundant and uninteresting.
+\end{qa}
+
+\begin{qa}{\deep What metric would you optimise for a telecalling team that can make only 100 calls a day out of 50{,}000 leads?}
+\oneline{Precision@100 (or expected conversions in the top 100), because the operational decision is which 100 to call; overall AUC or
+recall over all leads matters much less.}
+\why A model can have a lower AUC but better ordering at the very top. Evaluate on a time-based holdout: of the top 100 scored each day,
+how many converted? Also check calibration so you can compute expected revenue per call and staff accordingly. Over time, run an A/B
+test against the current rule-based list.
+\end{qa}
+
+\begin{qa}{When would you prefer specificity over sensitivity? Give a job-portal example.}
+\oneline{When false positives are expensive: for example auto-hiding recruiter accounts flagged as fraudulent, where blocking a genuine
+paying recruiter is very costly, so we need high specificity (few false alarms).}
+\end{qa}
+
+\begin{qa}{Compute precision for a test with sensitivity 0.9, specificity 0.95, prevalence 2\%.}
+\oneline{About $0.269$: $0.9\times0.02/(0.018 + 0.05\times0.98) = 0.018/0.067$.}
+\why Base-rate neglect: with rare positives, even good tests mostly flag negatives.
+\end{qa}
+
+\begin{qa}{Macro vs micro vs weighted F1: which would you report for classifying jobs into 30 functions where 5 functions have 70\% of
+jobs?}
+\oneline{Report macro F1 if every function matters equally (rare functions should not be ignored), weighted or micro F1 if overall volume
+matters; I would show both plus the per-class table.}
+\why Micro F1 equals accuracy for single-label problems and is dominated by the big classes. Macro reveals poor performance on small classes.
+\end{qa}
+
+\begin{qa}{\deep Your offline AUC improved from 0.80 to 0.83, but the A/B test shows no change in applies. Why might that be?}
+\oneline{The offline metric may not reflect what users see (only the top few positions matter), the improvement may be in parts of the
+ranking nobody views, there may be a train--serve mismatch or feedback loop, or the test may be underpowered.}
+\why Check NDCG@5 instead of AUC; check that features at serving match training (``train--serve skew''); position bias in logged data
+(users click top results regardless) can mislead offline evaluation; compute the minimum detectable effect of the A/B test.
+\end{qa}
+
+\begin{qa}{What does a reliability curve below the diagonal mean?}
+\oneline{The model is over-confident: when it predicts, say, 0.8, the actual positive rate is lower, like 0.6.}
+\why Fix with Platt or isotonic calibration on held-out data; check after resampling or class weighting, which commonly cause it.
+\end{qa}
+
+\begin{qa}{Compute NDCG@3 for relevances $(3, 2, 0)$ in the returned order when the ideal order is $(3, 2, 1)$.}
+\oneline{DCG $= 7 + 3/1.585 + 0 = 8.893$; ideal DCG $= 7 + 1.893 + 1/2 = 9.393$; NDCG $= 8.893/9.393 = 0.947$.}
+\why Gains $2^{rel} - 1$: 7, 3, 0 vs 7, 3, 1; discounts $1/\log_2(i+1)$: 1, 0.631, 0.5.
+\end{qa}
+
+\begin{qa}{\deep Can a model with lower accuracy be better? Give an example.}
+\oneline{Yes, whenever errors have different costs or classes are imbalanced: a fraud model at 95\% accuracy catching 80\% of fraud beats one
+at 99\% accuracy catching none.}
+\end{qa}
+
+\begin{qa}{How do you choose a classification threshold in practice?}
+\oneline{From business costs (minimise expected cost), from a capacity constraint (top-$k$), from a required precision or recall, or by
+maximising F1 or Youden's J on validation data; never on the test set.}
+\why Expected cost minimisation: predict positive if $p\cdot C_{FN} > (1-p)C_{FP}$, i.e. $p > \frac{C_{FP}}{C_{FP} + C_{FN}}$ for calibrated
+$p$. Youden's J $=$ TPR $-$ FPR picks the ROC point farthest above the diagonal.
+\end{qa}
+
+\begin{qa}{What is the Brier score of predictions $(0.9, 0.2, 0.6)$ for labels $(1, 0, 0)$?}
+\oneline{$(0.01 + 0.04 + 0.36)/3 = 0.137$.}
+\end{qa}
+
+\begin{qa}{\deep Why is accuracy fine for MNIST digit classification but not for fraud?}
+\oneline{MNIST classes are balanced and every error costs the same; fraud is extremely imbalanced and missed fraud costs far more than a
+false alarm, so a single accuracy number hides what matters.}
+\end{qa}
+
+\begin{qa}{How would you evaluate a regression model predicting salaries shown to job seekers?}
+\oneline{With a scale-aware error such as MAPE or RMSLE (a 1 lakh error matters more at 5 lakh than at 50 lakh), plus coverage of the
+predicted range, and segment-wise errors by city, experience and function to catch systematic bias.}
+\why Also check bias (mean signed error) per segment: a model consistently under-predicting salaries in tier-2 cities misleads users. For
+ranges, measure the fraction of true salaries inside the band and its average width.
+\end{qa}

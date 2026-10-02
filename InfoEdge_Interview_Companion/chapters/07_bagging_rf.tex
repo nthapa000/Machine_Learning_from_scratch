@@ -1,1 +1,315 @@
-% TODO 07_bagging_rf
+\chapter{Ensembles, Bagging and Random Forests}
+\companion{StatQuest: Random Forests Part 1, Building, Using and Evaluating}{\ytid{J4Wdy0Wc_xQ}}
+
+Random forests were asked about in InfoEdge interviews in detail (Glassdoor): intuition, bootstrap sampling, random
+feature selection, how each tree is trained, why a forest reduces variance compared with one tree, RF vs gradient
+boosting, and feature importance. The OA asked whether RF is bagging or boosting and the types of ensembles. The
+2026--27 talk even jotted ``Random forest \dots\ probabilistic''. This chapter answers all of that from first principles.
+
+\section{Wisdom of crowds}
+Ask one person to guess the number of sweets in a jar: they may be far off. Average the guesses of 500 people and the
+answer is usually remarkably close. Two conditions make this work: each guess must be \emph{somewhat} informed (better
+than random), and the errors must be \emph{different} from person to person (not all fooled the same way). Ensembles
+apply this to models.
+
+\section{Three families of ensembles}
+\begin{itemize}
+\item \textbf{Bagging} (bootstrap aggregating): train many models independently, each on a random resample of the data,
+  and average them (or vote). Reduces \emph{variance}. Example: random forest.
+\item \textbf{Boosting}: train models one after another, each focusing on the mistakes of the ensemble so far, and add
+  them up. Reduces \emph{bias} (and variance somewhat). Examples: AdaBoost, gradient boosting, XGBoost, LightGBM, CatBoost.
+\item \textbf{Stacking}: train several different models, then train a \emph{meta-model} that learns how to combine their
+  predictions (using out-of-fold predictions to avoid leakage).
+\end{itemize}
+Also: \textbf{voting} (hard: majority class; soft: average probabilities) and \textbf{blending} (stacking with a single holdout
+set instead of out-of-fold predictions).
+
+\section{Why averaging reduces variance: the formula}
+Suppose $B$ models each have prediction variance $\sigma^2$ and every pair has correlation $\rho$. The variance of their average is
+\[ \Var\Big(\frac1B\sum_b \hat f_b\Big) = \rho\sigma^2 + \frac{1-\rho}{B}\sigma^2. \]
+\begin{itemize}
+\item If the models were independent ($\rho = 0$): $\sigma^2/B$. Ten models cut variance tenfold.
+\item If identical ($\rho = 1$): $\sigma^2$. No gain at all.
+\item As $B\to\infty$, the variance falls to $\rho\sigma^2$: \emph{correlation} sets the floor.
+\end{itemize}
+So an ensemble wants many, individually strong, \emph{decorrelated} models. Averaging does not change the bias (the
+average of models with the same bias has that bias).
+
+\begin{example}[: how much does averaging help?]
+$\sigma^2 = 4$, $B = 10$. Independent: $0.4$. With $\rho = 0.3$: $1.2 + 0.7\cdot4/10 = 1.2 + 0.28 = 1.48$. With 1{,}000 models
+and $\rho = 0.3$: $1.2 + 0.0028 \approx 1.2$. Beyond a point, more trees barely help; lower correlation does.
+\end{example}
+
+\section{Majority voting: the maths of the crowd}
+If $B$ independent classifiers each have accuracy $p > 0.5$, majority vote accuracy rises with $B$ (Condorcet's jury theorem).
+\begin{example}[: three voters]
+Each 80\% accurate, independent. The vote is right if at least 2 of 3 are right:
+$P = 0.8^3 + 3\cdot0.8^2\cdot0.2 = 0.512 + 0.384 = 0.896$. With five voters at 0.6: $P = \sum_{k=3}^5\binom5k0.6^k0.4^{5-k} =
+0.3456 + 0.2592 + 0.0778 = 0.683$.
+If each were only 40\% accurate, three voters give $0.4^3 + 3\cdot0.4^2\cdot0.6 = 0.352$: voting makes bad models worse.
+\end{example}
+Real models are correlated, so gains are smaller, which is again why random forests work hard to decorrelate trees.
+
+\section{Bootstrap sampling}
+A \textbf{bootstrap sample} draws $n$ rows \emph{with replacement} from $n$ rows. Some rows appear several times, some not at all.
+The probability that a particular row is never chosen is $(1 - 1/n)^n \to e^{-1} \approx 0.368$. So each bootstrap sample contains
+about \textbf{63.2\%} of the distinct rows; the other 36.8\% are \textbf{out-of-bag (OOB)} for that model.
+\begin{example}[: OOB probability]
+$n = 1000$: $(0.999)^{1000} = 0.3677$. Expected unique rows in a bootstrap of 100: $100(1 - 0.99^{100}) = 63.4$.
+\end{example}
+
+\section{Random forest = bagged trees + random feature subsets}
+\begin{enumerate}
+\item For $b = 1,\dots,B$ (say 500):
+  \begin{enumerate}
+  \item Draw a bootstrap sample of the rows.
+  \item Grow a deep tree on it (often unpruned), but \textbf{at each split consider only a random subset of $m$ features}
+    (default $m = \sqrt d$ for classification, $d/3$ or all features for regression in various libraries).
+  \end{enumerate}
+\item Predict by majority vote (or averaging class probabilities) for classification, or averaging for regression.
+\end{enumerate}
+
+\textbf{Why the random feature subset?} Suppose one feature (say ``preferred city match'') is very strong. Plain bagging would put it
+at the root of nearly every tree, so the trees look alike and are highly correlated, and the $\rho\sigma^2$ floor stays high. Forcing
+each split to choose from a random subset sometimes hides the dominant feature, so other features get to shape the tree. The trees
+become less correlated; their average has lower variance. Each individual tree gets slightly worse (a bit more bias), but the
+forest gets better.
+
+\begin{example}[: the subset size]
+64 features, classification: $m = \sqrt{64} = 8$ features per split. If one feature dominates, the probability it is
+\emph{not} available at a given split is $1 - 8/64 = 87.5\%$.
+\end{example}
+
+\section{Out-of-bag error: free validation}
+Each row is OOB for about a third of the trees. Predict each row using only the trees that did not see it, and compare with its
+label. That OOB error is an almost unbiased estimate of test error, without a separate validation set. It is also how RF
+permutation importance was originally computed.
+
+\section{Feature importance in a forest}
+\begin{itemize}
+\item \textbf{Mean decrease in impurity (MDI)}: average over trees of the total impurity decrease from splits on each feature.
+  Fast; biased toward high-cardinality/continuous features.
+\item \textbf{Permutation importance} (mean decrease in accuracy): shuffle a feature's values in OOB or validation data and see how
+  much accuracy drops. Less biased; slower; correlated features share credit.
+\item \textbf{SHAP}: per-prediction attributions; TreeSHAP is exact for forests.
+\end{itemize}
+
+\section{Variants and practical notes}
+\begin{itemize}
+\item \textbf{Extra Trees} (extremely randomised trees): also pick thresholds at random (one per candidate feature) instead of
+  the best one; usually no bootstrap. Even less correlation, faster training, slightly more bias.
+\item \textbf{Isolation Forest}: random trees with random splits used for anomaly detection: anomalies are isolated in fewer splits
+  (shorter average path length).
+\item \textbf{Hyperparameters that matter}: \code{n\_estimators} (more is never worse for accuracy, only slower; stops improving
+  around 200--1000), \code{max\_features} (the decorrelation knob), \code{min\_samples\_leaf}/\code{max\_depth} (tree complexity),
+  \code{class\_weight} or balanced bootstrap for imbalance.
+\item \textbf{Parallel}: trees are independent, so training is embarrassingly parallel (\code{n\_jobs=-1}).
+\item \textbf{Weaknesses}: large memory and slower prediction than one tree; no extrapolation; probabilities can be poorly
+  calibrated (votes cluster away from 0 and 1); less accurate than well-tuned boosting on many tabular problems.
+\end{itemize}
+
+\section{Random forest vs gradient boosting}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X}
+\toprule
+& Random forest & Gradient boosting\\
+\midrule
+Ensemble type & bagging (parallel, independent trees) & boosting (sequential, each tree fixes the previous)\\
+Trees & deep, low bias, high variance & shallow (depth 3--8), high bias, low variance\\
+Mainly reduces & variance & bias (and variance via shrinkage)\\
+More trees & never overfits by itself (error plateaus) & can overfit; use early stopping\\
+Tuning & forgiving, good defaults & sensitive (learning rate, depth, trees, regularisation)\\
+Training & parallel across trees & sequential across trees (parallel within a tree)\\
+Typical accuracy on tabular & very good & usually best\\
+Noise / outliers in labels & robust & can chase noisy labels\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Stacking done right}
+Level 0: several diverse models (logistic regression, RF, LightGBM, $k$-NN). Generate \emph{out-of-fold} predictions for each
+training row (via $k$-fold CV) so every prediction is made by a model that did not see that row. Level 1: a simple model (often
+logistic regression) learns the best combination from these predictions. Without out-of-fold predictions, the meta-model learns
+to trust whichever base model overfit the most: a leakage bug.
+
+\begin{practical}[: ensembles at InfoEdge]
+\begin{itemize}
+\item \textbf{Lead scoring / telecalling} (99acres): random forests are a robust first model on mixed user-behaviour features;
+  their OOB score gives quick validation; permutation importance explains drivers to the sales team.
+\item \textbf{Fraud / fake-recruiter detection}: Isolation Forest flags unusual posting behaviour (hundreds of jobs in minutes,
+  odd salary ranges) without labels.
+\item \textbf{Resdex ranking}: the ``M10'' ranking blocks on the Resdex slide are typically gradient-boosted learning-to-rank
+  models; RF is the baseline they must beat.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: Bootstrapping, Main Ideas}{\ytid{Xz0x-8-cgaQ}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{OA: is Random Forest bagging or boosting?} Is a random forest bagging or boosting? Justify.}
+\oneline{Bagging: its trees are trained independently and in parallel on bootstrap samples and averaged; it adds random feature
+selection at each split to decorrelate the trees.}
+\why Boosting would train trees sequentially, each one on reweighted data or residuals from the ensemble so far. RF trees never see
+each other's errors. The ``random'' in random forest refers to two sources of randomness: bootstrap rows and random feature subsets
+per split.
+\pitfall Calling RF ``boosting because it combines weak learners''. RF's trees are deep (strong but high-variance) learners.
+\end{qa}
+
+\begin{qa}{\pyq{OA: types of ensembles} Name the types of ensemble methods, with an example and the error component each mainly
+attacks.}
+\oneline{Bagging (random forest; reduces variance), boosting (AdaBoost, GBM, XGBoost, LightGBM; reduces bias), and stacking
+(meta-learner over diverse models; combines strengths), plus simple voting and blending.}
+\why Bagging averages high-variance models; boosting builds a strong model from weak, high-bias ones by sequential correction;
+stacking learns weights or interactions between models' predictions. Mixture of experts is a related idea where a gating
+model chooses which expert to trust per input.
+\end{qa}
+
+\begin{qa}{\pyq{Glassdoor InfoEdge: Random Forest intuition} Explain random forests end to end: bootstrap sampling, random feature
+selection, how each tree is trained and how predictions are made.}
+\oneline{Build hundreds of deep trees, each on a bootstrap sample of the rows and each choosing every split from a random subset
+of features, then average their predictions (or vote); averaging many decorrelated, low-bias trees gives a low-variance model.}
+\why
+\textbf{Step 1, rows.} For each tree, draw $n$ rows with replacement: about 63\% unique rows; the rest are out-of-bag for that tree.
+\textbf{Step 2, features.} At every node, sample $m$ of the $d$ features (e.g. $\sqrt d$) and find the best split only among them.
+\textbf{Step 3, grow.} Usually deep (low bias); controlled by \code{min\_samples\_leaf}. No pruning by default.
+\textbf{Step 4, predict.} Classification: majority vote or mean of leaf class proportions (scikit-learn averages probabilities).
+Regression: mean of leaf means.
+\textbf{Why it works.} Deep trees have low bias but high variance; averaging cuts variance to about $\rho\sigma^2 + (1-\rho)\sigma^2/B$;
+the two randomisations lower $\rho$.
+\worked $d = 64$, 500 trees, $m = 8$: each split sees 8 random features; each tree sees about 632 of 1{,}000 rows.
+\pushes \emph{``Is RF probabilistic?''} Its \code{predict\_proba} is the average of leaf class proportions across trees: a
+frequency, not a calibrated probability. It tends to be under-confident near 0 and 1 (averaging pulls toward the middle); calibrate
+with isotonic regression if probabilities are used for decisions.
+\end{qa}
+
+\begin{qa}{\pyq{Glassdoor InfoEdge} Why does a random forest reduce variance and overfitting compared with a single tree?}
+\oneline{Because averaging $B$ models with variance $\sigma^2$ and pairwise correlation $\rho$ gives variance $\rho\sigma^2 +
+(1-\rho)\sigma^2/B$, and the forest's bootstrap and feature subsampling keep $\rho$ low, while averaging leaves bias unchanged.}
+\why A single deep tree fits the noise of its particular sample; another sample gives a very different tree. Errors that come from
+sample-specific noise point in different directions for different trees and cancel in the average. Errors that come from a shared
+systematic blind spot (bias) do not cancel. Deep trees have little bias, so the forest's remaining error is small.
+\worked Single tree: 100\% train, 78\% test. 500-tree RF: 100\% train, 87\% test. Note RF training accuracy can still be 100\%:
+it does not ``fit less'', it generalises better.
+\pushes \emph{``Can a random forest overfit?''} Adding trees cannot increase overfitting (the average converges), but the
+individual trees can overfit; with very noisy labels, limit \code{min\_samples\_leaf}. Also it can overfit through leakage, like any
+model.
+\end{qa}
+
+\begin{qa}{\pyq{Glassdoor InfoEdge} Random forest vs gradient boosting: differences, and when would you choose each?}
+\oneline{RF averages deep, independent trees to cut variance and is robust with little tuning; gradient boosting adds shallow trees
+sequentially, each fitting the current errors, to cut bias, and usually wins on accuracy when tuned, at the cost of sensitivity to
+hyperparameters and noise.}
+\why See the comparison table. Choose RF for a fast, strong baseline, small or noisy datasets, or when you need OOB validation and
+easy parallelism. Choose GBM (LightGBM/XGBoost) for maximum accuracy on large tabular data, custom losses (ranking, Poisson,
+quantile), and when you can afford tuning and early stopping.
+\pushes \emph{``Why does GBM overfit with more trees and RF not?''} In RF each new tree is an independent sample; the average
+converges to a limit. In GBM each new tree fits the remaining residuals, which eventually are noise: it keeps reducing training loss
+by fitting that noise.
+\end{qa}
+
+\begin{qa}{\pyq{Glassdoor InfoEdge: feature importance} How does a random forest compute feature importance, and what are its
+pitfalls?}
+\oneline{By default (MDI) it sums the impurity decreases from all splits on each feature, averaged over trees; permutation
+importance (drop in OOB/validation score when a feature is shuffled) is the more reliable alternative.}
+\why MDI is computed on training data and favours features with many split points (continuous, high-cardinality), even pure noise.
+Permutation importance is computed on held-out data and reflects real predictive value, but correlated features hide each other.
+Use both; drop-column importance (retrain without the feature) is the gold standard but costly.
+\end{qa}
+
+\begin{qa}{What is the probability that a given row is out-of-bag for one tree when $n = 1000$? Why does it approach 0.368?}
+\oneline{$(1 - 1/1000)^{1000} \approx 0.368$, because $(1 - 1/n)^n \to e^{-1}$.}
+\why Each of the $n$ draws misses the row with probability $1 - 1/n$; draws are independent. The limit is the definition of $e^{-1}$.
+Hence a bootstrap contains about 63.2\% unique rows.
+\end{qa}
+
+\begin{qa}{Compute the variance of the average of 10 models with variance 4 when (a) independent and (b) pairwise correlation 0.5.}
+\oneline{(a) 0.4; (b) $0.5\cdot4 + 0.5\cdot4/10 = 2.2$.}
+\why Correlation dominates: even infinitely many models with $\rho = 0.5$ only halve the variance.
+\end{qa}
+
+\begin{qa}{Three independent classifiers with 80\% accuracy vote. What is the ensemble accuracy? What if each is 40\% accurate?}
+\oneline{0.896 and 0.352: voting helps better-than-chance models and hurts worse-than-chance ones.}
+\end{qa}
+
+\begin{qa}{What is OOB error and how does it compare with cross-validation?}
+\oneline{OOB error predicts each row using only the trees that did not train on it, giving a nearly free estimate of generalisation
+error, comparable to cross-validation with about 1/3 holdout per tree.}
+\why It is slightly pessimistic because each OOB prediction uses only about a third of the trees. It is valid only if rows are
+independent: with grouped or time data, OOB leaks just like a random split.
+\end{qa}
+
+\begin{qa}{\deep Would bagging help a linear regression? A $k$-NN with $k = 1$? Why or why not?}
+\oneline{Bagging helps unstable, high-variance learners (deep trees, 1-NN somewhat, neural nets) and barely helps stable ones like
+linear regression, whose predictions hardly change across bootstrap samples.}
+\why For OLS, the bagged average is very close to the full-data OLS fit: variance is already low and the models are highly
+correlated ($\rho\approx1$). For 1-NN, bootstrapping changes which neighbour is nearest for some points, so it helps a bit, but 1-NN is
+surprisingly stable to bootstrap (each point is present with probability 63\%). Subsampling features (random subspaces) helps $k$-NN
+more.
+\end{qa}
+
+\begin{qa}{\deep Why does a random forest choose $\sqrt d$ features per split and not just 1, or all $d$?}
+\oneline{It trades individual tree strength against correlation: $m = d$ gives strong but highly correlated trees (plain bagging), $m
+= 1$ gives very decorrelated but weak, nearly random trees; $\sqrt d$ is an empirical sweet spot, and the right $m$ should be tuned.}
+\why Breiman showed the forest's error bound depends on the ratio $\bar\rho/s^2$ (mean correlation over squared strength). Smaller $m$
+lowers both $\bar\rho$ and strength $s$. With many noisy features and few informative ones, a small $m$ often misses the informative
+features at a split, so larger $m$ (like $d/3$ or $0.5d$) is better.
+\end{qa}
+
+\begin{qa}{\deep A random forest outputs probability 0.9. Is it calibrated? How would you check and fix it?}
+\oneline{Not necessarily; RF probabilities are vote fractions that tend to be pulled away from 0 and 1; check with a reliability
+curve or Brier score on held-out data and fix with isotonic or Platt calibration.}
+\why For an RF to output 1.0, every tree must agree; feature subsampling makes some trees always disagree, so extremes are rare
+(under-confidence at the edges). Conversely, very deep trees with few rows per leaf give overconfident leaves. \code{CalibratedClassifierCV}
+fits the calibration map with cross-validation.
+\end{qa}
+
+\begin{qa}{Explain stacking and how to avoid leakage in it.}
+\oneline{Stacking trains a meta-model on the predictions of base models; to avoid leakage, the meta-model must be trained on
+out-of-fold predictions, never on predictions the base models made for rows they trained on.}
+\why If a base model overfits (100\% training accuracy), its in-sample predictions are perfect, and the meta-model learns to trust it
+completely; on test data it fails. With $k$-fold, each row's base prediction comes from a model trained on the other folds. Test-time
+base predictions come from models retrained on all data (or the average of fold models).
+\end{qa}
+
+\begin{qa}{Hard voting vs soft voting: compute both for five classifiers giving $P(\text{class }1) = 0.9, 0.6, 0.4, 0.45, 0.3$.}
+\oneline{Hard voting: two vote 1, three vote 0, so class 0; soft voting: average 0.53, so class 1.}
+\why Soft voting uses confidence: one very confident model can outweigh several lukewarm ones. It needs reasonably calibrated
+probabilities.
+\end{qa}
+
+\begin{qa}{How does Isolation Forest detect anomalies?}
+\oneline{It builds random trees with random features and random split points; anomalies, being few and different, get isolated in
+very few splits, so a short average path length means a high anomaly score.}
+\why A normal point in a dense region needs many random cuts to be separated from its neighbours. An isolated point (a recruiter
+posting 400 jobs in an hour) is cut off quickly. Score $s = 2^{-\E[h(x)]/c(n)}$; close to 1 means anomaly. No labels needed,
+linear time, works in high dimensions.
+\end{qa}
+
+\begin{qa}{\deep With 500 features of which only 2 are informative, how will a random forest behave and what would you do?}
+\oneline{With $m = \sqrt{500}\approx 22$, most splits will not even see the two informative features, so many splits are on noise and
+accuracy suffers; increase $m$, do feature selection first, or use boosting, which picks the best feature at each split.}
+\why Probability a given informative feature is in a split's subset is $22/500 = 4.4\%$; both absent most of the time. Trees still
+find them sometimes, but noise splits add variance. Remedies: raise \code{max\_features}, remove noise features (permutation or
+Boruta), or use L1 logistic regression / GBM.
+\end{qa}
+
+\begin{qa}{Which hyperparameters of a random forest matter most and how would you tune them?}
+\oneline{\code{max\_features} (decorrelation), \code{min\_samples\_leaf}/\code{max\_depth} (tree complexity), and enough
+\code{n\_estimators}; tune the first two with CV or OOB, set trees high enough that OOB error has plateaued.}
+\why \code{n\_estimators} is not a regularisation parameter: more trees only reduce noise in the average. \code{class\_weight=
+"balanced\_subsample"} helps imbalance. \code{max\_samples} (bootstrap size) can speed training and add diversity.
+\end{qa}
+
+\begin{qa}{\deep Is a random forest a ``black box''? How would you explain one prediction to a recruiter?}
+\oneline{It is hard to read globally but easy to explain locally: TreeSHAP gives each feature's contribution to a specific prediction,
+and you can show the top contributing features in plain words.}
+\why Example output for a Resdex candidate: base score 0.10; +0.25 because skills match 9 of 10 required; +0.12 because notice period
+is 15 days; $-$0.05 because expected salary is above budget. This is the ``Explainability: why this candidate, in plain language''
+idea from the PremiumX slide.
+\end{qa}
+
+\begin{qa}{What is the difference between bagging and pasting? Between random forest and Extra Trees?}
+\oneline{Bagging samples rows with replacement, pasting without; Extra Trees additionally choose split thresholds at random and usually
+use the whole dataset per tree, which further decorrelates trees and speeds training.}
+\why Extra Trees trade a little bias for less variance and are often as accurate as RF and faster, especially with many features.
+\end{qa}

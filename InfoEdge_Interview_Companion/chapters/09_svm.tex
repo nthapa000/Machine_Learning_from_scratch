@@ -1,1 +1,293 @@
-% TODO 09_svm
+\chapter{Support Vector Machines and the Kernel Trick}
+\companion{StatQuest: Support Vector Machines Part 1, Main Ideas}{\ytid{efR1C6CvhmE}}
+
+InfoEdge interviews reportedly asked ``what is an SVM?'' and expected, in order: hinge loss, kernels, margin and support
+vectors. The OA asked SVM statements and that hinge loss is a classification loss. The ``kernel methods'' line on the
+Tools slide shows the team uses them. This chapter builds SVMs slowly enough that you can derive the margin and
+explain the kernel trick to someone who has never seen it.
+
+\section{Which line is best?}
+Two classes of points can be separated by infinitely many lines. Which should we choose? Intuition: the line that stays as
+far as possible from both classes. New points are slightly different from training points; a line hugging one class would
+misclassify them at the first wobble. The distance from the line to the nearest points is the \textbf{margin}. An SVM picks
+the line with the \textbf{maximum margin}: the widest empty ``street'' between the classes.
+
+\begin{center}
+\begin{tikzpicture}[scale=0.9]
+\draw[->] (0,0)--(6.5,0); \draw[->] (0,0)--(0,4.5);
+\draw[very thick,accent] (0.6,4.2)--(5.85,0);
+\draw[dashed,accent] (0.0,3.58)--(4.475,0);
+\draw[dashed,accent] (1.5,4.58)--(6.4,0.66);
+\foreach \p in {(0.7,1.2),(1.3,0.6),(2.0,1.0),(1.0,2.78),(2.6,1.5)} \fill[prframe] \p circle (2.3pt);
+\foreach \p in {(4.2,3.0),(5.0,2.2),(4.8,3.6),(3.8,2.74),(5.8,3.0)} \fill[exframe] \p circle (2.3pt);
+\draw[thick] (2.6,1.5) circle (4.5pt); \draw[thick] (1.0,2.78) circle (4.5pt); \draw[thick] (3.8,2.74) circle (4.5pt);
+\node[font=\small,align=left] at (8.6,2.2) {solid: $\mathbf w^\top\mathbf x + b = 0$\\dashed: $\mathbf w^\top\mathbf x + b = \pm1$\\circled: support vectors\\street width $= 2/\norm{\mathbf w}$};
+\end{tikzpicture}
+\end{center}
+
+Only the points on the edges of the street matter. They are the \textbf{support vectors}. Move or delete any other point
+(without crossing the street) and the solution does not change.
+
+\section{The geometry you need}
+A hyperplane is $\mathbf w^\top\mathbf x + b = 0$. The vector $\mathbf w$ is perpendicular to it. The signed distance from a point
+$\mathbf x$ to the plane is
+\[ \frac{\mathbf w^\top\mathbf x + b}{\norm{\mathbf w}}. \]
+\begin{example}[: distance to a plane]
+$\mathbf w = (3, 4)$, $b = -5$, point $(1, 1)$: $\frac{3 + 4 - 5}{\sqrt{9+16}} = \frac{2}{5} = 0.4$.
+\end{example}
+Labels are $y\in\{-1,+1\}$. A point is correctly classified when $y(\mathbf w^\top\mathbf x + b) > 0$.
+
+\section{Hard margin: the optimisation problem}
+Scaling $\mathbf w$ and $b$ by the same constant does not move the plane. Use that freedom: scale so the closest points satisfy
+$y(\mathbf w^\top\mathbf x + b) = 1$ exactly. Then their distance to the plane is $1/\norm{\mathbf w}$ and the street width is
+$2/\norm{\mathbf w}$. Maximising $2/\norm{\mathbf w}$ is the same as minimising $\frac12\norm{\mathbf w}^2$ (squared for smoothness):
+\[ \min_{\mathbf w,b}\ \tfrac12\norm{\mathbf w}^2\quad\text{subject to}\quad y_i(\mathbf w^\top\mathbf x_i + b)\ge1\ \text{for all } i. \]
+This is a convex quadratic program: a bowl-shaped objective with linear constraints, so there is one global solution.
+
+\begin{example}[: the simplest SVM]
+Two points: $(1,1)$ with $y = +1$ and $(-1,-1)$ with $y = -1$. By symmetry the boundary is perpendicular to the segment joining
+them and passes through the origin: $\mathbf w = (a, a)$, $b = 0$. Constraint for $(1,1)$: $2a \ge 1$, smallest $\norm{\mathbf w}$ at
+$a = 0.5$. So $\mathbf w = (0.5, 0.5)$, margin $2/\norm{\mathbf w} = 2/0.707 = 2.83$, which is exactly the distance between the two
+points. Both points are support vectors.
+\end{example}
+
+\section{Soft margin: allowing mistakes, and the C parameter}
+Real data overlap, and one outlier could force a tiny margin. Introduce a \textbf{slack} $\xi_i\ge0$ per point that measures how
+much it violates the margin:
+\[ \min\ \tfrac12\norm{\mathbf w}^2 + C\sum_i\xi_i\quad\text{s.t.}\quad y_i(\mathbf w^\top\mathbf x_i + b)\ge1 - \xi_i,\ \xi_i\ge0. \]
+\begin{itemize}
+\item $\xi_i = 0$: outside the street on the correct side. $0<\xi_i\le1$: inside the street, still correct.
+  $\xi_i > 1$: misclassified.
+\item \textbf{Large $C$}: violations are expensive; narrow margin; fits training data hard; low bias, high variance.
+  $C\to\infty$ is the hard margin.
+\item \textbf{Small $C$}: wide margin; tolerates violations; more bias, less variance.
+\end{itemize}
+
+\subsection{The same thing as a loss function: hinge loss}
+At the optimum, $\xi_i = \max(0, 1 - y_if(\mathbf x_i))$. Substituting gives an unconstrained problem:
+\[ \min_{\mathbf w,b}\ \tfrac12\norm{\mathbf w}^2 + C\sum_i\max\big(0, 1 - y_if(\mathbf x_i)\big). \]
+The term $\max(0, 1 - yf)$ is the \textbf{hinge loss}. So a linear SVM is ``hinge loss + L2 regularisation'', just as logistic
+regression is ``log loss + L2''.
+\begin{example}[: hinge loss values]
+$y = +1$: $f = 2$ gives 0 (confidently right, ignored); $f = 0.3$ gives $0.7$ (right but inside the margin); $f = -2$ gives 3 (wrong).
+$y = -1$, $f = -1.5$: $yf = 1.5$, loss 0.
+\end{example}
+Hinge loss is exactly zero beyond the margin: confidently correct points exert no pull. That is why only support vectors matter.
+
+\section{The dual problem: where kernels come from}
+Using Lagrange multipliers $\alpha_i\ge0$ (one per constraint), the solution has the form
+\[ \mathbf w = \sum_i\alpha_iy_i\mathbf x_i, \]
+and the $\alpha$'s solve the \textbf{dual} problem
+\[ \max_{\boldsymbol\alpha}\ \sum_i\alpha_i - \tfrac12\sum_{i,j}\alpha_i\alpha_jy_iy_j\,\mathbf x_i^\top\mathbf x_j\quad\text{s.t.}\quad 0\le\alpha_i\le C,\ \sum_i\alpha_iy_i = 0. \]
+Three facts follow (from the KKT conditions):
+\begin{itemize}
+\item $\alpha_i = 0$ for points strictly outside the margin: they do not appear in $\mathbf w$.
+\item $0 < \alpha_i < C$: points exactly on the margin.
+\item $\alpha_i = C$: points inside the margin or misclassified.
+\end{itemize}
+And the crucial observation: \textbf{the data appear only through dot products} $\mathbf x_i^\top\mathbf x_j$, both in training and in
+prediction, $f(\mathbf x) = \sum_i\alpha_iy_i\,\mathbf x_i^\top\mathbf x + b$.
+
+\section{The kernel trick}
+\subsection{The problem: curved boundaries}
+Points inside a circle (class $+1$) and outside it (class $-1$) cannot be separated by a line. But map each point
+$\mathbf x = (x_1, x_2)$ to a new 3-D feature vector $\phi(\mathbf x) = (x_1^2, \sqrt2x_1x_2, x_2^2)$. The circle $x_1^2 + x_2^2 = r^2$
+becomes the \emph{plane} $z_1 + z_3 = r^2$. Linear separation in the new space is a curved boundary in the old.
+
+\subsection{The trick}
+We could compute $\phi$ for every point and run a linear SVM. But $\phi$ can be huge (degree-3 polynomial features of 1{,}000 inputs:
+over 167 million features) or infinite. However, the dual needs only dot products, and for many $\phi$ there is a shortcut:
+\[ \phi(\mathbf x)^\top\phi(\mathbf z) = x_1^2z_1^2 + 2x_1x_2z_1z_2 + x_2^2z_2^2 = (x_1z_1 + x_2z_2)^2 = (\mathbf x^\top\mathbf z)^2. \]
+We never build $\phi$; we square the ordinary dot product. Any function $K(\mathbf x,\mathbf z) = \phi(\mathbf x)^\top\phi(\mathbf z)$ is a
+\textbf{kernel}. Replace every $\mathbf x_i^\top\mathbf x_j$ by $K(\mathbf x_i,\mathbf x_j)$.
+
+\begin{example}[: a kernel by hand]
+$K(\mathbf x,\mathbf z) = (\mathbf x^\top\mathbf z + 1)^2$, $\mathbf x = (1,2)$, $\mathbf z = (3,-1)$: $\mathbf x^\top\mathbf z = 3 - 2 = 1$, so $K = 4$.
+This equals a dot product in a 6-dimensional space of $(1, \sqrt2x_1, \sqrt2x_2, x_1^2, \sqrt2x_1x_2, x_2^2)$, computed with two
+multiplications and an addition.
+\end{example}
+
+\subsection{Common kernels}
+\begin{itemize}
+\item \textbf{Linear}: $K = \mathbf x^\top\mathbf z$ (no mapping). Best for high-dimensional sparse data like text.
+\item \textbf{Polynomial}: $K = (\gamma\mathbf x^\top\mathbf z + r)^d$: all interactions up to degree $d$.
+\item \textbf{RBF (Gaussian)}: $K = \exp(-\gamma\norm{\mathbf x - \mathbf z}^2)$: a similarity, 1 for identical points, decaying with
+  distance. Corresponds to an infinite-dimensional feature space. The default non-linear choice.
+\item \textbf{Sigmoid}: $\tanh(\gamma\mathbf x^\top\mathbf z + r)$: not always a valid kernel.
+\end{itemize}
+
+\subsection{What makes a valid kernel}
+$K$ must equal a dot product in \emph{some} space. Equivalently (Mercer's condition), for any set of points the \textbf{Gram matrix}
+$[K(\mathbf x_i,\mathbf x_j)]$ must be symmetric and positive semi-definite. Sums, positive multiples and products of valid kernels are
+valid, so kernels can be built from pieces (e.g. a text kernel plus a numeric kernel).
+
+\subsection{The RBF $\gamma$}
+$\gamma$ sets how far each support vector's influence reaches. Large $\gamma$: tiny bumps around each point, wiggly boundary,
+overfitting (in the limit, memorisation). Small $\gamma$: smooth, nearly linear boundary, underfitting. Tune $C$ and $\gamma$ together
+on a log grid (e.g. $C\in\{0.1, 1, 10, 100\}$, $\gamma\in\{0.001, 0.01, 0.1, 1\}$).
+
+\section{Practicalities}
+\begin{itemize}
+\item \textbf{Scale features}: the margin is a distance; an unscaled feature in rupees dominates one in years.
+\item \textbf{Cost}: kernel SVM training is between $O(n^2)$ and $O(n^3)$ and the kernel matrix needs $O(n^2)$ memory: fine for
+  $10^4$, painful beyond about $10^5$ rows. Linear SVMs (liblinear, SGD with hinge loss) scale to millions. Approximate kernels
+  (random Fourier features, Nystr\"om) make RBF-like models scalable.
+\item \textbf{Prediction cost}: proportional to the number of support vectors (for kernel SVMs).
+\item \textbf{Multiclass}: SVMs are binary; scikit-learn's \code{SVC} uses one-vs-one, \code{LinearSVC} one-vs-rest.
+\item \textbf{Probabilities}: SVM outputs signed distances; Platt scaling fits a sigmoid on cross-validated scores
+  (\code{probability=True}, slower).
+\item \textbf{Imbalance}: \code{class\_weight} scales $C$ per class.
+\item \textbf{SVR}: regression with the $\varepsilon$-insensitive tube (Chapter 4).
+\item \textbf{One-class SVM}: novelty detection, a boundary around ``normal'' data.
+\end{itemize}
+
+\begin{practical}[: SVMs and kernels at InfoEdge]
+Linear SVMs on TF-IDF features were the best text classifiers before deep learning and remain excellent fast baselines for
+classifying job titles or resumes into the taxonomy (500 categories, millions of rows: \code{LinearSVC} trains in seconds).
+The kernel idea, ``compare items by a similarity instead of explicit features'', reappears in attention (softmax of dot
+products) and in the Siamese networks on the Tools slide, which learn a similarity between a job and a CV.
+\end{practical}
+
+\stuck{StatQuest: The Radial (RBF) Kernel}{\ytid{Qc5IyLW_hns}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{INT: what is SVM; hinge loss, kernels, margin, support vectors} Explain SVMs in the order the interviewer wants:
+margin, support vectors, hinge loss, kernels.}
+\oneline{An SVM finds the separating hyperplane with the widest margin; the solution depends only on the points on or inside the
+margin (support vectors); with slack it is equivalent to minimising hinge loss plus an L2 penalty; and because it only needs dot
+products, kernels let it learn non-linear boundaries.}
+\why
+\textbf{Margin.} Among all separating hyperplanes choose the one farthest from the nearest points; scaled so the nearest satisfy
+$y(\mathbf w^\top\mathbf x + b) = 1$, the margin is $2/\norm{\mathbf w}$, so we minimise $\frac12\norm{\mathbf w}^2$ subject to all points
+being on the correct side with functional margin $\ge1$.
+\textbf{Support vectors.} In the dual, $\mathbf w = \sum\alpha_iy_i\mathbf x_i$ with $\alpha_i > 0$ only for points on or inside the margin.
+\textbf{Hinge loss.} Soft margin: $\min\frac12\norm{\mathbf w}^2 + C\sum\max(0, 1 - y_if(\mathbf x_i))$. $C$ trades margin width for
+training errors.
+\textbf{Kernels.} The dual and the prediction use only $\mathbf x_i^\top\mathbf x_j$; replacing with $K(\mathbf x_i,\mathbf x_j) =
+\phi(\mathbf x_i)^\top\phi(\mathbf x_j)$ fits a linear separator in a high (even infinite) dimensional space without computing $\phi$.
+\worked RBF SVM on a ``ring'' dataset: linear SVM 52\% accuracy; RBF with $C = 1$, $\gamma = 0.5$: 99\%.
+\pushes \emph{``Why maximise the margin?''} Larger margins mean the classifier is less sensitive to small perturbations of the data
+and, by statistical learning theory, generalisation bounds depend on margin rather than dimension, which is why SVMs work in very high
+dimensions.
+\end{qa}
+
+\begin{qa}{\pyq{OA: hinge loss} Is hinge loss a classification or regression loss? Compute it for $(y, f) = (+1, 0.3)$,
+$(+1, -2)$, $(-1, -1.5)$.}
+\oneline{Classification; the values are $0.7$, $3$ and $0$.}
+\why $\max(0, 1 - yf)$: $1 - 0.3 = 0.7$; $1 + 2 = 3$; $yf = 1.5$, so $0$. It is a convex upper bound on the 0--1 loss.
+\end{qa}
+
+\begin{qa}{\pyq{INT: kernels project to higher dimensions} What does the kernel trick do, exactly, and why is it a ``trick''?}
+\oneline{It lets an algorithm that only uses dot products operate in a high-dimensional feature space by computing those dot products
+directly with a kernel function, without ever constructing the high-dimensional vectors.}
+\why ``Trick'' because the cost stays that of computing $K$ in the original space. Example: $(\mathbf x^\top\mathbf z)^2$ equals a dot
+product of degree-2 features. For RBF, the implicit space is infinite-dimensional, so explicit mapping is impossible, yet
+$K = e^{-\gamma\norm{\mathbf x-\mathbf z}^2}$ is cheap. Any dot-product-only algorithm can be kernelised: kernel ridge regression, kernel
+PCA, kernel $k$-means, Gaussian processes.
+\end{qa}
+
+\begin{qa}{Derive why the SVM margin is $2/\norm{\mathbf w}$.}
+\oneline{After scaling so the closest points satisfy $|\mathbf w^\top\mathbf x + b| = 1$, their distance to the plane is $1/\norm{\mathbf w}$,
+and the street spans both sides, so its width is $2/\norm{\mathbf w}$.}
+\why Distance of $\mathbf x$ to the plane is $|\mathbf w^\top\mathbf x + b|/\norm{\mathbf w}$ because $\mathbf w/\norm{\mathbf w}$ is the unit normal.
+For $\mathbf w = (3,4)$: margin $2/5 = 0.4$.
+\end{qa}
+
+\begin{qa}{What does $C$ control? What happens as $C\to\infty$ and as $C\to0$?}
+\oneline{$C$ is the price of margin violations: large $C$ gives a narrow margin that fits training data closely (low bias, high variance),
+small $C$ a wide margin that tolerates errors (high bias, low variance); $C\to\infty$ is the hard margin, $C\to0$ ignores the data.}
+\why In hinge-loss form, $C$ is like $1/\lambda$. With outliers, a large $C$ bends the boundary to accommodate them.
+\end{qa}
+
+\begin{qa}{An RBF SVM gets 100\% training accuracy and poor test accuracy. What do you change?}
+\oneline{It is overfitting: decrease $\gamma$ (smoother kernel) and/or decrease $C$ (wider margin), tuned by cross-validation; also
+check scaling.}
+\why Large $\gamma$ makes each support vector influence only its immediate neighbourhood, so the model memorises. The number of
+support vectors approaching $n$ is a symptom.
+\end{qa}
+
+\begin{qa}{Logistic regression vs linear SVM: which and when?}
+\oneline{Both are linear classifiers with L2 regularisation differing only in loss; choose logistic regression for calibrated
+probabilities and interpretability, linear SVM when you want a max-margin boundary that ignores well-classified points, and either for
+text classification with similar accuracy.}
+\why Log loss is smooth and never zero; hinge is zero beyond the margin and has a kink. SVM gives sparse dual solutions; logistic gives
+probabilities. With kernels, SVM is the natural choice.
+\end{qa}
+
+\begin{qa}{Why must features be scaled for SVMs?}
+\oneline{Because the margin and the RBF kernel are based on Euclidean distances, so a feature with a large numeric range dominates the
+geometry regardless of its importance.}
+\worked Salary in rupees (range $10^6$) and experience in years (range 30): $\norm{\mathbf x - \mathbf z}^2$ is essentially only the salary
+difference.
+\end{qa}
+
+\begin{qa}{\deep Why do SVMs work well in very high dimensions with few samples (e.g. text)?}
+\oneline{Because their capacity is controlled by the margin, not by the number of features, and in high dimensions data are often
+nearly linearly separable with a good margin; the solution lives in the span of the support vectors, at most $n$ of them.}
+\why Generalisation bounds for margin classifiers scale with $R^2/\rho^2$ (data radius over margin squared), independent of dimension.
+TF-IDF vectors of documents with 100{,}000 dimensions are sparse and nearly separable; a linear SVM finds a robust boundary.
+\end{qa}
+
+\begin{qa}{\deep Can you use the kernel trick with logistic regression, $k$-means or PCA?}
+\oneline{Yes: any method that can be written purely in terms of dot products can be kernelised, giving kernel logistic regression, kernel
+$k$-means and kernel PCA; the catch is that without hinge loss's sparsity, all $n$ points are needed at prediction time.}
+\why Kernel logistic regression: $f(\mathbf x) = \sum_i\alpha_iK(\mathbf x_i,\mathbf x)$ with log loss; every $\alpha_i\ne0$, so prediction costs
+$O(n)$ and training $O(n^3)$. Kernel PCA: eigendecompose the centred kernel matrix to get non-linear components. Kernel $k$-means: distances
+in feature space via $K(\mathbf x,\mathbf x) - 2K(\mathbf x,\mathbf c) + \dots$; equivalent to spectral clustering in some forms.
+\end{qa}
+
+\begin{qa}{\deep Is a neural network with a final linear layer ``just a learned kernel''?}
+\oneline{In a sense yes: the hidden layers learn a feature map $\phi$, and the last layer is a linear model on $\phi(\mathbf x)$, so the
+network learns its kernel $K(\mathbf x,\mathbf z) = \phi(\mathbf x)^\top\phi(\mathbf z)$ from data instead of fixing it in advance.}
+\why An RBF SVM fixes the similarity; a network adapts it to the task. In the infinite-width limit, a randomly initialised network
+trained by gradient descent behaves like a kernel method with the ``neural tangent kernel''. Siamese networks make this explicit: they
+learn an embedding where dot products measure job--CV similarity.
+\end{qa}
+
+\begin{qa}{Compute the polynomial kernel $(\mathbf x^\top\mathbf z + 1)^2$ for $\mathbf x = (1,2)$, $\mathbf z = (3,-1)$ and the RBF kernel with
+$\gamma = 0.5$ for $\mathbf x = (0,0)$, $\mathbf z = (1,1)$.}
+\oneline{Polynomial: $(1+1)^2 = 4$; RBF: $e^{-0.5\cdot2} = e^{-1} = 0.368$.}
+\end{qa}
+
+\begin{qa}{What are the KKT conditions telling us about which points are support vectors?}
+\oneline{Complementary slackness says $\alpha_i[y_if(\mathbf x_i) - 1 + \xi_i] = 0$, so $\alpha_i > 0$ only when a point's constraint is
+tight (on the margin) or violated; points safely outside the margin have $\alpha_i = 0$.}
+\why Also $(C - \alpha_i)\xi_i = 0$: points with slack ($\xi_i > 0$) have $\alpha_i = C$. So: $\alpha = 0$ outside, $0<\alpha<C$ on the margin,
+$\alpha = C$ inside or wrong.
+\end{qa}
+
+\begin{qa}{What happens if you remove a non-support vector and retrain? A support vector?}
+\oneline{Removing a non-support vector leaves the solution unchanged; removing a support vector can change it.}
+\why This is also why leave-one-out error of an SVM is bounded by (number of support vectors)$/n$.
+\end{qa}
+
+\begin{qa}{\deep Your kernel SVM takes hours on 500{,}000 rows. What are your options?}
+\oneline{Use a linear SVM if the data are high-dimensional, approximate the kernel with random Fourier features or Nystr\"om and train
+a linear model on them, subsample, or switch to gradient boosting or a neural network.}
+\why Kernel SVM cost grows at least quadratically. Random Fourier features: $z(\mathbf x) = \sqrt{2/D}\cos(\Omega\mathbf x + \mathbf b)$ with
+$\Omega$ drawn from a Gaussian approximates the RBF kernel with $D$ features, so a linear SVM on $z$ trains in linear time.
+\end{qa}
+
+\begin{qa}{How do you get probabilities from an SVM, and why is it costly?}
+\oneline{Platt scaling: fit a logistic regression mapping the SVM's decision values to probabilities, using cross-validated decision values
+so the calibration data were not used to train the SVM; the internal cross-validation makes training about five times slower.}
+\end{qa}
+
+\begin{qa}{\deep When would you choose an SVM over gradient boosting today?}
+\oneline{For small-to-medium data with many features and smooth or similarity-based structure (text with TF-IDF, bioinformatics,
+custom kernels on strings or graphs), for strong regularised baselines, and for one-class novelty detection; for large mixed tabular data,
+boosting usually wins.}
+\why Kernels let you encode domain similarity (string kernels for skill sequences). SVMs have few hyperparameters and convex training
+(reproducible). They lack native handling of categoricals and missing values and scale poorly.
+\end{qa}
+
+\begin{qa}{How many support vectors would you expect for a well-separated vs a noisy dataset, and what does it indicate?}
+\oneline{Few for well-separated data and many for noisy or overlapping data; a very high fraction suggests overlap, too small $C$ or an
+overly complex kernel (overfitting with large $\gamma$).}
+\end{qa}
+
+\begin{qa}{What is a one-class SVM and where could InfoEdge use it?}
+\oneline{It learns a boundary enclosing most of the ``normal'' data (in kernel space) and flags points outside as novel; useful for
+spotting unusual recruiter behaviour or anomalous job postings when labelled fraud is scarce.}
+\why Parameter $\nu$ upper-bounds the fraction of training points treated as outliers. Isolation Forest is often faster on large data.
+\end{qa}

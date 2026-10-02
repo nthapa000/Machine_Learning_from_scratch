@@ -1,1 +1,427 @@
-% TODO 04_glm
+\chapter{Generalised Linear Models and the Regression Family}
+\companion{StatQuest: Generalised Linear Models (search)}{\yts{StatQuest+Generalized+Linear+Models}}
+
+The InfoEdge hire in the experience video said the single biggest change in his understanding came from
+learning the ``variants most courses skip'': count data needs \emph{Poisson regression}, which comes from
+\emph{GLMs}; SVMs can do \emph{regression}. In Round 4 he answered a heteroscedasticity question with a GLM and the
+interviewer accepted it. This chapter makes you fluent in that family. It is a high-return chapter because most
+candidates have never seen it.
+
+\section{The question GLMs answer}
+
+Ordinary linear regression quietly assumes three things about the target $y$:
+\begin{enumerate}
+\item its average is a straight-line function of the features;
+\item it can be any real number, negative included;
+\item its noise has the same spread everywhere (and is roughly bell-shaped).
+\end{enumerate}
+Many real targets break all three:
+\begin{itemize}
+\item \textbf{Counts}: number of applications a job gets today (0, 1, 2, \dots). Never negative; a job that
+  averages 2 applies varies by about $\pm1.4$, one that averages 200 varies by about $\pm14$. Spread grows with the mean.
+\item \textbf{Positive, skewed amounts}: salary, property price, time-to-hire. Never negative; spread grows in
+  proportion to the level.
+\item \textbf{Yes/no and proportions}: did the user apply; what fraction of mails were opened. Must stay in $[0,1]$.
+\end{itemize}
+A \textbf{generalised linear model (GLM)} keeps the convenient ``weighted sum of features'' but lets us choose
+(a) what distribution the target follows and (b) how the weighted sum is connected to the target's average.
+
+\section{The three ingredients of a GLM}
+
+\begin{enumerate}
+\item \textbf{A linear predictor} (the familiar part): $\eta = \mathbf w^\top\mathbf x + b$. It can be any real number.
+\item \textbf{A link function} $g$ that connects the average of $y$, written $\mu = \E[y\mid\mathbf x]$, to the linear
+  predictor: $g(\mu) = \eta$, or equivalently $\mu = g^{-1}(\eta)$. The link's job is to map the allowed range of $\mu$
+  onto the whole real line.
+\item \textbf{A distribution} for $y$ around its mean, from the \emph{exponential family} (Gaussian, Bernoulli/Binomial,
+  Poisson, Gamma, Inverse Gaussian, Tweedie, \dots). The distribution fixes how the variance depends on the mean:
+  $\Var(y) = \phi\,V(\mu)$, where $V$ is the \textbf{variance function} and $\phi$ a dispersion constant.
+\end{enumerate}
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l l l l X}
+\toprule
+Target type & Distribution & Variance $V(\mu)$ & Usual link & Name\\
+\midrule
+Any real number & Gaussian & $1$ (constant) & identity $\mu = \eta$ & ordinary linear regression\\
+0/1 or proportion & Bernoulli / Binomial & $\mu(1-\mu)$ & logit $\log\frac{\mu}{1-\mu} = \eta$ & logistic regression\\
+Count $0,1,2,\dots$ & Poisson & $\mu$ & log $\log\mu = \eta$ & Poisson regression\\
+Overdispersed count & Negative binomial & $\mu + \mu^2/k$ & log & NB regression\\
+Positive, skewed & Gamma & $\mu^2$ & log (or inverse) & Gamma regression\\
+Zeros + positive amounts & Tweedie ($1<p<2$) & $\mu^p$ & log & Tweedie regression\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{intuition}[: the link is a translator, the distribution is a noise model]
+The linear predictor speaks ``any real number''. A count's mean speaks ``positive numbers''. The log link translates:
+$\mu = e^\eta$ is always positive, whatever $\eta$ is. The distribution then says how scattered the real counts are
+around that mean. Ordinary regression is the special case where no translation is needed and the scatter is the same
+everywhere.
+\end{intuition}
+
+\section{Poisson regression, built from scratch}
+
+\subsection{The Poisson distribution in one paragraph}
+If events happen independently at an average rate $\mu$ per interval, the count $Y$ in one interval follows
+$P(Y = k) = e^{-\mu}\mu^k/k!$ for $k = 0,1,2,\dots$ Its mean \emph{and} its variance are both $\mu$.
+\begin{example}[: Poisson probabilities]
+A job averages $\mu = 2$ applies per hour. $P(0) = e^{-2} = 0.135$; $P(1) = 2e^{-2} = 0.271$; $P(2) = 2e^{-2} = 0.271$;
+$P(3) = \frac{8}{6}e^{-2} = 0.180$.
+\end{example}
+
+\subsection{The model}
+\[ y\mid\mathbf x \sim \text{Poisson}(\mu),\qquad \log\mu = \mathbf w^\top\mathbf x + b\quad\Longleftrightarrow\quad \mu = e^{\mathbf w^\top\mathbf x + b}. \]
+Effects are \emph{multiplicative}: raising $x_j$ by one unit multiplies the expected count by $e^{w_j}$.
+
+\begin{example}[: reading a Poisson coefficient]
+Daily applies to a job: $\log\mu = 1.5 + 0.4\cdot\text{remote} - 0.05\cdot\text{days\_since\_posting}$.
+A fresh, non-remote job: $\mu = e^{1.5} = 4.48$ applies/day. Remote: $e^{0.4} = 1.49$, so 49\% more, $6.7$/day.
+After 10 days: multiply by $e^{-0.5} = 0.61$.
+\end{example}
+
+\subsection{How it is fitted}
+Maximum likelihood again. For one row, $\log P(y\mid\mu) = y\log\mu - \mu - \log y!$. With $\log\mu = \eta$, the
+negative log-likelihood to minimise (dropping the constant) is
+\[ L(\mathbf w) = \sum_i\big(e^{\eta_i} - y_i\eta_i\big). \]
+Its gradient with respect to $\mathbf w$ is $\sum_i(\mu_i - y_i)\mathbf x_i$: \emph{prediction minus truth, times input},
+exactly the same form as linear and logistic regression. This is no coincidence: it is a property of every GLM that uses
+its \textbf{canonical link}, and it is why one algorithm (IRLS / Newton) fits them all. The loss is convex, so the optimum
+is global.
+
+\subsection{Exposure and offsets}
+Counts often come from different-sized windows: one job was live for 3 days, another for 30. Model the \emph{rate}:
+$\log\mu_i = \log(\text{exposure}_i) + \mathbf w^\top\mathbf x_i$. The term $\log(\text{exposure})$ is an \textbf{offset}: a
+feature whose coefficient is fixed at 1. Now $e^{w_j}$ is a rate ratio.
+
+\subsection{Overdispersion and zero inflation}
+Real counts usually vary \emph{more} than Poisson allows (variance $>$ mean), because of unobserved differences between
+units. Symptoms: residual deviance much larger than its degrees of freedom; standard errors far too small.
+\begin{itemize}
+\item \textbf{Quasi-Poisson}: keep the Poisson mean model, scale the variance by $\phi > 1$ (fixes standard errors).
+\item \textbf{Negative binomial}: variance $\mu + \mu^2/k$; a Poisson whose rate itself varies (Gamma-distributed).
+\item \textbf{Zero-inflated} or \textbf{hurdle} models: when there are far more zeros than Poisson predicts (most jobs
+  get zero applies from a given city), model ``zero or not'' and ``how many, if any'' separately.
+\end{itemize}
+
+\section{Gamma regression: positive, skewed, multiplicative noise}
+The Gamma distribution lives on positive numbers and has variance proportional to $\mu^2$, i.e. a \emph{constant
+coefficient of variation}: a 10 lakh salary varies by about $\pm1.5$ lakh and a 100 lakh salary by about $\pm15$
+lakh. With a log link, $\log\E[y] = \mathbf w^\top\mathbf x + b$.
+
+Why prefer it over ``regress $\log y$ with OLS''?
+\begin{itemize}
+\item OLS on $\log y$ estimates $\E[\log y]$, and $e^{\E[\log y]}$ is the geometric mean, which is \emph{below} the
+  arithmetic mean $\E[y]$. You need a correction to predict average salary. Gamma-log models $\E[y]$ directly.
+\item It handles the heteroscedasticity through the variance function rather than through a transformation.
+\end{itemize}
+This is exactly the answer the candidate gave for violated homoscedasticity: ``model the variance explicitly, keep a
+linear model on top''.
+
+\section{Tweedie: when many values are exactly zero}
+Revenue per recruiter this month, insurance claims, money spent by a user: most are exactly 0, the rest positive and
+skewed. The Tweedie family with power $1<p<2$ is a compound Poisson--Gamma: a Poisson number of Gamma-sized amounts, so
+it has a point mass at 0 and a continuous positive part. LightGBM and XGBoost offer \code{objective="tweedie"}.
+
+\section{Beyond the mean: other regression losses}
+
+GLMs change the distribution. Another way to vary regression is to change \emph{what summary of $y$} you predict, or
+\emph{how you treat large errors}.
+
+\subsection{Quantile regression}
+Instead of the mean, predict a quantile: the 90th percentile salary for a role, so that ``90\% of offers are below this''.
+The \textbf{pinball (quantile) loss} for quantile $\tau$ is
+\[ \ell_\tau(y,\hat y) = \begin{cases}\tau\,(y - \hat y) & y \ge \hat y\\ (1-\tau)(\hat y - y) & y < \hat y\end{cases}. \]
+Under-prediction costs $\tau$ per unit and over-prediction $1-\tau$. At $\tau = 0.5$ it is half the absolute error, and
+the minimiser is the median.
+\begin{example}[: why the pinball loss finds the 90th percentile]
+Values $1,2,\dots,10$, $\tau = 0.9$. If $\hat y = 9$: one value above (cost $0.9\times1$) and eight below (cost $0.1\times
+(8+7+\dots+1) = 3.6$), total $4.5$. If $\hat y = 10$: nothing above, cost $0.1\times(9+8+\dots+1)=4.5$. If $\hat y = 5$:
+above costs $0.9\times(1+2+3+4+5) = 13.5$, below $0.1\times10 = 1$; total $14.5$. The minimum is around the 90th
+percentile, where 90\% of points are below.
+\end{example}
+Uses: \textbf{salary ranges} (10th--90th percentile band in a salary engine), delivery-time promises, prediction intervals
+from gradient boosting (\code{loss="quantile"}).
+
+\subsection{Robust regression: Huber and friends}
+\textbf{Huber loss} is quadratic for small errors ($|e| \le \delta$) and linear for large ones:
+$\ell = \frac12e^2$ if $|e|\le\delta$, else $\delta(|e| - \frac12\delta)$. Small errors are treated like OLS (efficient);
+large errors are treated like MAE (outliers cannot dominate). Other robust options: least absolute deviations (median
+regression), RANSAC (fit on random subsets, keep the model with most inliers), Theil--Sen.
+
+\subsection{Support Vector Regression (SVR)}
+The SVM idea applied to regression. Use the \textbf{$\varepsilon$-insensitive loss}: errors smaller than $\varepsilon$ cost
+\emph{nothing}; beyond that, cost grows linearly:
+\[ \ell_\varepsilon(y,\hat y) = \max(0, |y - \hat y| - \varepsilon). \]
+Picture a tube of half-width $\varepsilon$ around the prediction. Points inside the tube are ignored; points on or outside
+it become \textbf{support vectors} and alone determine the fit. Add an L2 penalty $\frac12\norm{\mathbf w}^2$ for flatness:
+\[ \min_{\mathbf w,b}\ \tfrac12\norm{\mathbf w}^2 + C\sum_i\max(0,|y_i - \mathbf w^\top\mathbf x_i - b| - \varepsilon). \]
+Because the dual form involves only dot products, \textbf{kernels} apply (RBF SVR fits smooth curves). Hyperparameters:
+$C$ (penalty for points outside the tube), $\varepsilon$ (tube width, the tolerated error), and the kernel's $\gamma$.
+Chapter 9 develops SVMs fully.
+
+\begin{example}[: the $\varepsilon$-insensitive loss]
+$\varepsilon = 0.5$. Errors $0.3, -0.5, 1.2, -2.0$ cost $0, 0, 0.7, 1.5$.
+\end{example}
+
+\subsection{Other regressors to be able to name}
+\begin{itemize}
+\item \textbf{Kernel ridge regression}: ridge regression with the kernel trick; squared loss, so every point matters
+  (unlike SVR's sparsity); closed-form solution $\boldsymbol\alpha = (K + \lambda I)^{-1}\mathbf y$.
+\item \textbf{Gaussian process regression}: a Bayesian kernel method that returns a mean \emph{and} an uncertainty.
+\item \textbf{Isotonic regression}: fits the best monotone (non-decreasing) step function; used to calibrate classifier
+  probabilities.
+\item \textbf{$k$-NN regression, regression trees, random forests, gradient boosting, neural networks}: all can regress.
+\item \textbf{Survival (time-to-event) models}: time-to-hire or time-to-churn with censoring (jobs still open), e.g. Cox
+  proportional hazards. Ordinary regression on ``days open'' is biased because open jobs have not finished.
+\end{itemize}
+
+\section{Choosing a regression model: a decision guide}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{X X}
+\toprule
+Situation & Reach for\\
+\midrule
+Continuous, roughly symmetric noise & OLS / Ridge\\
+Counts (applies, clicks, calls) & Poisson (or negative binomial) with log link and exposure offset\\
+Positive, right-skewed, spread $\propto$ level (salary, price) & Gamma GLM with log link, or OLS on $\log y$\\
+Many exact zeros plus positive amounts (revenue) & Tweedie, or a two-part (hurdle) model\\
+Need a range or a pessimistic estimate & Quantile regression (or quantile GBM)\\
+Outliers in $y$ & Huber / LAD / RANSAC\\
+Non-linear, smallish data, smooth function & SVR or kernel ridge with RBF kernel, or Gaussian process\\
+Big tabular data with interactions & Gradient boosting (with the matching objective: poisson, gamma, tweedie, quantile)\\
+Time-to-event with censoring & Survival models\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{practical}[: GLMs at InfoEdge]
+\begin{itemize}
+\item \textbf{Applies per job per day} (Job Posting engine; 100 crore+ applies a year): Poisson/negative binomial with
+  exposure, used to forecast which jobs will under-perform and need promotion via mailers or WhatsApp.
+\item \textbf{Salary engine} (Data Factory): Gamma-log or log-OLS for the mean, quantile regression for the band shown in
+  Naukri TopTier's ``salary intelligence'' (10th/50th/90th percentile).
+\item \textbf{99acres}: number of enquiries per listing (Poisson); price per square foot (Gamma or log-OLS).
+\item \textbf{Revenue per recruiter} (many zero months): Tweedie.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: Support Vector Machines Part 1 (for SVR intuition)}{\ytid{efR1C6CvhmE}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{reported by InfoEdge hire: count data} You need to predict the number of applications a job posting
+will receive tomorrow. Why is ordinary linear regression a poor choice, and what would you use?}
+\oneline{Counts are non-negative integers whose variance grows with their mean, and effects on them are naturally
+multiplicative; Poisson regression (a GLM with a log link), or negative binomial if overdispersed, models all three.}
+\why
+Problems with OLS on counts:
+\begin{enumerate}
+\item It can predict negative applies for unattractive jobs.
+\item Its noise model assumes the same spread for a job expecting 1 apply and one expecting 500; in reality the spread
+  grows like $\sqrt\mu$. OLS over-weights the noisy high-count jobs and its intervals are wrong.
+\item Effects are multiplicative in reality (``remote jobs get 50\% more applies'', not ``7 more applies'' regardless
+  of baseline). A linear model forces additivity.
+\end{enumerate}
+Poisson regression: $y\sim\text{Poisson}(\mu)$, $\log\mu = \mathbf w^\top\mathbf x + b + \log(\text{hours live})$ (offset
+for exposure). Predictions are positive; $e^{w_j}$ is a rate ratio; the variance equals the mean by assumption.
+\textbf{Check overdispersion}: if the Pearson $\chi^2$ divided by degrees of freedom is well above 1 (say 3), switch to
+negative binomial or quasi-Poisson. If there are many structural zeros (expired jobs), use a zero-inflated model.
+\worked Fitted $\log\mu = 0.8 + 0.4\,\text{remote} + 0.3\,\text{top\_company} - 0.07\,\text{days}$. A remote job at a
+top company on day 0: $\mu = e^{1.5} = 4.5$ applies/day; on day 10: $4.5\times e^{-0.7} = 2.2$.
+\pushes \emph{``Could you just log-transform and use OLS?''} $\log(0)$ is undefined; $\log(y+1)$ is a hack that biases
+results for small counts. \emph{``Could gradient boosting do it?''} Yes, with \code{objective="poisson"}, which uses the
+same log link and Poisson deviance loss, capturing non-linearities.
+\pitfall Saying ``use classification because counts are discrete''. Counts are ordered and unbounded; a regression with a
+count distribution is the right framing.
+\end{qa}
+
+\begin{qa}{\pyq{reported: GLM as the answer to heteroscedasticity} What is a generalised linear model? Name its
+components and explain how it generalises linear regression.}
+\oneline{A GLM has a linear predictor $\eta = \mathbf w^\top\mathbf x + b$, a link function $g$ with $g(\E[y]) = \eta$, and a
+distribution from the exponential family that fixes how the variance depends on the mean; linear regression is the
+special case with Gaussian noise and identity link.}
+\why
+Linear regression ties together three choices: the mean is linear, the target is unbounded, the noise is constant and
+Gaussian. A GLM unties them. The link handles the range of the mean (log for positive, logit for $(0,1)$). The
+distribution handles the noise shape and the mean--variance relationship (Poisson: $\Var = \mu$; Gamma: $\Var \propto
+\mu^2$; Bernoulli: $\mu(1-\mu)$). Fitting is by maximum likelihood, done with iteratively reweighted least squares:
+each Newton step is a weighted linear regression on a ``working response''. Goodness of fit is measured by
+\textbf{deviance}, twice the log-likelihood gap between the model and a perfect (saturated) model; for the Gaussian it
+reduces to the sum of squared residuals.
+\worked Three GLMs on the same features: Gaussian-identity for ``rating 1--5'' treated as continuous,
+Bernoulli-logit for ``applied or not'', Poisson-log for ``number of profile views''.
+\pushes \emph{``Why must the distribution be in the exponential family?''} Because then the likelihood has a common form
+$\exp\{(y\theta - b(\theta))/\phi + c(y,\phi)\}$, which gives a single fitting algorithm, convexity with the canonical
+link, and the neat gradient $(\mu - y)\mathbf x$.
+\end{qa}
+
+\begin{qa}{\pyq{reported: SVR} Can an SVM be used for regression? Explain how.}
+\oneline{Yes: support vector regression fits a function that keeps as many points as possible inside a tube of half-width
+$\varepsilon$, ignores errors smaller than $\varepsilon$, penalises larger errors linearly with weight $C$, keeps the function
+flat with an L2 penalty, and uses kernels for non-linear fits.}
+\why
+Classification SVM: find the widest margin separating classes; only points on or inside the margin (support vectors)
+matter. SVR flips the picture: we want a function such that points lie \emph{within} a band around it. Formally
+\[ \min\ \tfrac12\norm{\mathbf w}^2 + C\sum_i(\xi_i + \xi_i^*)\ \text{ s.t. } y_i - f(\mathbf x_i) \le \varepsilon + \xi_i,\
+f(\mathbf x_i) - y_i \le \varepsilon + \xi_i^*,\ \xi,\xi^*\ge0. \]
+$\xi$ and $\xi^*$ measure how far a point sticks out above or below the tube. The dual involves only dot products
+$\mathbf x_i^\top\mathbf x_j$, so replacing them with a kernel $K(\mathbf x_i,\mathbf x_j)$ gives non-linear regression.
+The solution depends only on points on or outside the tube: \textbf{sparse} in the data, like SVM classification.
+\textbf{Hyperparameters:} $\varepsilon$ (how much error is tolerated for free; larger $\varepsilon$ means fewer support vectors and
+a smoother fit), $C$ (how strongly violations are penalised), $\gamma$ (RBF width). Scale features first.
+\worked $\varepsilon = 1$ lakh for a salary model: predictions within 1 lakh incur no loss, so the model concentrates on the
+large errors; points within the tube do not influence the fit.
+\pushes \emph{``SVR vs kernel ridge?''} Same kernel trick; kernel ridge uses squared loss (every point matters, closed
+form, faster to fit for moderate $n$), SVR uses $\varepsilon$-insensitive loss (sparse, robust to small noise, linear in large
+errors so less outlier-sensitive). \emph{``When is SVR a good choice?''} Small to medium data (up to tens of thousands of
+rows), smooth non-linear relations, a natural tolerance level.
+\pitfall Saying ``SVMs are only for classification'', or ``points inside the tube are support vectors'' (it is the
+reverse).
+\end{qa}
+
+\begin{qa}{\deep Is logistic regression a GLM? Is linear regression? What is a ``link function'' in each?}
+\oneline{Both are GLMs: linear regression is Gaussian with the identity link, logistic regression is Bernoulli with the
+logit link $\log\frac{\mu}{1-\mu}$.}
+\why For a binary $y$, $\mu = P(y=1)$ lives in $(0,1)$. The logit maps $(0,1)$ onto the real line, so the linear
+predictor can be any number. Its inverse is the sigmoid. The Bernoulli variance $\mu(1-\mu)$ is the variance function.
+Other links for binary data exist: \textbf{probit} (inverse normal CDF, popular in economics) and \textbf{complementary
+log-log} (asymmetric, for rare events). Logit is the canonical link, giving the tidy gradient and interpretable odds ratios.
+\end{qa}
+
+\begin{qa}{\deep Why does every canonical-link GLM have the gradient ``(prediction $-$ target) $\times$ input''?}
+\oneline{Because in the exponential family the derivative of the log-partition function is the mean, so with the
+canonical link the score equation becomes $\sum(y_i - \mu_i)\mathbf x_i = 0$.}
+\why An exponential-family density can be written $p(y) = h(y)\exp(\theta y - A(\theta))$, where $\theta$ is the natural
+parameter and $A$ the log-partition function, with $A'(\theta) = \mu$. The canonical link sets $\theta = \eta = \mathbf
+w^\top\mathbf x$. The log-likelihood of one point is $\theta y - A(\theta)$, whose derivative with respect to $\mathbf w$ is
+$(y - A'(\theta))\mathbf x = (y - \mu)\mathbf x$. Gaussian ($A = \theta^2/2$), Bernoulli ($A = \log(1+e^\theta)$) and
+Poisson ($A = e^\theta$) all fit this.
+\pushes \emph{``Why does that matter?''} One generic fitting routine (IRLS) and one gradient code path serve all of them;
+it is also why neural-network output layers pair sigmoid with BCE and softmax with cross-entropy.
+\end{qa}
+
+\begin{qa}{\deep Salary is right-skewed and heteroscedastic. Compare: OLS on $\log(\text{salary})$, a Gamma GLM with log link,
+and gradient boosting with MSE.}
+\oneline{Log-OLS and Gamma-log both model multiplicative effects and growing spread, but log-OLS predicts the geometric
+mean and needs a back-transform correction while Gamma-log predicts the mean directly; GBM with MSE fits non-linear effects
+but is dominated by the largest salaries unless you change its objective or target.}
+\why
+\begin{itemize}
+\item \textbf{Log-OLS}: fit $\E[\log y]$. Predicting $e^{\hat\eta}$ underestimates the mean by a factor $e^{\sigma^2/2}$
+  (Duan smearing fixes it). Coefficients are percent effects. Easy and robust.
+\item \textbf{Gamma-log}: $\log\E[y] = \eta$ and $\Var\propto\mu^2$. Coefficients are percent effects on the mean; no
+  back-transform; requires $y > 0$.
+\item \textbf{GBM with MSE on raw salary}: captures interactions (city $\times$ title) but squared error on raw scale makes
+  the high earners dominate the loss. Better: GBM on $\log y$, or GBM with \code{objective="gamma"}.
+\end{itemize}
+Choose by the question: for an interpretable salary report, log-OLS or Gamma; for maximum accuracy, GBM with the gamma
+objective, validated with a scale-aware metric (MAPE or RMSLE).
+\end{qa}
+
+\begin{qa}{What is overdispersion and how do you detect and handle it?}
+\oneline{Overdispersion is count data varying more than the Poisson model's variance $=$ mean allows; detect it with
+deviance or Pearson $\chi^2$ per degree of freedom well above 1, and handle it with quasi-Poisson, negative binomial, or
+random effects.}
+\why Unmodelled differences (some recruiters write better job descriptions) make counts clump. Under Poisson the
+standard errors are then too small, so you would wrongly declare features significant. Negative binomial adds a Gamma-
+distributed multiplier to each rate, giving $\Var = \mu + \mu^2/k$.
+\worked Mean daily applies 5, sample variance 23: ratio 4.6, strong overdispersion.
+\end{qa}
+
+\begin{qa}{\deep You need a salary \emph{range} for a job title, not a single number. How would you build it?}
+\oneline{Use quantile regression (linear or gradient-boosted) to predict, for example, the 10th, 50th and 90th
+percentiles directly with the pinball loss; alternatively predict mean and variance with a distributional model.}
+\why A mean $\pm$ constant band is wrong under heteroscedasticity. Quantile regression lets each quantile depend on features
+differently (senior roles have wider bands). Train one model per quantile with loss $\ell_\tau$; enforce non-crossing (sort
+the predictions or fit jointly). Evaluate with pinball loss and \textbf{coverage}: on validation data, about 80\% of actual
+salaries should fall between the 10th and 90th predictions.
+\inpractice This is what a ``salary intelligence'' card (Naukri TopTier: ``you earn more than 68\% of software engineers in
+Delhi'') needs: a conditional distribution, not a point.
+\end{qa}
+
+\begin{qa}{Explain the pinball loss and prove that, for $\tau = 0.5$, its minimiser is the median.}
+\oneline{It charges $\tau$ per unit of under-prediction and $1-\tau$ per unit of over-prediction; at $\tau=0.5$ both are $0.5$,
+so it is half the absolute error, which is minimised by the median.}
+\why Minimise $\sum_i\ell_\tau(y_i, c)$ over a constant $c$. Moving $c$ up by a tiny $\delta$ changes the loss by $\delta$
+times $[(1-\tau)\cdot\#\{y_i < c\} - \tau\cdot\#\{y_i > c\}]$. At the optimum this is zero: the fraction of points below
+$c$ equals $\tau$. So $c$ is the $\tau$-quantile; for $\tau = 0.5$, the median.
+\end{qa}
+
+\begin{qa}{\deep What is Huber loss and when would you use it instead of MSE or MAE?}
+\oneline{Huber is squared for small errors and linear for large ones; use it when the data are mostly well-behaved but have
+some outliers, because it keeps OLS's efficiency on the bulk and MAE's robustness on the tail.}
+\why MSE's gradient is the error itself, so one huge error dominates the update. MAE's gradient is $\pm1$ everywhere: robust
+but not smooth at 0 and less efficient for Gaussian-like noise. Huber's gradient is the error, clipped at $\pm\delta$. $\delta$
+sets where ``outlier'' starts; about $1.35\sigma$ gives 95\% of OLS efficiency under Gaussian noise. Deep learning's ``smooth
+L1'' (in object detection) is the same idea; ``gradient clipping'' is its cousin.
+\end{qa}
+
+\begin{qa}{\deep Can a classification model be turned into a regression model, and vice versa?}
+\oneline{Yes: regression can be framed as classification over bins (ordinal or binned targets), and a classifier's
+probability output is itself a regression of $\E[y]$ for a 0/1 target; many algorithms (trees, $k$-NN, SVM, neural nets) have
+both forms with only the loss or leaf rule changed.}
+\why Examples: predicting salary band (0--5, 5--10, 10--20 lakh) as multiclass when only bands are needed or when the
+distribution is multimodal; ordinal regression (cumulative logit) for star ratings 1--5; decision trees use mean in leaves
+for regression and majority vote for classification; SVM uses hinge or $\varepsilon$-insensitive loss. Binning loses ordering
+information unless you use an ordinal model.
+\end{qa}
+
+\begin{qa}{What is deviance in a GLM, and how is it used?}
+\oneline{Deviance is twice the difference in log-likelihood between a perfect (saturated) model and your model; it generalises
+the residual sum of squares, and differences in deviance compare nested models.}
+\why For Gaussian, deviance $=$ SSE$/\sigma^2$. For Poisson, $D = 2\sum[y\log(y/\mu) - (y - \mu)]$. Null deviance (intercept only)
+minus residual deviance measures what the features explain; ``pseudo-$R^2$'' $= 1 - D_{model}/D_{null}$. Two nested models are
+compared by the deviance difference, roughly $\chi^2$ with degrees of freedom equal to the number of extra parameters.
+\worked Null deviance 1{,}200, model deviance 800: pseudo-$R^2 = 0.33$.
+\end{qa}
+
+\begin{qa}{\deep How would you model ``time to fill a vacancy'' when 30\% of jobs in your data are still open?}
+\oneline{With a survival model, because open jobs are right-censored: we know they took at least their current age, and
+dropping them or treating their age as the outcome biases the estimate downward.}
+\why Ordinary regression on closed jobs only selects the fast-filling ones; using the current age of open jobs as if it were
+the fill time understates it. Survival analysis uses the full information: Kaplan--Meier curves to describe, Cox proportional
+hazards ($h(t\mid x) = h_0(t)e^{\mathbf w^\top\mathbf x}$) to model, or accelerated failure time models. Gradient boosting has
+survival objectives too (\code{survival:cox} in XGBoost).
+\end{qa}
+
+\begin{qa}{What is an offset in Poisson regression? Give an example.}
+\oneline{A term added to the linear predictor with its coefficient fixed at 1, typically $\log(\text{exposure})$, so the model
+predicts a rate per unit of exposure.}
+\why $\log\mu_i = \log t_i + \mathbf w^\top\mathbf x_i$ means $\mu_i = t_i e^{\mathbf w^\top\mathbf x_i}$: expected count is
+exposure times rate. Example: listing enquiries on 99acres where listings were live 2 to 60 days: offset $\log(\text{days live})$.
+Without it, ``old listings get more enquiries'' masquerades as a feature effect.
+\end{qa}
+
+\begin{qa}{\deep A colleague fits OLS to predict ``probability of hire'' and gets some predictions of 1.2. Fix the model
+without changing to a black box.}
+\oneline{Use a binomial GLM (logistic regression) so predictions stay in $(0,1)$; if they need a linear-probability reading, report
+average marginal effects from the logistic model.}
+\why The identity link has no range control; the logit link does. Average marginal effect $= \frac1n\sum w_j p_i(1-p_i)$ gives
+``change in probability per unit of $x_j$'' averaged over the data, which is what the colleague wanted from OLS coefficients.
+\end{qa}
+
+\begin{qa}{When would you use isotonic regression?}
+\oneline{When you know the relationship is monotone but not its shape, most commonly to calibrate classifier scores into
+probabilities.}
+\why Isotonic regression finds the best non-decreasing step function (pool adjacent violators algorithm). To calibrate a
+gradient-boosted model, fit isotonic regression from its raw score to the 0/1 labels on a held-out set. It is flexible but can
+overfit with little data; Platt scaling (a 1-feature logistic regression) is the low-data alternative.
+\end{qa}
+
+\begin{qa}{\deep Kernel ridge regression, SVR and Gaussian process regression all use kernels. How do they differ?}
+\oneline{They share the kernel function but differ in loss and output: kernel ridge uses squared loss with a closed-form solution,
+SVR uses the $\varepsilon$-insensitive loss giving a sparse solution, and a GP is the Bayesian version of kernel ridge that also
+returns predictive uncertainty.}
+\why Kernel ridge: $\hat f(\mathbf x) = \sum_i\alpha_iK(\mathbf x_i,\mathbf x)$ with $\boldsymbol\alpha = (K + \lambda I)^{-1}\mathbf y$;
+every training point has non-zero $\alpha_i$. SVR: most $\alpha_i = 0$ (points in the tube), so prediction is cheaper and small
+errors are ignored. GP: the posterior mean equals kernel ridge with $\lambda = $ noise variance; the posterior variance tells you
+where the model is unsure (useful for active learning or pricing risk). All scale as $O(n^3)$ naively.
+\end{qa}
+
+\begin{qa}{How does XGBoost or LightGBM do Poisson, Gamma or quantile regression?}
+\oneline{By swapping the loss: the trees fit gradients and Hessians of the chosen negative log-likelihood (Poisson, Gamma, Tweedie)
+or of the pinball loss, usually on the log scale, so the boosting machinery is unchanged.}
+\why For Poisson with log link and raw score $F$, the loss per row is $e^F - yF$; gradient $e^F - y = \mu - y$; Hessian $e^F =
+\mu$. These plug straight into the XGBoost split-gain formula (Chapter 8). Parameters: \code{objective="count:poisson"},
+\code{"reg:gamma"}, \code{"reg:tweedie"}, \code{"reg:quantileerror"} with \code{quantile\_alpha}.
+\end{qa}

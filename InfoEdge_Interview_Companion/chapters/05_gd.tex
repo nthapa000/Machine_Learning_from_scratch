@@ -1,1 +1,378 @@
-% TODO 05_gd
+\chapter{Gradient Descent and Optimisers}
+\companion{StatQuest: Gradient Descent, Step-by-Step}{\ytid{sDv4f4s2SB8}}
+
+Almost every model in this book is trained by some form of gradient descent: logistic regression, neural networks,
+matrix factorisation, word embeddings, and (in function space) gradient boosting. InfoEdge has asked which is faster,
+SGD or batch gradient descent (OA), what the learning rate is and how to adjust it, and what to do if training gets
+stuck in a local optimum (interview).
+
+\section{Walking downhill in fog}
+You stand on a hillside in thick fog and want to reach the valley floor. You cannot see the valley, but you can feel
+the slope under your feet. Strategy: step in the steepest downhill direction, a small step, then feel again. That is
+gradient descent.
+
+\begin{itemize}
+\item The \textbf{landscape} is the loss $L(\mathbf w)$: height at each setting of the parameters.
+\item The \textbf{slope} is the \textbf{gradient} $\nabla L(\mathbf w)$: a vector of partial derivatives, pointing in the
+  direction of steepest \emph{ascent}. Its length says how steep.
+\item The \textbf{step} goes the other way: $\mathbf w \leftarrow \mathbf w - \eta\,\nabla L(\mathbf w)$.
+\item $\eta$ (eta) is the \textbf{learning rate}: how big a step relative to the slope.
+\end{itemize}
+
+\subsection{What a derivative is, in one paragraph}
+For a function of one number, $L(w)$, the derivative $L'(w)$ is the slope of the curve at $w$: how much $L$ changes per
+tiny change in $w$. If $L'(w) > 0$, increasing $w$ increases $L$, so we should decrease $w$; if $L'(w) < 0$ we should
+increase it. ``Move against the derivative'' always goes downhill. With many parameters, the partial derivative
+$\partial L/\partial w_j$ is the slope along $w_j$ alone, and the gradient collects all of them.
+
+\begin{example}[: three steps by hand]
+$L(w) = (w-3)^2$, so $L'(w) = 2(w-3)$. Start $w_0 = 0$, $\eta = 0.1$.
+Step 1: $L'(0) = -6$, $w_1 = 0 - 0.1\cdot(-6) = 0.6$.
+Step 2: $L'(0.6) = -4.8$, $w_2 = 0.6 + 0.48 = 1.08$.
+Step 3: $L'(1.08) = -3.84$, $w_3 = 1.464$.
+Each step closes 20\% of the remaining gap to 3 ($w_{t+1} - 3 = 0.8(w_t - 3)$). Steps shrink automatically as the slope
+flattens near the minimum.
+\end{example}
+
+\section{The learning rate}
+\begin{itemize}
+\item \textbf{Too small}: progress is painfully slow; training may stop (time budget) before converging.
+\item \textbf{Too large}: steps overshoot the valley floor and land higher on the other side; the loss oscillates or
+  blows up (NaN).
+\item \textbf{Just right}: fast, steady decrease.
+\end{itemize}
+
+\begin{example}[: when it diverges]
+Same $L = (w-3)^2$. The update is $w_{t+1} - 3 = (1 - 2\eta)(w_t - 3)$. This shrinks the gap only if
+$|1 - 2\eta| < 1$, i.e. $0 < \eta < 1$. At $\eta = 0.5$ it jumps to 3 in one step. At $\eta = 0.9$ it oscillates
+($1 - 1.8 = -0.8$) but converges. At $\eta = 1.1$, the factor is $-1.2$: the gap grows by 20\% each step, with alternating
+sign. In general, for a quadratic with curvature (second derivative) $h$, GD converges iff $\eta < 2/h$.
+\end{example}
+
+With several parameters, the steepest direction can have curvature 50 and the flattest 1; $\eta$ must be below $2/50$
+for stability, which makes progress along the flat direction 50 times slower. This ratio is the \textbf{condition
+number}, and it is why \textbf{feature scaling} matters: unscaled features (salary in rupees next to experience in years)
+create long, narrow valleys where GD zig-zags.
+
+\subsection{Schedules}
+\begin{itemize}
+\item \textbf{Step decay}: divide $\eta$ by 10 every few epochs.
+\item \textbf{Exponential decay}: $\eta_t = \eta_0\gamma^t$.
+\item \textbf{Cosine annealing}: $\eta_t = \eta_{min} + \frac12(\eta_{max} - \eta_{min})(1 + \cos(\pi t/T))$.
+\item \textbf{Warmup}: start tiny and ramp up over the first few hundred steps (standard for Transformers, where early
+  gradients are unreliable and Adam's statistics are not yet warmed up).
+\item \textbf{Reduce on plateau}: cut $\eta$ when validation loss stops improving.
+\item \textbf{LR range test}: increase $\eta$ exponentially over one short run, plot loss, choose a value a bit below where
+  loss is falling fastest.
+\end{itemize}
+
+\section{Batch, stochastic and mini-batch}
+The loss is an average over $n$ examples, so its gradient is the average of $n$ per-example gradients.
+\begin{itemize}
+\item \textbf{Batch GD}: use all $n$ examples per step. Exact gradient, smooth path, but one step costs a full pass over
+  the data. With 10 million rows, that is very slow per step.
+\item \textbf{Stochastic GD (SGD)}: use one random example per step. Very cheap, very noisy steps.
+\item \textbf{Mini-batch GD}: use a batch of $B$ examples (32--1024). The standard in practice: noise is reduced by
+  averaging, and GPUs process a batch in parallel almost as fast as one example.
+\end{itemize}
+An \textbf{epoch} is one pass through the data. With $n = 50{,}000$ and $B = 250$, one epoch is 200 updates.
+
+\begin{intuition}[: why noisy steps can be good]
+A random sample of examples gives an unbiased but noisy estimate of the true gradient (on average correct). The noise
+jostles the parameters, which helps escape saddle points and shallow local minima and tends to settle in wider valleys,
+which generalise better. The price: SGD with a fixed learning rate never settles exactly; it jitters around the minimum
+in a cloud whose size is proportional to $\eta$. Decaying $\eta$ shrinks the cloud.
+\end{intuition}
+
+\section{Convexity, local minima and saddle points}
+\begin{itemize}
+\item A function is \textbf{convex} if the straight line between any two points on its graph lies above the graph: a
+  bowl. Any local minimum is global. Linear regression (MSE), logistic regression (log loss), SVM (hinge + L2) and Lasso
+  are convex.
+\item Neural network losses are \textbf{non-convex}: many minima and many \textbf{saddle points} (flat points that go up in
+  some directions and down in others, like a horse saddle).
+\item In high dimensions, saddle points are far more common than bad local minima: for a critical point to be a minimum,
+  the curvature must be positive in \emph{every} one of millions of directions. Empirically, most local minima of large
+  networks have similar, good loss values. The real enemies are plateaus and saddles, where the gradient is tiny.
+\end{itemize}
+
+\section{Momentum, RMSProp and Adam, built up step by step}
+
+\subsection{Momentum}
+Plain GD in a long narrow valley zig-zags across the steep walls while creeping along the floor. \textbf{Momentum} keeps a
+running ``velocity'':
+\[ \mathbf v \leftarrow \beta\mathbf v + \nabla L,\qquad \mathbf w \leftarrow \mathbf w - \eta\mathbf v,\qquad \beta\approx0.9. \]
+Across the valley the gradients alternate sign and cancel in $\mathbf v$; along the floor they agree and accumulate. Like a
+heavy ball rolling downhill. With a constant gradient $g$, $\mathbf v$ approaches $g/(1-\beta) = 10g$: the effective step is
+up to 10 times larger along consistent directions.
+
+\begin{example}[: momentum velocities]
+$\beta = 0.9$, constant gradient 1, $v_0 = 0$: $v_1 = 1$, $v_2 = 1.9$, $v_3 = 2.71$, $v_4 = 3.44$, \dots\ $\to 10$.
+\end{example}
+
+\textbf{Nesterov momentum} evaluates the gradient at the look-ahead point $\mathbf w - \eta\beta\mathbf v$: it corrects course
+before overshooting.
+
+\subsection{AdaGrad and RMSProp: a learning rate per parameter}
+Some parameters get large gradients, some small (rare features, rare words). RMSProp keeps a running average of
+\emph{squared} gradients per parameter and divides by its square root:
+\[ s \leftarrow \rho s + (1-\rho)g^2,\qquad w \leftarrow w - \frac{\eta}{\sqrt{s} + \epsilon}g. \]
+Parameters with consistently large gradients take smaller steps; rarely updated ones take larger steps. AdaGrad uses the
+\emph{sum} of all past squared gradients instead of a moving average, so its effective learning rate only ever shrinks
+(good for sparse convex problems, stalls in deep learning).
+
+\subsection{Adam = momentum + RMSProp + bias correction}
+\begin{align*}
+m &\leftarrow \beta_1m + (1-\beta_1)g &&\text{(average gradient: momentum)}\\
+v &\leftarrow \beta_2v + (1-\beta_2)g^2 &&\text{(average squared gradient: scale)}\\
+\hat m &= m/(1-\beta_1^t),\quad \hat v = v/(1-\beta_2^t) &&\text{(bias correction)}\\
+w &\leftarrow w - \eta\,\hat m/(\sqrt{\hat v} + \epsilon)
+\end{align*}
+Defaults: $\beta_1 = 0.9$, $\beta_2 = 0.999$, $\epsilon = 10^{-8}$, $\eta = 10^{-3}$. Because $m$ and $v$ start at 0, early
+averages are biased toward 0; dividing by $(1 - \beta^t)$ removes that bias.
+
+\begin{example}[: the first Adam step]
+$g = 4$, $w = 1$, $\eta = 0.01$, $t = 1$. $m = 0.4$, $v = 0.016$. $\hat m = 0.4/0.1 = 4$, $\hat v = 0.016/0.001 = 16$.
+Step $= 0.01\cdot4/4 = 0.01$, so $w = 0.99$. The first step has size $\eta$ whatever the gradient's scale: Adam is
+scale-invariant per parameter.
+\end{example}
+
+\textbf{AdamW} applies weight decay directly to the weights instead of through the gradient (Chapter 1); it is the
+default for Transformers.
+
+\section{Second-order methods}
+Newton's method uses curvature: $\mathbf w \leftarrow \mathbf w - H^{-1}\nabla L$, where $H$ is the Hessian (matrix of second
+derivatives). It jumps straight to the minimum of a quadratic and converges in a handful of steps near the optimum. But
+$H$ has $d^2$ entries and inverting costs $d^3$: impossible for a million parameters. \textbf{L-BFGS} approximates
+$H^{-1}$ from the last few gradients and is the default for logistic regression in scikit-learn. XGBoost uses a diagonal
+second-order step per leaf (Chapter 8).
+
+\section{Practical checklist when training is not going well}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{X X}
+\toprule
+Symptom & Likely cause and fix\\
+\midrule
+Loss explodes / NaN & learning rate too high, exploding gradients, $\log(0)$ or division by 0: lower $\eta$, gradient
+clipping, check data for inf/NaN, use numerically stable losses\\
+Loss oscillates wildly & $\eta$ too high or batch too small: lower $\eta$, larger batch, momentum\\
+Loss decreases very slowly & $\eta$ too low, unscaled features, saturated activations: raise $\eta$, scale features, better
+init, BatchNorm, Adam\\
+Loss plateaus early at a poor value & saddle/plateau, dead ReLUs, too much regularisation, bug in labels: restart with
+different seed, warm restarts, cyclic LR, check data pipeline, overfit a tiny batch first\\
+Train loss falls, val loss rises & overfitting: early stopping and regularisation\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{practical}[: optimisation at InfoEdge scale]
+Click/apply models on billions of events are trained with mini-batch SGD/Adam on sparse features, often on Spark or
+GPU. The Transformers behind search and the fine-tuned LLMs in the GenAI slide (SFT, DPO, distillation) are trained with
+AdamW, warmup and cosine decay. A practical rule from these systems: when you double the batch size, scale the learning
+rate up (linearly for SGD, by about $\sqrt2$ for Adam) and add warmup.
+\end{practical}
+
+\stuck{3Blue1Brown: Gradient descent, how neural networks learn}{\ytid{IHZwWFHWa-w}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{OA: SGD vs batch gradient descent} On a dataset with 10 million rows, which is faster, stochastic or batch
+gradient descent? Explain properly.}
+\oneline{Per update, SGD (or mini-batch) is millions of times cheaper and in wall-clock time it reaches a good solution much
+faster; batch GD takes more exact steps but each step costs a full pass over the data.}
+\why
+Batch GD computes the exact gradient by touching all $10^7$ rows before moving once. SGD moves after each row (or each
+mini-batch of, say, 256), so in the time batch GD makes 1 step, mini-batch SGD makes about 39{,}000 steps. Early in
+training, even a noisy direction is good enough to make huge progress. Near the optimum, the noise means SGD jitters rather
+than converging exactly; a decaying learning rate fixes that.
+Technically, to reach error $\epsilon$ on a strongly convex problem, batch GD needs $O(\log(1/\epsilon))$ iterations of cost
+$O(n)$ each, and SGD needs $O(1/\epsilon)$ iterations of cost $O(1)$ each: for large $n$ and modest accuracy (which is all
+generalisation needs), SGD wins.
+\worked Logistic regression on 10M apply events: one epoch of mini-batch SGD with $B = 512$ gives about 19{,}500 updates
+and typically gets within 0.1\% of the final log loss; batch GD would need hundreds of full passes.
+\pushes \emph{``Then why ever use batch GD?''} Small datasets, when you need exact deterministic convergence, or with
+second-order methods (L-BFGS) that need accurate gradients. \emph{``Why mini-batch over pure SGD?''} GPU parallelism and
+lower variance per step.
+\pitfall Answering ``batch GD, because it converges in fewer iterations''. Fewer iterations, but each is $n$ times more
+expensive.
+\end{qa}
+
+\begin{qa}{\pyq{INT: learning rate} What is the learning rate, how do you pick it, and how do you adjust it during
+training?}
+\oneline{It is the step size multiplier on the gradient; pick it with an LR range test or a log-scale search, and adjust it
+with a schedule (warmup, then step/cosine decay or reduce-on-plateau).}
+\why
+Too small: slow; too large: oscillation or divergence. For a quadratic with curvature $h$, stability requires $\eta < 2/h$.
+\textbf{Picking}: try $10^{-1}, 10^{-2}, 10^{-3}, 10^{-4}$ for a few hundred steps and compare loss curves, or run a range
+test. Defaults: Adam $10^{-3}$ (from scratch), $2\times10^{-5}$ to $5\times10^{-5}$ for fine-tuning BERT; SGD with momentum
+$0.1$ for ResNets with batch 256.
+\textbf{Adjusting}: large $\eta$ early to make progress and escape poor regions, smaller later to settle. Warmup protects
+the start; decay sharpens the end. If validation loss plateaus, cut by 10.
+\pushes \emph{``What happens if you raise the batch size 8 times?''} The gradient noise drops; you can raise $\eta$ (linear
+scaling rule) with a warmup.
+\end{qa}
+
+\begin{qa}{\pyq{INT: stuck at a local optimum} Your network's loss stops improving at a poor value. What could be happening
+and what do you do?}
+\oneline{In deep nets it is more often a plateau, a saddle point, saturated or dead units, a learning rate problem or a data
+bug than a true bad local minimum; I would debug the pipeline first, then change the optimisation (learning rate schedule,
+momentum/Adam, restarts, initialisation, normalisation).}
+\why
+\begin{enumerate}
+\item \textbf{Bug check}: can the model overfit 32 examples to near-zero loss? If not, there is a bug (labels shuffled
+  relative to inputs, wrong loss, frozen layers, wrong preprocessing).
+\item \textbf{Learning rate}: too low means crawling on a plateau; too high means bouncing in a valley. Try an LR finder
+  and a schedule; try cyclic or warm restarts to jump out.
+\item \textbf{Saturation}: sigmoid/tanh units with huge inputs have near-zero gradients; ReLUs that always output 0 are
+  dead. Fix with better initialisation (He/Xavier), BatchNorm, Leaky ReLU, a lower $\eta$.
+\item \textbf{Optimiser}: momentum or Adam carry through flat regions; SGD noise (smaller batches) helps escape saddles.
+\item \textbf{Capacity}: if training loss itself is high, the model may simply be too small.
+\item \textbf{Restarts}: different random seeds; ensembles of them.
+\end{enumerate}
+\pushes \emph{``Are local minima a big problem in deep learning?''} Mostly no, in large networks: most local minima are
+nearly as good as the global one; saddle points and plateaus are the practical issue.
+\end{qa}
+
+\begin{qa}{Do three gradient-descent steps on $L(w) = (w - 3)^2$ from $w_0 = 0$ with $\eta = 0.1$. For which $\eta$ does it
+converge?}
+\oneline{$w = 0.6, 1.08, 1.464$; it converges for $0 < \eta < 1$.}
+\why Derivative $2(w-3)$; the gap to the optimum multiplies by $(1 - 2\eta)$ each step; convergence needs $|1 - 2\eta| <
+1$.
+\end{qa}
+
+\begin{qa}{Why does feature scaling speed up gradient descent?}
+\oneline{Unscaled features create a loss surface with very different curvature in different directions; the learning rate
+must suit the steepest direction, so progress along flat directions is slow and the path zig-zags; scaling makes the contours
+roughly circular.}
+\why For linear regression the curvature along $w_j$ is proportional to the variance of feature $j$. Salary in rupees
+(variance $10^{11}$) next to experience in years (variance 10) gives a condition number of $10^{10}$. With standardisation
+both have variance 1 and GD heads straight to the minimum.
+\pushes \emph{``Which models do not need scaling?''} Trees and tree ensembles (they split on thresholds, invariant to
+monotone transforms). Naive Bayes mostly. Everything distance- or gradient-based needs it.
+\end{qa}
+
+\begin{qa}{Explain momentum intuitively and mathematically.}
+\oneline{Momentum keeps an exponentially weighted average of past gradients and steps along it, so consistent directions
+accelerate and oscillating directions cancel, like a heavy ball rolling down a valley.}
+\why $\mathbf v_t = \beta\mathbf v_{t-1} + \nabla L$; the effective step for a constant gradient approaches $\eta g/(1-\beta)$.
+In a ravine the across-ravine gradient flips sign every step and averages out, while the along-ravine component adds up.
+\worked See the velocity sequence $1, 1.9, 2.71, 3.44 \to 10$ for $\beta=0.9$.
+\end{qa}
+
+\begin{qa}{Explain Adam. Why does it need bias correction?}
+\oneline{Adam keeps moving averages of the gradient (momentum) and of its square (per-parameter scale) and steps by their
+ratio; because both averages start at zero they are biased toward zero early on, and dividing by $1-\beta^t$ corrects this.}
+\why At $t=1$, $m_1 = (1-\beta_1)g = 0.1g$, ten times too small; $\hat m_1 = m_1/(1-0.9) = g$. Without correction the first
+steps would be tiny for $m$ and, more dangerously, $v$ would be tiny too ($0.001g^2$), so $m/\sqrt v$ could be large and erratic.
+\pushes \emph{``Adam or SGD?''} Adam converges faster with little tuning and is standard for Transformers and NLP; SGD with
+momentum often generalises slightly better for CNNs on vision. AdamW fixes Adam's interaction with L2.
+\end{qa}
+
+\begin{qa}{Compute one Adam step: $g = 4$, $w = 1$, $\eta = 0.01$, $\beta_1=0.9$, $\beta_2=0.999$, $t = 1$.}
+\oneline{$\hat m = 4$, $\hat v = 16$, step $= 0.01$, new $w = 0.99$.}
+\why $m = 0.1\cdot4 = 0.4$; $v = 0.001\cdot16 = 0.016$; $\hat m = 0.4/0.1 = 4$; $\hat v = 0.016/0.001 = 16$; $\sqrt{\hat v} = 4$;
+step $= 0.01\cdot4/4$.
+\end{qa}
+
+\begin{qa}{\deep Why does SGD with a constant learning rate not converge exactly, and why might that be a feature rather than
+a bug?}
+\oneline{Its gradient is a noisy estimate, so even at the minimum it keeps taking random steps of size proportional to $\eta$;
+that noise also helps escape sharp minima and saddles and biases training toward flat minima that generalise better.}
+\why At the optimum the average gradient is zero but individual mini-batch gradients are not. The stationary cloud has
+variance roughly proportional to $\eta\cdot\text{(gradient variance)}/B$. Sharp minima (high curvature) cannot hold a
+noisy SGD iterate, so it drifts to wide basins; wide basins are less sensitive to the shift between training and test
+data. To get exact convergence, decay $\eta$ (Robbins--Monro: $\sum\eta_t = \infty$, $\sum\eta_t^2 < \infty$) or average
+the iterates.
+\end{qa}
+
+\begin{qa}{\deep Large-batch training often generalises slightly worse. Why?}
+\oneline{Larger batches mean less gradient noise and fewer updates per epoch, so training tends to settle into sharper minima
+and explores less; this can be largely recovered by scaling the learning rate, warmup and longer training.}
+\why Gradient noise scale is about $\eta/B$. Keeping $\eta/B$ constant (linear scaling rule) restores the noise level.
+Methods like LARS/LAMB adapt per-layer learning rates for very large batches.
+\end{qa}
+
+\begin{qa}{What is gradient clipping? Compute the clipped gradient for $g = (3, 4)$ with norm threshold 1.}
+\oneline{If the gradient's length exceeds a threshold, rescale it to that length, keeping its direction; here
+$\norm{g} = 5$ so the clipped gradient is $(0.6, 0.8)$.}
+\why Clipping prevents one exploding step from destroying training, standard for RNNs and Transformers. Clipping by norm
+keeps the direction; clipping by value (each component to $[-c, c]$) can change it.
+\end{qa}
+
+\begin{qa}{\deep Is gradient descent guaranteed to find the global minimum of logistic regression? Of a neural network?}
+\oneline{For logistic regression yes (with a suitable learning rate), because the loss is convex; for a neural network no
+guarantee, but in practice large networks reach minima that are nearly as good as any.}
+\why Convexity means every local minimum is global and GD with $\eta < 2/L$ ($L$ = largest curvature) converges. Neural
+network losses are non-convex because of symmetries (swapping two hidden units gives the same function) and
+non-linearities. Over-parameterisation makes the landscape benign in practice.
+\pushes \emph{``What if the logistic data are separable?''} There is no finite minimum; GD keeps growing $\norm{\mathbf w}$
+(direction converges to the max-margin SVM solution, interestingly).
+\end{qa}
+
+\begin{qa}{Why is Newton's method rarely used for deep learning, and where is second-order information used?}
+\oneline{The Hessian of a network with $d$ parameters has $d^2$ entries and inverting it costs $d^3$, which is impossible
+for millions of parameters, and it can be indefinite (saddles); quasi-Newton L-BFGS is used for small convex problems and
+XGBoost uses per-leaf second-order steps.}
+\why With $d = 10^8$, the Hessian would need $10^{16}$ numbers. Newton also moves toward saddle points as readily as minima.
+Approximations (K-FAC, Shampoo) exist in research and large-scale training.
+\end{qa}
+
+\begin{qa}{How many parameter updates happen in 20 epochs with 50{,}000 examples and batch size 250?}
+\oneline{$50{,}000/250 = 200$ updates per epoch, so 4{,}000 updates.}
+\end{qa}
+
+\begin{qa}{\deep Loss becomes NaN after a few epochs. Debug it out loud.}
+\oneline{I would check, in order: input data for NaN/inf, numerically unstable operations (log of zero, division by zero,
+exp overflow), learning rate and exploding gradients, and mixed-precision overflow.}
+\why
+\begin{enumerate}
+\item Assert no NaN/inf in inputs and labels (\code{np.isfinite}). A single bad row can poison a batch.
+\item Use stable loss functions: \code{BCEWithLogitsLoss} instead of sigmoid then log; log-softmax instead of
+  softmax then log. Add $\epsilon$ in denominators.
+\item Log the gradient norm per step: a spike before NaN means exploding gradients: lower $\eta$, clip gradients, add
+  normalisation.
+\item In fp16, loss scaling may overflow; use bf16 or dynamic loss scaling.
+\item Reproduce on a small batch with anomaly detection (\code{torch.autograd.set\_detect\_anomaly(True)}).
+\end{enumerate}
+\end{qa}
+
+\begin{qa}{What are the differences between AdaGrad, RMSProp and Adam?}
+\oneline{All scale steps per parameter by past squared gradients; AdaGrad sums them forever (learning rate only decays),
+RMSProp uses a moving average (adapts to recent scale), Adam adds momentum and bias correction to RMSProp.}
+\why AdaGrad suits sparse convex problems (rare features get large steps). In deep nets its accumulated sum grows without
+bound, freezing learning. RMSProp's forgetting fixes that. Adam's momentum smooths the direction.
+\end{qa}
+
+\begin{qa}{\deep Gradient boosting is called ``gradient descent in function space''. What does that mean?}
+\oneline{Instead of updating a parameter vector by minus the gradient, each boosting round adds a small tree fitted to
+the negative gradient of the loss with respect to the current predictions, so the predictions themselves take a gradient
+step.}
+\why Treat the vector of predictions $(F(x_1),\dots,F(x_n))$ as the thing to optimise. The gradient of $\sum\ell(y_i,F_i)$ with
+respect to $F_i$ is $\partial\ell/\partial F_i$; for MSE, minus the gradient is the residual $y_i - F_i$. A tree fitted to these
+values generalises the step to new $x$. The learning rate (shrinkage) is $\eta$. Chapter 8 develops this.
+\end{qa}
+
+\begin{qa}{What is early stopping, and why is it a form of regularisation?}
+\oneline{Stop training when validation loss stops improving and keep the best checkpoint; because weights start small and grow
+during training, stopping early limits their size, similar to an L2 penalty.}
+\why For a quadratic loss with GD from zero, the number of steps $t$ and learning rate $\eta$ act like $1/\lambda$ in Ridge:
+directions with large curvature are fitted early, small-curvature (noisy) directions late. Use patience (for example 5 epochs
+without improvement) to avoid stopping on noise.
+\end{qa}
+
+\begin{qa}{\deep Why does warmup help when training Transformers with Adam?}
+\oneline{At the start, Adam's second-moment estimates are based on very few gradients and are unreliable, and the network is
+in an unstable region (especially with post-LayerNorm); a small learning rate at first prevents a few huge, badly scaled steps
+from wrecking the model.}
+\why Early $\hat v$ can be tiny for some parameters, making $\hat m/\sqrt{\hat v}$ large; the attention softmax can saturate.
+Linear warmup over the first 1--10\% of steps lets statistics accumulate. RAdam is a variant that corrects the variance of
+the adaptive term automatically.
+\end{qa}
+
+\begin{qa}{\deep A colleague says ``we use the closed-form solution, so we do not need to worry about optimisation''. When can
+the closed form be worse than gradient descent?}
+\oneline{When the matrix is ill-conditioned or singular (numerical error), when the data do not fit in memory, when $d$ is huge,
+and when early-stopped GD gives useful implicit regularisation.}
+\why $(X^\top X)^{-1}$ amplifies rounding error by the condition number; QR or SVD solvers are safer. With $d = 10^6$ sparse text
+features, forming $X^\top X$ is impossible. For underdetermined problems, GD from zero gives the minimum-norm solution, often
+desirable.
+\end{qa}

@@ -1,1 +1,323 @@
-% TODO 08_boosting
+\chapter{Boosting: AdaBoost, Gradient Boosting, XGBoost and LightGBM}
+\companion{StatQuest: Gradient Boost Part 1, Regression Main Ideas}{\ytid{3CC4N4z3GJc}}
+
+Gradient-boosted trees are the workhorse of tabular machine learning: ranking in search, lead scoring, fraud, pricing.
+The syllabus names boosting, gradient boosting machines, XGBoost and LightGBM separately, so expect several questions.
+The aim of this chapter is that you can do one round of gradient boosting by hand, write the XGBoost gain formula, and
+explain what LightGBM changes.
+
+\section{The idea: learn from your mistakes, a little at a time}
+Imagine predicting flat prices. Your first guess for every flat is the average price. Look at the errors: big flats are
+under-predicted, small ones over-predicted. Fit a small model to those errors and add a fraction of it to your guess. Look
+at the new errors: maybe flats near metro stations are still under-predicted. Fit another small model to those errors, add a
+fraction. Repeat hundreds of times. Each step fixes some of what is left. That is boosting.
+
+Key words:
+\begin{itemize}
+\item \textbf{Weak learner}: a simple model only a little better than guessing, usually a shallow tree (a ``stump'' has one
+  split).
+\item \textbf{Additive model}: the final model is a sum $F_M(x) = F_0(x) + \nu\sum_{m=1}^M h_m(x)$.
+\item \textbf{Shrinkage / learning rate} $\nu$ (0.01--0.3): each new tree's contribution is scaled down so no single tree
+  dominates and later trees can correct earlier ones.
+\end{itemize}
+
+\section{AdaBoost (adaptive boosting)}
+For binary labels $y\in\{-1,+1\}$:
+\begin{enumerate}
+\item Start with equal weights $w_i = 1/n$ on every example.
+\item For $t = 1,\dots,T$:
+  \begin{enumerate}
+  \item Fit a stump $h_t$ minimising weighted error $\varepsilon_t = \sum_i w_i\,[h_t(x_i)\ne y_i]$.
+  \item Give it a say $\alpha_t = \frac12\ln\frac{1-\varepsilon_t}{\varepsilon_t}$ (accurate stumps get big say; $\varepsilon = 0.5$ gets 0).
+  \item Reweight: $w_i \leftarrow w_i e^{-\alpha_ty_ih_t(x_i)}$ (misclassified points' weights grow by $e^{\alpha_t}$, correct ones
+    shrink by $e^{-\alpha_t}$), then normalise to sum 1.
+  \end{enumerate}
+\item Final classifier: $\text{sign}\big(\sum_t\alpha_th_t(x)\big)$.
+\end{enumerate}
+\begin{example}[: one AdaBoost round]
+Five points, weights 0.2 each. A stump misclassifies one: $\varepsilon = 0.2$. $\alpha = \frac12\ln(0.8/0.2) = \frac12\ln4 = 0.693$.
+Misclassified weight: $0.2e^{0.693} = 0.4$. Correct ones: $0.2e^{-0.693} = 0.1$ each. Sum $= 0.4 + 0.4 = 0.8$; normalise: the
+misclassified point now has weight $0.5$, the others $0.125$. The next stump is forced to care about the hard point: exactly half
+the total weight is on it, so the previous stump would now have weighted error 0.5 (useless), guaranteeing a different stump.
+\end{example}
+AdaBoost is equivalent to forward stagewise additive modelling with the \textbf{exponential loss} $e^{-yF(x)}$. That loss punishes
+misclassified points exponentially, so AdaBoost is sensitive to label noise and outliers.
+
+\section{Gradient boosting: gradient descent on predictions}
+
+\subsection{The recipe}
+Choose any differentiable loss $\ell(y, F)$.
+\begin{enumerate}
+\item Initialise with the best constant: $F_0 = \argmin_c\sum_i\ell(y_i, c)$ (the mean for MSE; the log-odds of the base rate for
+  log loss).
+\item For $m = 1,\dots,M$:
+  \begin{enumerate}
+  \item Compute \textbf{pseudo-residuals}: $r_i = -\frac{\partial\ell(y_i,F)}{\partial F}\Big|_{F = F_{m-1}(x_i)}$.
+    For MSE ($\frac12(y-F)^2$) this is exactly the residual $y_i - F_{m-1}(x_i)$.
+  \item Fit a regression tree $h_m$ to the pairs $(x_i, r_i)$.
+  \item Set each leaf's value to the best constant step for the actual loss in that leaf.
+  \item Update $F_m = F_{m-1} + \nu h_m$.
+  \end{enumerate}
+\end{enumerate}
+
+\begin{intuition}[: why ``gradient''?]
+In ordinary gradient descent we move parameters by minus the gradient. Here, think of the $n$ predictions $F(x_1),\dots,F(x_n)$ as
+the parameters. Minus the gradient of the total loss with respect to them is the vector of pseudo-residuals. A tree fitted to that
+vector is a step in (approximately) that direction that also tells us what to do for new $x$. So boosting is gradient descent in the
+space of functions.
+\end{intuition}
+
+\begin{example}[: two rounds of gradient boosting by hand (MSE)]
+Targets $y = (3, 5, 10)$ for three flats (in tens of lakhs), $\nu = 0.1$.
+$F_0 = $ mean $= 6$. Residuals $r = (-3, -1, 4)$.
+Suppose tree 1 (a stump) puts flats 1--2 in one leaf (mean residual $-2$) and flat 3 in another (residual $4$). Update:
+$F_1 = (6 - 0.2, 6 - 0.2, 6 + 0.4) = (5.8, 5.8, 6.4)$. New residuals $(-2.8, -0.8, 3.6)$; MSE fell from $\frac{9+1+16}{3} = 8.67$ to
+$\frac{7.84 + 0.64 + 12.96}{3} = 7.15$. Hundreds of such small steps drive it down.
+\end{example}
+
+\subsection{Gradient boosting for classification}
+With log loss and raw score $F$ (log-odds), $p = \sigma(F)$, the pseudo-residual is $y - p$: ``label minus predicted probability''.
+$F_0 = \log\frac{\bar y}{1-\bar y}$. For 20\% positives, $F_0 = \log(0.25) = -1.386$.
+
+\subsection{Regularising a boosted model}
+\begin{itemize}
+\item Learning rate $\nu$ (smaller needs more trees but generalises better).
+\item Number of trees $M$ chosen by \textbf{early stopping} on validation data.
+\item Tree size: max depth 3--8, or max leaves; min samples (or min Hessian) per leaf.
+\item \textbf{Stochastic gradient boosting}: each tree sees a random subsample of rows (e.g. 80\%) and columns.
+\item L1/L2 penalties on leaf values (XGBoost).
+\end{itemize}
+
+\section{XGBoost: regularised, second-order, engineered}
+
+\subsection{The objective}
+XGBoost minimises loss plus a complexity penalty for each tree:
+\[ \text{Obj} = \sum_i\ell(y_i, \hat y_i) + \sum_m\Omega(h_m),\qquad \Omega(h) = \gamma T + \tfrac12\lambda\sum_{j=1}^Tw_j^2, \]
+$T$ = number of leaves, $w_j$ = leaf values. $\gamma$ charges for each leaf; $\lambda$ shrinks leaf values.
+
+\subsection{Second-order approximation}
+When adding tree $h$ to current predictions, expand the loss with a Taylor series to second order. For each row,
+$g_i = \partial\ell/\partial\hat y_i$ (gradient) and $h_i = \partial^2\ell/\partial\hat y_i^2$ (Hessian, curvature). For rows in leaf
+$j$, with sums $G_j = \sum g_i$ and $H_j = \sum h_i$:
+\[ \text{Obj}_j \approx G_jw_j + \tfrac12(H_j + \lambda)w_j^2 + \gamma. \]
+This is a parabola in $w_j$, minimised at
+\[ \boxed{w_j^* = -\frac{G_j}{H_j + \lambda}},\qquad \text{Obj}_j^* = -\frac12\frac{G_j^2}{H_j + \lambda} + \gamma. \]
+So the gain of splitting a node into left and right is
+\[ \boxed{\text{Gain} = \frac12\left[\frac{G_L^2}{H_L + \lambda} + \frac{G_R^2}{H_R + \lambda} - \frac{(G_L + G_R)^2}{H_L + H_R + \lambda}\right] - \gamma.} \]
+A split is made only if Gain $> 0$: $\gamma$ is a minimum gain, which prunes useless splits.
+
+\begin{example}[: leaf weight and gain]
+MSE loss $\frac12(y - \hat y)^2$: $g = \hat y - y = -\text{residual}$, $h = 1$. Leaf with residuals $(2, 3, 4)$, $\lambda = 1$:
+$G = -9$, $H = 3$, $w^* = 9/4 = 2.25$ (the mean residual 3, shrunk by $\lambda$).
+Split gain: left $G_L = -6, H_L = 2$; right $G_R = 4, H_R = 3$; $\lambda = 1$, $\gamma = 0$:
+$\frac12[36/3 + 16/4 - 4/6] = \frac12[12 + 4 - 0.667] = 7.67$.
+For log loss with $p = 0.8$, $y = 0$: $g = p - y = 0.8$, $h = p(1-p) = 0.16$.
+\end{example}
+
+Why second order? It gives the optimal leaf value in one Newton step (not just a direction), it works uniformly for any
+twice-differentiable loss (a custom objective only needs $g$ and $h$), and the Hessian acts as a natural ``weight'' of each row
+(\code{min\_child\_weight} is a minimum sum of Hessians in a leaf).
+
+\subsection{Engineering features}
+Sparsity-aware split finding with a learned \textbf{default direction for missing values}; approximate and histogram split
+finding with weighted quantile sketches; column block structure for parallel split search within a tree; cache-aware access;
+out-of-core training; GPU support; column and row subsampling; monotonic and interaction constraints.
+
+\section{LightGBM: faster on big data}
+\begin{itemize}
+\item \textbf{Histogram-based} splits: continuous features bucketed into at most 255 bins; split search costs $O(\#\text{bins})$ per
+  feature. A child's histogram is the parent's minus its sibling's (``histogram subtraction''), halving the work.
+\item \textbf{Leaf-wise (best-first) growth}: always split the leaf with the largest gain anywhere in the tree, instead of growing
+  level by level. Lower loss for the same number of leaves; can grow deep, lopsided trees and overfit small data, so control it with
+  \code{num\_leaves}, \code{max\_depth} and \code{min\_data\_in\_leaf}.
+\item \textbf{GOSS} (gradient-based one-side sampling): keep all rows with large gradients (badly predicted), randomly sample a
+  fraction of small-gradient rows and up-weight them by $(1-a)/b$ to keep the gradient sums unbiased.
+\item \textbf{EFB} (exclusive feature bundling): bundle sparse features that are rarely non-zero together into one feature
+  (one-hot columns), reducing the feature count.
+\item \textbf{Native categorical splits}.
+\end{itemize}
+\textbf{CatBoost} (for completeness): ordered target statistics for categorical features (encode a row using only rows ``before'' it in
+a random permutation, preventing target leakage) and ordered boosting; symmetric (oblivious) trees that are fast at inference.
+
+\section{Learning to rank with boosted trees}
+Search and recommendation (Resdex, job search, Jeevansathi) need \emph{orderings}. \textbf{LambdaMART} is gradient boosting whose
+pseudo-gradients (``lambdas'') come from swapping pairs of results and measuring the change in NDCG. LightGBM's
+\code{objective="lambdarank"} and XGBoost's \code{rank:ndcg} implement it. Training data are grouped by query.
+
+\begin{practical}[: boosting at InfoEdge]
+\begin{itemize}
+\item \textbf{Resdex ranking blocks} (``M10'' per segment on the slide): LambdaMART-style GBMs over query--candidate features
+  (skill match, title similarity, experience fit, recency, past recruiter actions), then personalisation.
+\item \textbf{Telecalling lead ranking} (99acres): LightGBM classifier on user activity features; ranked list feeds the call queue.
+\item \textbf{Salary engine}: GBM with \code{objective="gamma"} or on log salary; quantile objectives for the band.
+\item Practical defaults: LightGBM, \code{learning\_rate=0.05}, \code{num\_leaves=31--127}, \code{min\_data\_in\_leaf=50},
+  \code{feature\_fraction=0.8}, \code{bagging\_fraction=0.8}, early stopping with patience 100.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: XGBoost Part 1, Regression}{\ytid{OtD8wVaFm6E}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{OA: types of ensemble, boosting} What is boosting, and how is it different from bagging?}
+\oneline{Boosting trains weak learners sequentially, each one concentrating on what the ensemble so far gets wrong, and adds them up
+with small weights; bagging trains strong learners independently on bootstrap samples and averages them.}
+\why Bagging reduces variance of low-bias models; boosting reduces bias of high-bias models (stumps or shallow trees), and its
+shrinkage and subsampling also control variance. Bagging is parallel; boosting is inherently sequential across rounds. Boosting can
+overfit with too many rounds; bagging plateaus.
+\end{qa}
+
+\begin{qa}{\pyq{Glassdoor InfoEdge: RF vs gradient boosting; INT: why GBM overfits with more trees} Explain why adding trees to a
+gradient-boosted model can overfit while adding trees to a random forest does not.}
+\oneline{Each boosting tree fits whatever residual remains; once the real signal has been fitted the residual is noise, and further
+trees keep fitting it; RF trees are independent draws whose average converges, so more trees only reduce the randomness of the average.}
+\why GBM's training loss decreases monotonically with $M$; validation loss is U-shaped in $M$, so we use early stopping. Shrinkage
+$\nu$ makes the U flatter and wider. RF's validation error decreases and flattens as $B$ grows; it never turns up from adding trees.
+\worked LightGBM with $\nu = 0.1$: validation AUC peaks at 420 trees (0.861) and falls to 0.853 by 2{,}000. With $\nu = 0.02$, the peak
+moves to about 2{,}100 trees at 0.864.
+\end{qa}
+
+\begin{qa}{Walk through gradient boosting for regression with MSE, by hand, for targets 3, 5, 10.}
+\oneline{Start with the mean 6, compute residuals $(-3, -1, 4)$, fit a small tree to them, add a fraction $\nu$ of its predictions, and
+repeat on the new residuals.}
+\why See the worked example: after one round with $\nu = 0.1$, predictions $(5.8, 5.8, 6.4)$, MSE $8.67\to7.15$.
+\pushes \emph{``What does each tree predict, exactly?''} The negative gradient of the loss with respect to the current prediction: for
+MSE, the residuals; for log loss, $y - p$; for absolute loss, the sign of the residual (then leaf values are medians).
+\end{qa}
+
+\begin{qa}{Why is it called \emph{gradient} boosting?}
+\oneline{Because each new tree is fitted to the negative gradient of the loss with respect to the current predictions, so adding it is a
+gradient-descent step in function space, which works for any differentiable loss.}
+\why For MSE the negative gradient happens to be the residual, which is why gradient boosting is often described as ``fitting
+residuals''; for other losses it is not the residual. The learning rate is the step size; the tree approximates the gradient direction
+and generalises it to unseen $x$.
+\end{qa}
+
+\begin{qa}{Compute AdaBoost's $\alpha$ for weighted error 0.2, and the new weights for five equally weighted points with one mistake.}
+\oneline{$\alpha = \frac12\ln4 = 0.693$; after normalising, the misclassified point has weight 0.5 and each correct point 0.125.}
+\pushes \emph{``What if $\varepsilon = 0.5$?''} $\alpha = 0$: the stump is ignored. \emph{``$\varepsilon > 0.5$?''} $\alpha < 0$: flip its
+predictions. \emph{``Which loss does AdaBoost minimise?''} Exponential loss $e^{-yF}$.
+\end{qa}
+
+\begin{qa}{Derive the XGBoost optimal leaf weight and split gain.}
+\oneline{A second-order Taylor expansion makes each leaf's objective $G w + \frac12(H + \lambda)w^2 + \gamma$, minimised at
+$w^* = -G/(H+\lambda)$ with value $-\frac12G^2/(H+\lambda) + \gamma$; the split gain is the improvement from replacing one leaf by two.}
+\why Expand $\ell(y, \hat y + w) \approx \ell + gw + \frac12hw^2$. Summing over rows in a leaf and adding $\frac12\lambda w^2$ and $\gamma$
+gives the parabola. Setting the derivative $G + (H + \lambda)w = 0$ gives $w^*$. Plugging back gives the score. Gain $=$ score(parent)
+$-$ score(left) $-$ score(right), which yields the boxed formula with the $-\gamma$ term.
+\worked Residuals $(2,3,4)$, $\lambda=1$: $w^* = 2.25$. The split example gives gain 7.67.
+\pushes \emph{``What does $\lambda$ do?''} Shrinks leaf values toward 0, more so for leaves with small Hessian sums (few rows): a
+data-dependent shrinkage. \emph{``And $\gamma$?''} Minimum loss reduction to make a split: post-pruning.
+\end{qa}
+
+\begin{qa}{Why does XGBoost use the Hessian?}
+\oneline{The second derivative gives the optimal step size per leaf (a Newton step) instead of only a direction, makes the method work
+for any twice-differentiable loss with one formula, and acts as a per-row weight.}
+\why For log loss, $h = p(1-p)$: rows the model is already sure about have small Hessians and count less in deciding leaf values, which
+is like IRLS in logistic regression. For MSE, $h = 1$ and XGBoost reduces to ordinary gradient boosting with L2-shrunk leaf means.
+\end{qa}
+
+\begin{qa}{\pyq{INT and coding round: XGBoost and missing values} How does XGBoost handle missing values?}
+\oneline{At every split it learns a default direction: it tries sending all rows with a missing value left, then right, and keeps
+the direction with the higher gain; at prediction time missing values follow that learned direction.}
+\why This is ``sparsity-aware split finding''. It only scans non-missing values for thresholds (fast on sparse data) and treats
+missingness as potentially informative (a blank current salary might indicate a fresher, which the default direction captures). It is
+learned per split, so the same feature's missing values can go different ways in different parts of the tree.
+\end{qa}
+
+\begin{qa}{Which XGBoost/LightGBM parameters control overfitting?}
+\oneline{Learning rate with early stopping, tree complexity (max\_depth, num\_leaves, min\_child\_weight / min\_data\_in\_leaf,
+gamma), regularisation (lambda, alpha), and randomness (subsample, colsample\_bytree).}
+\why Order of tuning I use: fix $\nu = 0.05$ and early stopping; tune tree size (num\_leaves/max\_depth, min\_data\_in\_leaf); then
+subsampling; then $\lambda$/$\alpha$; finally lower $\nu$ and retrain for the last bit.
+\end{qa}
+
+\begin{qa}{What is LightGBM's leaf-wise growth and why can it overfit?}
+\oneline{It splits the single leaf with the largest gain anywhere in the tree rather than all leaves at one depth, reaching lower loss
+with fewer leaves but producing deep, unbalanced branches that can fit noise on small data.}
+\why Level-wise growth wastes splits on leaves with little gain; leaf-wise does not. But a few branches can become very deep.
+Constrain with \code{num\_leaves} (keep it below $2^{\text{max\_depth}}$), \code{max\_depth}, and \code{min\_data\_in\_leaf}.
+\end{qa}
+
+\begin{qa}{Explain GOSS and EFB.}
+\oneline{GOSS keeps all large-gradient rows and a random sample of small-gradient rows (up-weighted) to compute splits faster with
+little bias; EFB merges mutually exclusive sparse features into single features to cut the feature count.}
+\why Rows with small gradients are already well fitted and contribute little to gain. Keep top $a$ fraction, sample $b$ of the
+rest, multiply sampled rows' gradients by $(1-a)/b$. Example: $a = 0.2$, $b = 0.1$: weight $= 8$. EFB uses the fact that one-hot
+columns are never non-zero together, so they can share one feature with offset value ranges.
+\end{qa}
+
+\begin{qa}{\deep Can you boost linear models? Can you boost a neural network?}
+\oneline{Boosting linear regression with squared loss just converges to a linear model (the sum of linear models is linear), so it gains
+only regularisation-path behaviour, not new expressiveness; boosting non-linear weak learners like small trees or small nets is what adds
+power.}
+\why Componentwise linear boosting (one feature at a time, small steps) is equivalent to a form of forward stagewise regression and
+approximates the Lasso path: useful for feature selection. XGBoost has \code{booster="gblinear"}. Neural networks can be boosted
+(e.g. AdaNet, boosted residual networks), and ResNets can be viewed as an additive, boosting-like stack of corrections.
+\end{qa}
+
+\begin{qa}{\deep Why does boosting use shallow trees but random forests use deep ones?}
+\oneline{Boosting reduces bias by adding many small corrections, so each learner should be weak and low-variance; bagging reduces
+variance by averaging, so each learner should be low-bias even if high-variance.}
+\why A depth-$k$ tree captures interactions among up to $k$ features; depth 4--8 is enough for most real interactions. Deep trees in
+boosting would fit noise in early rounds with nothing to average it away. Shallow trees in RF would all be similar and biased, and
+averaging cannot remove bias.
+\end{qa}
+
+\begin{qa}{What are the pseudo-residual and initial value for log-loss gradient boosting? Compute $F_0$ for 20\% positives.}
+\oneline{Pseudo-residual $y - p$; $F_0 = \log\frac{0.2}{0.8} = -1.386$.}
+\end{qa}
+
+\begin{qa}{\deep Your boosted model is excellent offline but its predicted probabilities seem too extreme. Why, and what do you do?}
+\oneline{Many boosting rounds keep pushing scores of separable training points outward, especially with deep trees and little
+regularisation, so log-odds become overconfident; fix with stronger regularisation and early stopping, then calibrate on held-out data.}
+\why Log loss keeps rewarding more confident correct predictions; with high capacity the model memorises. Check reliability curves;
+apply isotonic/Platt calibration; consider \code{min\_child\_weight} and $\lambda$.
+\end{qa}
+
+\begin{qa}{How does CatBoost handle categorical features, and why is naive target encoding dangerous?}
+\oneline{It uses ordered target statistics: each row's category is encoded with the average target of rows that come before it in a
+random permutation; naive target encoding uses the row's own label, leaking the target and overfitting rare categories.}
+\why A company that appears once with label 1 gets encoding 1.0: a perfect but fake signal. Out-of-fold or ordered encoding plus
+a prior ($\frac{\text{sum} + a\cdot\text{prior}}{\text{count} + a}$) solves it.
+\end{qa}
+
+\begin{qa}{What are monotonic constraints and when would you use them?}
+\oneline{They force predictions to only increase (or only decrease) with a feature, which encodes domain knowledge, stabilises the model
+and makes it defensible.}
+\why A salary model should not predict lower salary for more experience, all else equal; a credit-style lead score should not drop when
+a user views more listings in their price band. XGBoost/LightGBM: \code{monotone\_constraints}. Often costs little accuracy and prevents
+embarrassing artefacts.
+\end{qa}
+
+\begin{qa}{\deep Why might gradient boosting be hurt more than a random forest by mislabelled data?}
+\oneline{Boosting concentrates effort on the examples it currently gets wrong, and mislabelled examples are permanently ``wrong'', so later
+trees keep chasing them; a random forest's averaging treats them as noise.}
+\why AdaBoost's exponential loss makes it extreme; gradient boosting with log loss is gentler, and with Huber or other robust losses even
+more so. Mitigations: robust loss, stronger regularisation, subsampling, early stopping, label cleaning.
+\end{qa}
+
+\begin{qa}{How would you choose between XGBoost, LightGBM and CatBoost?}
+\oneline{LightGBM for speed on large data, CatBoost when there are many high-cardinality categorical features and little time to engineer
+them, XGBoost for maturity and fine control; accuracy differences are usually small after tuning.}
+\why In practice try LightGBM first, compare with CatBoost with default settings, pick by validation metric and latency.
+\end{qa}
+
+\begin{qa}{What is LambdaMART and why is it used for search ranking?}
+\oneline{It is gradient-boosted trees trained with ``lambda'' gradients derived from how much swapping two results would change a ranking
+metric like NDCG, so it optimises the ordering directly.}
+\why Pointwise models (predict relevance per item) do not care about order; pairwise (RankNet) cares about pairs; LambdaMART weights each
+pair by the NDCG change, focusing on the top of the list where users look. Data: (query, candidate, relevance grade) grouped by query.
+\inpractice Resdex: for a recruiter query, rank 30 lakh profiles by fit; LambdaMART on retrieval features is the classic ranker.
+\end{qa}
+
+\begin{qa}{Can gradient boosting be parallelised?}
+\oneline{Not across rounds (each tree depends on the previous), but within each round the split search over features and histogram
+building is parallelised across threads, machines and GPUs.}
+\end{qa}
+
+\begin{qa}{\deep A GBM ranks feature ``user\_id'' as the most important. What is happening?}
+\oneline{The model is memorising users: it is either leakage across the split (same users in train and validation) or overfitting to
+identity rather than behaviour; remove the ID, split by user, and use behavioural features.}
+\why High-cardinality IDs let trees isolate individual users; with a random split, the same users appear in validation, so it even
+seems to help. A group split by user will reveal the drop.
+\end{qa}
