@@ -28,6 +28,7 @@
 \usepackage{bookmark}
 
 \setlength{\parindent}{0pt}
+\setlength{\emergencystretch}{3em}
 \setlength{\parskip}{5pt plus 1pt}
 \linespread{1.06}
 \setlist{itemsep=2pt,topsep=3pt,parsep=1pt}
@@ -84,7 +85,7 @@
 % companion resource at the start of a chapter (also sets the footer)
 \newcommand{\companion}[2]{\stuck{#1}{#2}%
   \begin{tcolorbox}[colback=accentlight,colframe=accent,boxrule=0.5pt,arc=2pt,left=6pt,right=6pt,top=3pt,bottom=3pt]
-  \small\faPlayCircle\ \textbf{Companion video for this chapter:} \href{#2}{\color{accent}\underline{#1}}
+  \small\raggedright\faPlayCircle\ \textbf{Companion video for this chapter:} \href{#2}{\color{accent}#1}
   \end{tcolorbox}}
 
 % ---------------- teaching boxes ----------------

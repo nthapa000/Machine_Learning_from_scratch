@@ -1,1 +1,35 @@
-% TODO 99_end
+\chapter*{Last-Week Checklist}
+\addcontentsline{toc}{chapter}{Last-Week Checklist}
+\stuck{StatQuest: Machine Learning playlist}{https://www.youtube.com/@statquest}
+
+\section*{Can you do these on paper, aloud, in under three minutes each?}
+\begin{itemize}
+\item Draw the error-vs-complexity and error-vs-iterations curves; explain bias--variance with the formula and one number example.
+\item Derive OLS (one feature) and the normal equations; list linear-regression assumptions and the fix for each violation, including a GLM for heteroscedasticity.
+\item Derive the logistic-regression gradient $(p - y)x$; interpret a coefficient as an odds ratio.
+\item Explain GLMs (link + distribution); Poisson regression for counts; SVR's $\varepsilon$-tube; quantile regression's pinball loss.
+\item Do one gradient-descent, momentum and Adam step by hand.
+\item Compute entropy, Gini and information gain; write decision-tree pseudo-code; explain pruning.
+\item Explain random forests (bootstrap, feature subsampling, variance formula, OOB) and RF vs GBM.
+\item Do one gradient-boosting round by hand; write XGBoost's leaf weight and gain; explain LightGBM's histogram, leaf-wise growth, GOSS, EFB.
+\item Derive the SVM margin; explain hinge loss, support vectors, the dual and the kernel trick with a worked kernel.
+\item Build Naive Bayes from Bayes' theorem with smoothing; derive Fisher's LDA direction.
+\item Compute precision, recall, F1, specificity, AUC (pair counting) and choose metrics for spam, fraud and telecalling.
+\item Derive MLE for Bernoulli and Gaussian; explain MAP as regularisation; Beta smoothing of CTR.
+\item Explain MCAR/MAR/MNAR and imputation choices; SMOTE; why not to drop genuine outliers.
+\item Explain PCA via SVD, the scree plot, t-SNE perplexity; matrix factorisation for recommendations.
+\item Run K-Means and one EM step by hand; KDE bandwidth.
+\item Compute TF-IDF; compare BoW, Word2Vec, FastText and BERT; explain negative sampling and MLM.
+\item Backpropagate through a two-layer network by hand; explain vanishing/exploding gradients and the fixes; Xavier vs He; dropout; BatchNorm.
+\item CNN output size and parameter counts; invariance vs equivariance.
+\item Draw an LSTM cell with equations; explain why it does not vanish; GRU differences; time-series modelling plan.
+\item Compute scaled dot-product attention by hand; explain every part of a Transformer block.
+\item GAN objective and optimal discriminator; mode collapse; VAE vs autoencoder.
+\item Explain RAG, LoRA, SFT/DPO and agents with guardrails at a basic level.
+\item In a notebook: load, clean names, missing values, describe, value counts, groupby, plots, leakage check, pipeline, split, fit, confusion matrix, report, CV.
+\item Walk through two case studies with the ten-step skeleton; answer ``why InfoEdge'' specifically.
+\end{itemize}
+
+\section*{Book statistics}
+This edition contains \textbf{\total{qtotal}} interview questions with full answers, of which \textbf{\total{qpyq}} are reported InfoEdge questions (PYQ) and
+\textbf{\total{qdeep}} are ``Think deeper'' questions (the thought-provoking or unconventional kind you asked to be at least 15\% of the total).

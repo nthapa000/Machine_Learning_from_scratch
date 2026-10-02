@@ -171,7 +171,11 @@ reg = Pipeline([("pre", pre), ("m", Ridge(alpha=1.0))]).fit(Xtr, ytr_salary)
 mean_absolute_error(yte_salary, reg.predict(Xte)); r2_score(...)
 TransformedTargetRegressor(regressor=Ridge(), func=np.log1p, inverse_func=np.expm1)  # log target
 \end{lstlisting}
-Text: \code{Pipeline([("tfidf", TfidfVectorizer()), ("clf", LinearSVC())])}. Clustering: \code{KMeans(n\_clusters=4, n\_init=10).fit\_predict(Xs)}.
+Text classification:
+\begin{lstlisting}
+Pipeline([("tfidf", TfidfVectorizer()), ("clf", LinearSVC())])
+KMeans(n_clusters=4, n_init=10).fit_predict(Xs)      # clustering
+\end{lstlisting}
 Saving: \code{joblib.dump(clf, "model.pkl")}.
 
 \begin{practical}[: what interviewers watch in Round 3]

@@ -1,1 +1,51 @@
-% TODO 30_hr
+\chapter{The Final Conversation: Resume Drill, Company Knowledge and HR}
+\companion{InfoEdge DS interview experience: HR round and ``Why InfoEdge'' (at 12:26)}{https://youtu.be/nWyBQhGnHaM?t=746}
+
+\section{Everything on your resume will be drilled}
+The hire's interviewers followed his projects (PCA, t-SNE) into depth. For every project and technique on your resume prepare:
+\begin{enumerate}
+\item A 60-second story: problem, why it mattered, data, approach, your specific contribution, result with a number, what you would do differently.
+\item The maths of every method you name, at the level of this book.
+\item The baseline you beat and how you evaluated (split, metric, significance).
+\item One failure or surprise and what you learned.
+\end{enumerate}
+
+\section{Company knowledge}
+InfoEdge (India) Ltd: founded in the mid-1990s by Sanjeev Bikhchandani; Naukri.com (launched 1997, India's largest job portal), Jeevansathi.com (matrimony), 99acres.com
+(real estate), Shiksha.com (education), and an investment arm with stakes in companies such as Zomato and PolicyBazaar. Listed on Indian stock exchanges in 2006. \emph{Verify
+years and figures from InfoEdge's annual report before quoting them.} From the 2026--27 talk: 100 crore+ applies a year through the job-posting engine; Resdex serves about 60K
+recruiters and 16 lakh searches a day; the Data Factory runs 400+ AI models; GenAI work includes in-house fine-tuned and distilled LLMs, voice agents and the AI REX agentic hiring
+product. Work model (as reported): mostly in-office.
+
+\section{``Why InfoEdge?''}
+The hire called this the most important HR question. A strong answer has three specific parts:
+\begin{enumerate}
+\item \textbf{Real problems at scale}: ML that touches crores of job seekers and lakhs of recruiters; search, ranking, matching and recommendation are core, not side projects.
+\item \textbf{Technical depth}: cite something from the pre-placement talk (hybrid retrieval in PremiumX, the SilverSkAI taxonomy, AI REX's agents, in-house LLMs) and why it excites you.
+\item \textbf{Breadth and business}: several products (jobs, real estate, matrimony, education) let you learn many problem types; the company wants data scientists who understand
+  business, which matches what you want to become.
+\end{enumerate}
+
+\section{Questions to ask them}
+How do teams decide between a classical ranker and an LLM-based approach given latency and cost? How is model impact measured (A/B culture)? How do new data scientists ramp up?
+What does a successful first six months look like?
+
+\stuck{InfoEdge DS interview experience (full video)}{\ytid{nWyBQhGnHaM}}
+\section{Questions}
+
+\begin{qa}{Tell me about yourself (for a data scientist role at InfoEdge).}
+\oneline{A 60--90 second story: who you are academically, the two or three ML experiences most relevant to search, ranking, NLP or tabular modelling with one concrete result each, and why that
+leads you to InfoEdge now.}
+\why Example structure: ``I am an M.Tech AI student at IIT Jodhpur. In my project on X I built Y, which improved Z by N\%. I enjoy problems where models meet users at scale, which is why the
+matching and search work you presented, especially hybrid retrieval in PremiumX, is exactly what I want to work on.''
+\end{qa}
+
+\begin{qa}{Describe a project where your model did not work as expected. What did you do?}
+\oneline{Pick a real case, explain the symptom (for example great offline, poor online), how you diagnosed it (leakage, distribution shift, wrong metric), what you changed, and what you now do by
+default because of it.}
+\end{qa}
+
+\begin{qa}{How do you keep up with ML, and what recent development do you find most useful for a company like InfoEdge?}
+\oneline{Name concrete sources and one development with a clear application: for example retrieval-augmented generation with hybrid search for grounded job-discovery chat, or distillation of
+LLMs into small models to serve ranking features cheaply.}
+\end{qa}

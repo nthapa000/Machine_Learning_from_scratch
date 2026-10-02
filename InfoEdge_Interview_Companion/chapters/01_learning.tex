@@ -338,7 +338,7 @@ beats any other. Every algorithm wins by making assumptions (smoothness, lineari
 problem. Practically: always start with a simple \textbf{baseline} (predict the mean; logistic regression;
 ``most popular jobs'') and demand that a complex model beat it by a margin worth its cost.
 
-\stuck{StatQuest: Machine Learning Fundamentals, Cross Validation}{\ytid{fSytzGwwBVw}}
+\stuck{StatQuest: Machine Learning Fundamentals, Cross Validation}{\yts{StatQuest+Machine+Learning+Fundamentals+Cross+Validation}}
 \section{Interview questions}
 
 \begin{qa}{\pyq{OA and INT: bias--variance graphs} Draw the error versus model complexity graph and
@@ -581,7 +581,7 @@ three different models.}
 training and control how learning happens.}
 \why
 \begin{center}\small
-\begin{tabular}{lll}
+\begin{tabularx}{\linewidth}{l X X}
 \toprule
 Model & Parameters (learned) & Hyperparameters (chosen)\\
 \midrule
@@ -590,7 +590,7 @@ Decision tree & split features, thresholds, leaf values & max depth, min samples
 Neural network & weights and biases of every layer & learning rate, layers, width, dropout, batch size\\
 $k$-means & centroid positions & $k$, initialisation\\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{center}
 Hyperparameters are tuned on validation data (grid, random or Bayesian search), never on the test set.
 \end{qa}

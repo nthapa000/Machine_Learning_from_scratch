@@ -1,1 +1,206 @@
-% TODO 29_cases
+\chapter{Worked Case Studies from InfoEdge's Own Products}
+\companion{InfoEdge DS interview experience: the 99acres and Naukri cases}{https://youtu.be/nWyBQhGnHaM?t=547}
+
+Each case below is written as a full answer you could give in 15--25 minutes, following the ten-step skeleton of Chapter 28. The first two were
+reported from real Round 4 interviews; the rest are built from systems InfoEdge described in its 2026--27 pre-placement talk (Resdex search, the
+job--CV matching engine, 99acres ML telecalling, Jeevansathi recommendations, the Data Factory salary engine, the SilverSkAI taxonomy, AI REX, the
+content feed). Practise them aloud with a friend who keeps asking ``and then?''.
+
+\begin{qa}{\pyq{Round 4, reported} Given a user's full browsing data on 99acres, design features (and a model) to predict whether they will buy a property.}
+\oneline{Frame it as a time-windowed binary classification (``will this user transact or book a site visit within $N$ days''), engineer intent features along recency, frequency,
+depth, consistency (price-band and locality concentration) and trend, train a gradient-boosted classifier on a time-based split, and evaluate by precision at the top of the ranked
+list that sales will act on.}
+\why
+\textbf{1. Goal and decision.} Prioritise high-intent users for telecalling, developer leads or personalised offers. The decision is a ranking, so the top of the list matters most.
+\textbf{2. Label.} ``Bought'' is often offline; use the best observable proxy: confirmed transaction (developer CRM), site visit booked, or a lead marked ``converted'' by an agent,
+within 30--60 days after the prediction date. Note selection bias: outcomes are mostly observed for users who were called or who enquired.
+\textbf{3. Row.} One user--date snapshot; features computed only from data before the snapshot date (no leakage).
+\textbf{4. Features} (I would generate them systematically):
+\begin{itemize}
+\item \emph{Recency and frequency}: days since last visit; sessions, searches and listing views in the last 1/7/30 days; returning after a long gap (a life event).
+\item \emph{Depth}: time on listing pages, photo and floor-plan views, EMI calculator use, shortlists, contact-number reveals, enquiries, repeated visits to the same listing.
+\item \emph{Price-band concentration} (the feature that impressed the interviewer): the share of viewed listings within $\pm$15\% of the median viewed price; also the
+  coefficient of variation of viewed prices. Someone who looks mostly at 30-lakh flats with a few 10- and 60-lakh outliers is a 30-lakh buyer; the outliers are noise.
+  Narrowing price spread over time signals a decision forming.
+\item \emph{Location focus}: localities of the last 10--15 searches; entropy of locality distribution (low = focused); distance between viewed listings and the user's city; a
+  Noida searcher will not buy in Bangalore however similar the listing.
+\item \emph{Property-type focus}: BHK and type entropy; ready-to-move vs under-construction preference.
+\item \emph{Stage signals}: loan-eligibility checks, legal or registration guides read, ``ready to move'' filters, visiting builder pages.
+\item \emph{Profile}: stated budget vs viewed prices (mismatch means early stage), owner vs tenant, account age.
+\item \emph{Market context}: inventory and price trend in the focus locality; festive season.
+\end{itemize}
+\textbf{5. Baseline.} Rule: ``enquired in last 7 days''. \textbf{6. Model.} LightGBM on these features (handles non-linearity, missing values, mixed scales); class weights for
+the rare positives. \textbf{7. Offline evaluation.} Train on earlier months, test on later; metrics: precision@k for $k$ equal to daily call capacity, PR AUC, calibration (to estimate
+expected conversions); segment by city and by new vs returning users.
+\textbf{8. Online.} A/B test against the rule-based list: conversions per call; guardrails: user complaints about calls, unsubscribes. \textbf{9. Risks.} Feedback loop (only called
+users get labels: reserve random calls), privacy (consent for calls), seasonality, drift after price changes.
+\pushes \emph{``What if two users have identical behaviour but one is a broker?''} Add account-type and behaviour features (many cities, many enquiries per day) and possibly a separate
+broker classifier, because brokers are a different business line. \emph{``How would you handle someone who searches only at night on mobile?''} Context features; but ask whether it
+causally relates to intent or is just a demographic proxy.
+\end{qa}
+
+\begin{qa}{\pyq{Round 4, reported} You are the sales head of Naukri.com. Give three things you would do to increase revenue. No clarifying questions allowed.}
+\oneline{Assuming most revenue comes from recruiters paying for job postings and Resdex database access, and that recruiter value depends on finding good candidates quickly, I would (1)
+grow and activate the seeker side to raise match quality, (2) increase revenue per recruiter with outcome-focused premium products and smarter pricing, and (3) open new recruiter
+segments such as campus and SME hiring through partnerships, all measured by revenue per recruiter, renewal rate and time to hire.}
+\why
+\textbf{Framing.} Naukri is a two-sided marketplace with a flywheel: more and better seekers $\to$ more successful hires $\to$ recruiters pay and renew $\to$ more jobs $\to$ more seekers.
+Revenue $=$ number of paying recruiters $\times$ revenue per recruiter $\times$ retention.
+\textbf{1. Strengthen the seeker side (match quality drives willingness to pay).} Reactivate dormant profiles with personalised job alerts on the channel each seeker prefers (the
+``seeker acquisition and reactivation engine'' and multi-channel touchpoints: mailers, notifications, WhatsApp); improve profile completeness with AI resume help; this increases
+applies per job, the metric recruiters actually buy.
+\textbf{2. Revenue per recruiter.} Outcome-based and tiered products: PremiumX-style premium discovery with explainable shortlists; AI REX-style automated sourcing and screening sold as
+time-to-hire reduction; usage-based Resdex pricing for heavy users; upsell based on predicted hiring need (a model of which accounts are likely to expand).
+\textbf{3. New segments and partnerships.} Campus hiring: partner with colleges by giving them a mini placement portal on Naukri where companies post openings (the candidate's
+reported idea), which brings fresher supply and campus-recruiting budgets; SME self-serve hiring with low-cost packages; data products (Talent Pulse) sold to enterprises and HR consultancies.
+\textbf{Measurement.} For each, an experiment with revenue per account, renewal rate, and a guardrail on seeker experience (spam complaints).
+\pushes \emph{``Which one first?''} The one with the fastest, most measurable impact: reactivation of seekers via channel-optimised alerts, because it lifts applies per job for all existing
+recruiters, which improves renewals.
+\end{qa}
+
+\begin{qa}{\deep 99acres ML-based telecalling (from the 2026--27 slide): design the system that turns users and projects into a ranked call list of high-intent leads.}
+\oneline{Three models in sequence, as on the slide: infer each user's requirement (budget, location, configuration), match users to project bundles, and rank user--bundle pairs by predicted
+conversion (and value), then fill the callers' queues from the top, measuring conversions per call and learning from call outcomes.}
+\why
+\textbf{User requirement model.} From browsing and search history, predict the user's budget band, preferred localities and BHK (multi-output classification or simply robust statistics such
+as the mode of the price band and localities weighted by recency). Output a structured requirement with confidence.
+\textbf{User--project matching.} Retrieve projects that satisfy hard constraints (city, budget $\pm$ tolerance, BHK) and score soft fit (amenities, distance to work, developer
+reputation); a two-tower or GBM matcher trained on past enquiries and site visits. Bundle 2--3 projects per user so one call can pitch several.
+\textbf{User ranking.} Predict $P(\text{site visit or conversion}\mid\text{call})$ for each user--bundle with LightGBM; multiply by expected value (project commission) for revenue-aware
+ranking; calibrate so expected conversions can be planned.
+\textbf{Operations.} Capacity: $C$ callers $\times$ $k$ calls/day; assign by language and city; avoid re-calling too soon; respect consent and do-not-call lists.
+\textbf{Labels and bias.} Only called users have outcomes: reserve a small random-call slice for unbiased training and evaluation; use call dispositions (no answer, not interested, visit booked).
+\textbf{Evaluation.} Offline: precision@k on a later period. Online: A/B test conversions per call-hour against the current list; guardrails: complaint rate, user unsubscribes.
+\textbf{Iteration.} Learn the best time to call (uplift by hour), and which users the call actually influences (uplift modelling) rather than who would convert anyway.
+\pushes \emph{``Why uplift instead of conversion probability?''} Calling a user who would buy anyway wastes a call; the business value is the \emph{increase} in conversion caused by the call.
+Uplift models (two-model or class-transformation approaches) need randomised call/no-call data.
+\end{qa}
+
+\begin{qa}{\deep Resdex search: a recruiter types ``sr data scientist blr 5+ yrs python''. Design the search system (the slide's query intelligence $\to$ retrieval + ranking $\to$
+personalisation).}
+\oneline{Parse and normalise the query into structured intent with the taxonomy, retrieve candidates with hybrid sparse and dense retrieval within hard filters, rank them with a learning-to-rank
+model per function segment, and personalise using the recruiter's past actions; evaluate with NDCG and recruiter actions per search.}
+\why
+\textbf{Query intelligence (QI).} Tokenise; map ``sr''$\to$Senior, ``blr''$\to$Bengaluru, ``5+ yrs''$\to$experience $\ge5$, ``python''$\to$skill; identify department (Data Science) and
+premium/targeting needs (the slide's M1--M4: taxonomy, department, premium, targeting models). Use dictionaries, NER and the SilverSkAI taxonomy; expand synonyms (``ML''$=$``machine learning'').
+\textbf{Retrieval.} From 30 lakh+ daily-active candidate pool: sparse BM25 on skills/titles (precise, handles rare skills), dense bi-encoder embeddings (semantic: ``data scientist'' $\approx$
+``ML engineer''), hard filters (location, experience); merge (reciprocal rank fusion); the slide shows separate retrieval models per segment (finance, core engineering, sales, IT)
+and per field (skill, title, skill+title), plus ``company boost'' and ``catch-all'' streams.
+\textbf{Ranking.} LambdaMART/GBM per segment (the ``M10'' rankers) on features: skill match coverage, title similarity, experience fit, notice period, current CTC vs budget, recency of
+profile update, activity (likely to respond), past recruiter engagement with similar profiles, profile completeness. Labels from recruiter actions (view $<$ download/contact $<$ shortlist),
+debiased for position.
+\textbf{Personalisation.} Recruiter-specific preferences (enterprise vs consultant, the slide's ``ER'' and ``Consultant'' models): preferred colleges, companies, past shortlists.
+\textbf{Evaluation.} Offline NDCG@10 on held-out searches; online: contacts per search, time to first contact, recruiter retention.
+\textbf{Constraints.} 16 lakh searches/day: latency budget about 100--200 ms; precompute candidate embeddings; ANN index; cache popular queries.
+\textbf{Risks.} Fairness (avoid proxies for gender/age), freshness (stale profiles), gaming (keyword stuffing).
+\end{qa}
+
+\begin{qa}{\deep Design the job--CV matching engine that decides which applicants a recruiter sees first in the apply pool.}
+\oneline{Score every application for fit to the job with a model trained on recruiter feedback (shortlist vs reject), combining structured matching features with text-similarity from a fine-tuned
+cross-encoder, then rank the pool and explain the top reasons.}
+\why
+\textbf{Labels.} Recruiter actions on applications: shortlisted/contacted (positive), rejected (negative), ignored (weak negative; position-biased).
+\textbf{Features.} Must-have skills coverage (via taxonomy), experience range fit, location/relocation, salary expectation vs budget, education requirements, title trajectory, notice period,
+semantic similarity of JD and CV (bi-encoder cosine; cross-encoder score for the top part), application timing.
+\textbf{Model.} GBM ranker or a fine-tuned cross-encoder whose score is a GBM feature; per-function models if behaviour differs.
+\textbf{Evaluation.} NDCG@20 of shortlisted applicants; online: recruiter time to shortlist, shortlist rate of top-20.
+\textbf{Explainability.} SHAP or rule-based reasons (``matches 8/9 required skills; 6 yrs vs 5--8 required''), mirroring PremiumX's ``AI reasons'' and ``search highlights''.
+\textbf{Fairness.} Exclude protected attributes and audit proxies; monitor selection rates by group.
+\end{qa}
+
+\begin{qa}{\deep Jeevansathi: recommend profiles to a user (slide: preferences $\to$ pool generation $\to$ content, activity and collaborative models $\to$ ranked profiles $\to$ filters and
+personalisation).}
+\oneline{Generate a candidate pool that satisfies stated preferences, score each candidate with content (profile similarity), activity (likelihood to respond) and collaborative (people like you
+liked) models combined in a ranker that predicts \emph{mutual} interest, then apply filters and diversity, and evaluate by mutual acceptances.}
+\why
+\textbf{Two-sided}: success requires both users to accept, so model $P(\text{A likes B})\times P(\text{B likes A})$ (reciprocal recommendation), otherwise popular profiles are flooded and
+everyone else ignored.
+\textbf{Pool}: hard preferences from the slide's example (community, cities), relaxed slightly if the pool is small.
+\textbf{Models}: content (age, education, profession, location similarity), activity (online recency, response rate), collaborative (matrix factorisation or two-tower on interest/accept
+interactions).
+\textbf{Ranking}: GBM over these scores and features, optimising mutual acceptance; diversity and fairness of exposure.
+\textbf{Metrics}: interests sent, acceptance rate, mutual matches, conversations started; guardrails: reports/blocks.
+\textbf{Trust}: fake-profile detection upstream (photo checks, behaviour).
+\end{qa}
+
+\begin{qa}{\deep Build the salary engine behind ``Salary Intelligence'' (Data Factory/TopTier slides): given title, city, experience, company, skills, show the typical salary and a range.}
+\oneline{Clean and validate salary data, normalise titles and companies with the taxonomy, model log salary (or a Gamma GLM / GBM) for the centre and quantile models for the 10th--90th band,
+shrink sparse company estimates toward their industry, and validate with MAPE and interval coverage by segment.}
+\why
+\textbf{Data}: self-reported CTCs (noisy, MNAR: high earners hide), offers, job-post salary ranges. Clean units (LPA vs monthly), remove impossible values, deduplicate.
+\textbf{Normalisation}: title and company to canonical IDs (SilverSkAI); experience bands.
+\textbf{Model}: GBM on log salary with features title, function, city tier, company (target encoding with shrinkage), skills (embedding or top-k binary), education, industry; quantile GBMs
+for the band; enforce monotonicity in experience.
+\textbf{Sparse cells}: hierarchical shrinkage (company $\to$ industry $\to$ function).
+\textbf{Evaluation}: MAPE/RMSLE on held-out recent reports; 80\% interval should cover about 80\% of truths; bias checks by city and gender.
+\textbf{Product}: ``you earn more than 68\% of software engineers in Delhi'' is a percentile from the predicted conditional distribution; communicate uncertainty when data are thin.
+\pushes \emph{``Heteroscedasticity?''} Expected: spread grows with level; log target or Gamma GLM handles it (Chapter 4).
+\end{qa}
+
+\begin{qa}{\deep SilverSkAI taxonomy: normalise 50 lakh raw skill strings (``ML'', ``machine-learning'', ``M.L.'', ``Machine Lerning'') into about 70K canonical skills.}
+\oneline{Clean strings, generate candidate canonical matches with character n-gram and embedding nearest-neighbour search, decide matches with a trained classifier using string, semantic and
+co-occurrence features, route uncertain cases to human review, and keep the canonical set curated with clustering for discovering new skills.}
+\why
+\textbf{Steps}: (1) normalise case, punctuation, whitespace; expand abbreviations from a dictionary; (2) candidate generation: TF-IDF on character 3-grams + cosine, FastText/BERT embeddings + ANN,
+edit distance; (3) features per (raw, canonical) pair: edit distance, Jaccard of tokens, embedding cosine, how often they co-occur with the same other skills in resumes, frequency;
+(4) classifier (GBM) trained on human-labelled pairs; (5) thresholds: auto-map high confidence, human-review medium, new-skill candidate otherwise; (6) cluster unmapped strings to propose new
+canonical skills (``LangChain'' when it appears).
+\textbf{Evaluation}: precision/recall of mappings on a labelled sample, weighted by string frequency; downstream: search recall improvement.
+\textbf{Pitfalls}: ambiguous strings (``Java'' island vs language; ``Spark'' Apache vs automotive) need context (the rest of the resume); hierarchy (``PyTorch'' is-a ``Deep learning
+framework'').
+\end{qa}
+
+\begin{qa}{\deep Spam and fake recruiters (the panel's own example): design detection for job postings and recruiter messages.}
+\oneline{Treat it as rare-event classification combining content (text of posts and messages), behaviour (posting velocity, payment, response patterns) and network signals, with recall-focused
+but precision-guarded thresholds feeding automated blocks and a human review queue, evaluated with recall at fixed precision and refreshed often because adversaries adapt.}
+\why
+\textbf{Labels}: user reports, moderation decisions, confirmed frauds (asking candidates for money, fake companies). Noisy and delayed.
+\textbf{Features}: text (TF-IDF/BERT: ``registration fee'', ``WhatsApp only'', unrealistic salary for title); recruiter account age, verification status, company domain match, posts per
+hour, near-duplicate posts across accounts, apply-to-response ratio, candidate complaints, payment method.
+\textbf{Model}: GBM on tabular + text model scores; anomaly detection (Isolation Forest) for new patterns.
+\textbf{Metrics}: the panel's point: \emph{look at recall, not accuracy}; also precision at the review queue capacity; time to detection.
+\textbf{Actions}: tiered: block (very high score, high precision), hold for review, monitor.
+\textbf{Adversarial}: rotate features, monitor drift weekly, red-team.
+\end{qa}
+
+\begin{qa}{\deep AI REX: how would you evaluate the screening agent that decides which candidates move forward after automated pre-screening?}
+\oneline{Measure it like a classifier against human judgement and hiring outcomes: recall of genuinely suitable candidates (not losing good people), precision of those forwarded (recruiter
+time), agreement with expert recruiters on a labelled sample, calibration, fairness across groups, and end-to-end time to hire in an A/B test.}
+\why
+\textbf{Offline}: sample conversations and answers; expert recruiters label fit/no-fit; compute precision/recall/F1, Cohen's kappa vs humans; error analysis by job type and language.
+\textbf{Online}: A/B (AI REX vs standard process) on time to shortlist, interview-to-offer ratio, recruiter satisfaction, candidate drop-off and complaints.
+\textbf{Guardrails}: no use of protected attributes; adverse-impact ratio monitoring; human approval for rejections in sensitive roles; audit logs; prompt-injection tests (candidate answers trying
+to manipulate the agent).
+\textbf{Calibration agent loop}: if forwarded candidates are too few, trigger more sourcing (as the slide notes).
+\end{qa}
+
+\begin{qa}{\deep Seeker reactivation: which dormant job seekers should receive which message on which channel (mail, notification, WhatsApp)?}
+\oneline{Model, for each seeker and channel, the uplift in the probability of returning and applying caused by a message (not just the probability of returning), choose the best channel and
+content per seeker under frequency caps, and test with holdout groups.}
+\why Propensity models target people who would return anyway; uplift models target persuadable users. Features: last activity, past response by channel, profile freshness, market demand
+for their skills, time of day. Content: personalised job recommendations. Constraints: daily caps, unsubscribe risk (guardrail), WhatsApp cost. Evaluation: randomised holdout; metrics:
+reactivation rate, applies per reactivated user, unsubscribe rate.
+\end{qa}
+
+\begin{qa}{\deep Shiksha: recommend colleges to a student who has filled a short form (exam score, preferred city, course, budget).}
+\oneline{Filter colleges by hard eligibility (cut-offs, course, budget), score fit with a model trained on past students' applications and admissions (content features plus collaborative
+signals from similar students), balance ``reach, match, safety'' options, and evaluate by applications and admissions.}
+\why Cold start for new students is the norm (one form): content-based and similar-student (KNN on profile) methods dominate; popularity priors; explain recommendations (``students with your
+rank were admitted here last year''). Fairness: avoid steering by socio-economic proxies.
+\end{qa}
+
+\begin{qa}{\pyq{Round 4 follow-up, reported} After your feature list, the interviewer asks: ``What are the assumptions of linear regression, and what do you do if homoscedasticity is
+violated?'' Answer as you would in the room.}
+\oneline{Linearity, independent errors, constant variance, normal errors, no perfect multicollinearity and exogeneity; under heteroscedasticity coefficients stay unbiased but standard errors
+are wrong, so I would transform the target (log or Box--Cox), use weighted least squares or robust standard errors, or model the variance directly with a GLM such as Gamma with a log link.}
+\why Full answers are in Chapters 2 and 4; in the room, mention both the transformation the interviewer expected and the GLM the candidate proposed, and say when you would pick each.
+\end{qa}
+
+\begin{qa}{\deep Content feed for job seekers (slide: insights generation agent $\to$ content manifestation agent $\to$ formats $\to$ personalised recommendation). How would you make sure the
+generated insights are true and the feed is useful?}
+\oneline{Generate insights from verified aggregates in the Data Factory with statistical checks (sample size, significance, period-over-period), let the LLM only phrase pre-computed facts with
+citations to the numbers, review automatically for factual consistency, and rank content per user by predicted engagement and usefulness, evaluated by dwell time, saves and downstream
+applies.}
+\why Example insight from the slide: ``AI jobs up 20\% in Kolkata, flat in Pune and Chennai''. Risks: small-number noise (20\% of 50 jobs), hallucinated numbers, clickbait optimisation.
+Guardrails: minimum counts, confidence intervals, numeric consistency checks between the generated text and source tables.
+\end{qa}

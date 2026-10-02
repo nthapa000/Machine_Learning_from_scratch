@@ -1,1 +1,145 @@
-% TODO 28_case_framework
+\chapter{How to Answer a Data Science Case Study}
+\companion{InfoEdge DS interview experience: Round 4 case studies (at 9:07)}{https://youtu.be/nWyBQhGnHaM?t=547}
+
+Round 4 (45--60 minutes, a senior data scientist): ``A case study based on a real world data science problem to assess the candidate's talent in
+applying machine learning theory to practice. The candidate shall be assessed on her/his ability to understand data related challenges, modelling
+and design choices as well as model assessment skills. There is generally no single best solution. The interviewer will rather assess the
+candidate on her/his thought process and on how she/he may fare in a team-working environment.'' The 2026--27 talk added: ``an AI case study:
+asked how you would approach the problem, what type of data you will need'', and that they want people ``who actually want to understand
+business''.
+
+This chapter gives you a repeatable structure. Chapter 29 applies it to InfoEdge's own products.
+
+\section{The ten-step skeleton}
+Memorise it; say the steps aloud as you go, so the interviewer can follow and steer.
+\begin{enumerate}
+\item \textbf{Clarify the goal and the decision.} What business outcome? Who acts on the prediction, and how? (``Rank leads for 50 telecallers who make 200
+  calls each per day.'') If clarifying questions are not allowed, \emph{state your assumptions} explicitly.
+\item \textbf{Define success.} One primary business metric (conversions per call, applies per job, revenue), guardrails (complaints, unsubscribes, latency), and the
+  offline proxy metric you will optimise (precision@k, NDCG, AUC, MAPE).
+\item \textbf{Frame the ML problem.} Classification, regression, ranking, recommendation, clustering, forecasting, anomaly detection? What is one row (user,
+  user--day, user--listing pair)? What is the label and over what time window? When is the prediction made?
+\item \textbf{Data.} What data exist (logs, profiles, listings, CRM, call outcomes)? What is missing? How are labels obtained (natural outcomes, human labels, proxies)?
+  Biases in how data were collected (only called leads have call outcomes: selection bias).
+\item \textbf{Features.} Brainstorm by entity and by time window: user, item, user$\times$item, context, recency/frequency/monetary, trends, ratios; text and image
+  embeddings. Check leakage for every feature: ``is this known at prediction time?''
+\item \textbf{Baseline.} A rule or simple model the business already uses or would accept (most-recent-activity rule, popularity, logistic regression).
+\item \textbf{Model.} Justify the choice by data type, size, latency, interpretability (GBM for tabular, two-tower for retrieval, Transformer for text). Handle
+  imbalance and cold start.
+\item \textbf{Offline evaluation.} Time-based split, the right metric at the operating point, segment analysis (new vs returning users, cities), calibration.
+\item \textbf{Online evaluation and deployment.} A/B test with a clear hypothesis and sample size; batch vs real-time scoring; monitoring (data drift, prediction
+  drift, metric decay); retraining cadence; feedback loops.
+\item \textbf{Risks and iteration.} Fairness, privacy, gaming, cold start, exploration vs exploitation; next steps.
+\end{enumerate}
+
+\begin{intuition}[: why structure wins]
+The interviewer is imagining you in their team next month. A structured answer shows you will not jump into modelling before knowing what decision the model
+serves, and that you will catch leakage and evaluation mistakes on your own.
+\end{intuition}
+
+\section{Feature engineering: a generator of ideas}
+When the interviewer ``keeps pushing until you run out of answers'' (as reported for the 99acres question), use this grid to generate features systematically.
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+Dimension & Examples (99acres buyer intent)\\
+\midrule
+Recency & days since last session, since last enquiry\\
+Frequency & sessions in last 7/30 days, listings viewed, searches\\
+Depth / intensity & time on listing pages, photos viewed, floor plans opened, EMI calculator used, contact number revealed\\
+Consistency (concentration) & share of views within the dominant price band (the price-band concentration feature that impressed the interviewer), share in top
+locality, entropy of property types viewed (low entropy = focused buyer)\\
+Trend & views this week vs last week; narrowing of price range over time\\
+Context & device, time of day, city tier, festival season, interest rates\\
+Profile & stated budget, loan pre-approval, family size, owner vs tenant\\
+User $\times$ item & distance of viewed listings from workplace; match between budget and viewed prices\\
+Social / market & inventory in the target locality, price trend of that locality\\
+Text & search queries (``ready to move'', ``near metro''), enquiry messages\\
+\bottomrule
+\end{tabularx}
+\end{center}
+For each feature, state the hypothesis (``a narrow price band means a decided buyer'') and the leakage check.
+
+\section{Metrics: from business to offline}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{X X X}
+\toprule
+Business decision & Offline metric & Online metric\\
+\midrule
+Who to call with limited capacity & precision@k, expected conversions in top $k$ & conversions per call-hour\\
+Rank search results & NDCG@10, MRR, recall@k for retrieval & CTR, contacts/applies per search, time to first contact\\
+Recommend jobs & recall@k, NDCG, coverage, novelty & applies per user, recruiter responses\\
+Flag fraud/spam & recall at fixed precision, PR AUC & fraud caught, false-positive complaints\\
+Estimate salary & MAPE/RMSLE, interval coverage & user trust, engagement with salary card\\
+Forecast demand & MAPE, bias & staffing efficiency\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{A/B testing in one page}
+\begin{itemize}
+\item \textbf{Hypothesis}: the new lead scorer increases conversions per call by at least 5\%.
+\item \textbf{Randomisation unit}: caller or lead (avoid interference: two variants sharing one caller's queue contaminate each other).
+\item \textbf{Sample size}: depends on baseline rate, minimum detectable effect, significance $\alpha$ (0.05) and power (0.8). For a proportion $p$ and absolute effect $\delta$,
+  roughly $n\approx16p(1-p)/\delta^2$ per arm. Baseline 5\%, detect +0.5 points: $16\cdot0.0475/0.000025\approx30{,}400$ per arm.
+\item \textbf{Guardrails}, \textbf{novelty effects} (run long enough), \textbf{multiple testing} (pre-register the primary metric), \textbf{peeking} (do not stop at the first
+  significant day).
+\end{itemize}
+
+\section{Product and business questions}
+InfoEdge is a marketplace company: Naukri (jobs), 99acres (real estate), Jeevansathi (matrimony), Shiksha (education), plus investments. Its revenue is mostly from the
+paying side of each marketplace (recruiters buying job postings and Resdex database access; property developers and agents buying listings and leads). Marketplaces have
+\textbf{network effects}: more recruiters attract more seekers and vice versa. Good product answers grow both sides, improve match quality (which raises willingness to pay),
+and use data products (Talent Pulse) to open new revenue. A useful skeleton for ``grow revenue'': \emph{more customers} (acquisition, new segments), \emph{more revenue per
+customer} (upsell, pricing, premium tiers), \emph{less churn} (better outcomes, success management), \emph{new products} (data/insight products, AI tools).
+
+\section{Communication and team fit}
+Think aloud; summarise every few minutes; ask ``shall I go deeper here or move on?''; accept pushback gracefully (``good point; that would bias the labels; I would
+fix it by\dots''); do not claim certainty you do not have; quantify where possible; end with a crisp summary and next steps.
+
+\stuck{Exponent: How to answer ML system design interview questions (search)}{\yts{machine+learning+system+design+interview+framework+example}}
+\section{Framework questions}
+
+\begin{qa}{\pyq{Round 4 format: no clarifying questions allowed} How do you structure a case answer when the interviewer says you may not ask clarifying questions?}
+\oneline{State your assumptions explicitly and briefly, choose the most plausible interpretation, and keep going with the usual structure; mention how the answer would change
+under a different assumption.}
+\why The reported Naukri revenue question disallowed questions to test company knowledge and decisiveness. ``I will assume most revenue comes from recruiters buying
+postings and database access, and that growth in seekers drives recruiter value. If instead the focus were seeker subscriptions, I would\dots''
+\end{qa}
+
+\begin{qa}{What are the most common mistakes in ML case interviews?}
+\oneline{Jumping to a model before defining the decision and metric, ignoring how labels are created, missing leakage, using random splits on temporal data, choosing the wrong metric
+(accuracy on imbalanced data), forgetting deployment and monitoring, and never connecting back to the business outcome.}
+\end{qa}
+
+\begin{qa}{\deep Your model will change who gets shown which jobs, which changes future training data. Why is that a problem and what do you do?}
+\oneline{It creates a feedback loop: the model only observes outcomes for items it chose to show, so its training data become biased toward its own past choices and it can lock in
+errors or popularity bias; counter with exploration (randomised or bandit traffic), propensity-weighted training and logging of what was shown.}
+\why Position bias too: users click top results regardless. Use inverse propensity scoring or position-aware models; reserve a small random slice of traffic for unbiased evaluation.
+\end{qa}
+
+\begin{qa}{How do you choose the label for ``will this user buy a property''?}
+\oneline{Define an observable event and a window tied to the decision: for example ``a site visit booked or a transaction recorded within 30 days of the prediction date''; check that
+it is measured reliably, that it is available for all users (not only those called), and that the window matches the business cycle.}
+\why A purchase may happen offline and never be logged; proxies (site visit, developer-confirmed lead) may be better measured. Different windows give different models; choose
+by how long telecalling can usefully wait.
+\end{qa}
+
+\begin{qa}{\deep Offline evaluation looks great but you can only A/B test with 5\% of traffic. How do you de-risk?}
+\oneline{Use a careful time-based offline backtest, shadow deployment (score live traffic without acting), a small ramped A/B test with guardrails and pre-computed power, interleaving
+for ranking (very sensitive with little traffic), and clear rollback criteria.}
+\end{qa}
+
+\begin{qa}{How would you explain a model's output to a non-technical stakeholder, such as a sales head?}
+\oneline{Translate into the decision and its impact (``calling the top 200 leads converts 3 times more than the current list''), show a few concrete examples with the top reasons per lead,
+and state limitations plainly.}
+\end{qa}
+
+\begin{qa}{Estimate the sample size for an A/B test with baseline conversion 5\% and a minimum detectable absolute lift of 0.5 percentage points.}
+\oneline{About $16p(1-p)/\delta^2 = 16\times0.0475/0.005^2\approx30{,}400$ users per arm (for 5\% significance and 80\% power).}
+\end{qa}
+
+\begin{qa}{\deep When would you \emph{not} use machine learning for a business problem?}
+\oneline{When a simple rule achieves nearly the same outcome, when there is not enough reliable labelled data, when the cost of errors or lack of explainability is unacceptable, or when the
+decision is rare and better made by people; ML must beat a baseline by enough to justify maintenance cost.}
+\end{qa}
