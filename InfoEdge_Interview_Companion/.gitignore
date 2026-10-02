@@ -1,0 +1,7 @@
+*.aux
+*.log
+*.toc
+*.out
+*.tcbtemp
+build.log
+main.pdf

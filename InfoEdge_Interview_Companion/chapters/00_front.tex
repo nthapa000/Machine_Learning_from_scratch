@@ -1,0 +1,140 @@
+\chapter*{How to use this book}
+\addcontentsline{toc}{chapter}{How to use this book}
+\stuck{InfoEdge Data Scientist interview experience (Ayush Agarwal)}{\ytid{nWyBQhGnHaM}}
+
+\section*{What this book is, and how it fits with your OA book}
+
+You already have the \emph{OA question bank} (675 short questions for the 40-question online test).
+That book trains speed. This book trains \textbf{understanding and speaking}: Rounds 1 and 2 are
+``drilling'' rounds in which an interviewer asks three or four questions per topic and keeps asking
+``why?'' until you either explain the idea from first principles or run out of road. Round 3 is a
+live Python notebook. Round 4 is an open case study. None of these can be passed by remembering
+formulas; all of them can be passed by \emph{understanding}.
+
+So every chapter has two halves.
+\begin{enumerate}
+\item \textbf{Teach.} The concept is built from nothing. No prerequisite is assumed: if a chapter
+  needs a derivative, a dot product or a probability, it says in plain words what that is at the
+  point it is needed. Every idea is followed by a \emph{small example} you can do with a pen in under
+  a minute, and an \emph{in practice} box that places it in a Naukri, 99acres, Jeevansathi or Shiksha
+  setting. Red boxes list the mistakes that interviewers fish for.
+\item \textbf{Interview questions.} Each question is answered the way a strong candidate answers aloud:
+  \begin{itemize}
+  \item \textbf{\color{accent}In one line} -- the sentence you say first, so the interviewer knows you know.
+  \item \textbf{\color{accent}The full answer} -- the logic, step by step, with the ``because'' behind every claim.
+  \item \textbf{\color{accent}Worked example} -- numbers or a concrete scenario, so the idea is checkable.
+  \item \textbf{\color{accent}If the interviewer pushes} -- the next two or three questions they will ask, already answered.
+  \item \textbf{\color{accent}Trap to avoid} -- the wrong answer that sounds right.
+  \end{itemize}
+\end{enumerate}
+
+\section*{The tags}
+\begin{itemize}
+\item \textcolor{pyqc}{\faStar\ \textbf{PYQ}} -- a question reported by InfoEdge candidates
+  (online test, interview rounds, or the coding round). They come first in each chapter. InfoEdge does
+  not publish papers, so the wording is a faithful reconstruction of what was reported.
+\item \textcolor{deepc}{\faBrain\ \textbf{Think deeper}} -- a thought-provoking or ``unconventional''
+  question of the kind the InfoEdge hire in the experience video called out: \emph{can an SVM do
+  regression? what do you do with count data? is logistic regression a GLM? can a random forest
+  extrapolate?} You asked for these to be at least 15\% of all questions. This edition contains
+  \textbf{\total{qdeep} such questions out of \total{qtotal}} in total, and \textbf{\total{qpyq}} PYQs.
+\end{itemize}
+
+At the foot of \emph{every page} there is a ``Stuck on this page?'' link to one specific video for the
+topic on that page. Where a direct video link could not be verified, the link is a YouTube search for the
+exact video title, which lands on that video as the first result.
+
+\section*{The InfoEdge selection process, from the Pre-Placement Talk}
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{>{\bfseries}l X l}
+\toprule
+Stage & What is tested & Time\\
+\midrule
+Pre-screening & CV shortlisting + online test: about 40 MCQs in 40 minutes to 1 hour, from ML, DL,
+programming and statistics. Programming MCQs are ``quite easy'' (for example converting a string to an
+int and spotting the right output). & 40--60 min\\
+Round 1 & Technical: Maths \& Statistics (33.33\%) and Classical ML \& Deep Learning (66.66\%). & 30 min\\
+Round 2 & Same split, deeper. Reported as the round that ``tests your ability to explain the architecture
+of ML and DL models'' on pen and paper. & 45 min\\
+Round 3 & Programming. Part 1, data handling (Python, NumPy, Pandas): reading data, column naming,
+statistical parameters, group-by, basic visualisation, basic text processing. Part 2, ML basics
+(scikit-learn): train--test split, training a model, performance testing. & 30--45 min\\
+Round 4 & Case study on a real-world data science problem: data challenges, modelling and design choices,
+model assessment, thought process and team fit. ``There is generally no single best solution.'' & 45--60 min\\
+HR & Company knowledge, why InfoEdge, work model. & 15--20 min\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection*{What the 2026--27 talk added}
+\begin{itemize}
+\item \textbf{Emphasis:} ``a lot more emphasis will be given to ML and DL''; GenAI is evolving, so
+  \emph{basic} LLM knowledge is expected, but ``if you don't know topics like quantisation it will be
+  fine''. The work is ``largely ML based, with some knowledge of DL and GenAI''.
+\item \textbf{No DSA}, unless the discussion with a very strong candidate goes there.
+\item The interviewers want ``a young data scientist who actually wants to understand business''.
+\item \textbf{A spam example was used to explain what they look for:} do you look at recall and not just
+  accuracy, can you build the right dataframe, do you frame it properly as a classification or a
+  regression problem. Chapter 11 and Chapter 27 are built around exactly this.
+\item \textbf{Products shown:} the Naukri job posting engine (100 crore+ applies per year), seeker
+  acquisition and reactivation, apply generation, search and recommendation, the job--CV matching engine,
+  Resdex search (60K recruiters, 16 lakh searches and 30 lakh candidates a day) organised as
+  \emph{query intelligence $\to$ retrieval + ranking $\to$ personalisation}, PremiumX hybrid retrieval
+  (dense + sparse, LLM ranking features, explainability), the SilverSkAI taxonomy (50 lakh raw skill strings
+  normalised to 70K), AI REX agentic hiring (mandate, sourcing, screening, outreach, calibration agents),
+  the Data Factory (400+ models; salary engine, company engine), Talent Pulse analytics, the content feed,
+  Jeevansathi match recommendation (content, activity and collaborative models), and 99acres ML-based
+  telecalling (user requirement, user--project matching, user ranking, then calls to high-intent leads).
+  Every one of these appears as a case study in Part VI.
+\item \textbf{Tools named:} classifiers, ensembles, kernel methods, dimensionality reduction, feature
+  learning, Bayesian inference; ANNs, RNNs/LSTMs, Transformers, CNNs, label attention networks, Siamese
+  networks; PyTorch, Keras/TensorFlow, Spark; Transformers, GPT, BERT, open LLMs, TTS/ASR, fine-tuning,
+  agentic AI.
+\end{itemize}
+
+\subsection*{What a recent hire reported (IIT BHU, InfoEdge DS)}
+\begin{itemize}
+\item \textbf{Statistics:} p-value vs alpha. \textbf{Probability:} Naive Bayes built up from Bayes'
+  theorem, with intuition rather than formulas.
+\item \textbf{ML:} PCA via SVD and the scree plot; t-SNE and perplexity; Fisher LDA (push class means
+  apart, shrink within-class spread); a little on decision trees.
+\item \textbf{DL (the heaviest):} vanishing and exploding gradients; weight decay; how a network learns
+  (backprop); preventing overfitting; Xavier vs He initialisation; time-series models (RNN, LSTM, GRU and
+  their internals).
+\item \textbf{Linear algebra:} rank, eigen-things, null space, and a Markov chain question.
+\item \textbf{Round 3:} an MBA placement dataset. He spotted \emph{target leakage} first (salary is only
+  present for placed students), checked missing values, checked outliers with \code{describe()} and
+  \emph{did not} blindly remove genuine extreme marks, did value counts, a correlation matrix, logistic
+  regression, a confusion matrix, precision, recall, F1 and accuracy.
+\item \textbf{Round 4:} features predicting whether a 99acres user will buy (price-band concentration,
+  location of recent searches); linear regression assumptions and what to do under heteroscedasticity
+  (he proposed a GLM; the interviewer expected transformations; both were accepted); ``you are sales head
+  of Naukri, give three ways to grow revenue, no clarifying questions''.
+\item \textbf{Depth in basic ML:} count data needs Poisson regression (a GLM); SVMs can do regression (SVR).
+\end{itemize}
+
+\section*{How to answer aloud: the five-beat structure}
+Interviewers grade \emph{structure} almost as much as content. For any ``explain X'' question:
+\begin{enumerate}
+\item \textbf{Define in one sentence} what X is and what problem it solves.
+\item \textbf{Give the intuition} with a picture or an everyday analogy.
+\item \textbf{Give the mechanism}: the formula or algorithm, and say what each symbol means.
+\item \textbf{Give a tiny example}, ideally with numbers.
+\item \textbf{Give the trade-off}: when it fails, and what you would use instead.
+\end{enumerate}
+If you are not sure, say what you \emph{do} know and reason aloud. ``I have not used it, but from the name
+and from how X works I would expect\dots'' is a strong answer. Silence is the only bad answer.
+
+\section*{A four-week plan}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+Week 1 & Part I (Chapters 1--5) and Chapters 6--9. Say every ``In one line'' aloud.\\
+Week 2 & Chapters 10--17. Re-derive every worked example on paper without looking.\\
+Week 3 & Part IV (deep learning) and Chapter 23. Draw LSTM, Transformer and backprop diagrams from memory.\\
+Week 4 & Part V in a real notebook (type every snippet) and Part VI with a friend acting as interviewer.\\
+\bottomrule
+\end{tabularx}
+\end{center}

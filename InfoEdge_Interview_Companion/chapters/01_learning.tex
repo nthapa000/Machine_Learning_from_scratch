@@ -1,0 +1,673 @@
+\chapter{What Learning Means: Generalisation, Bias--Variance and Regularisation}
+\companion{StatQuest: Machine Learning Fundamentals, Bias and Variance}{\ytid{EuBBz3bI-aA}}
+
+Almost every interview question in Rounds 1 and 2 is, underneath, a question about one idea:
+\emph{a model must do well on data it has never seen}. This chapter builds that idea from nothing.
+Every later chapter (trees, boosting, SVMs, neural networks) is a different answer to the same
+problem, so time spent here pays off everywhere.
+
+\section{The problem machine learning solves}
+
+Suppose Naukri wants to show each job seeker an estimate: ``jobs like this usually pay about
+Rs.~$X$ lakh''. Nobody can write that rule by hand; it depends on title, city, experience, company,
+skills and a hundred other things. But Naukri has \emph{examples}: millions of past jobs with their
+salaries. Machine learning is the craft of turning examples into a rule.
+
+We use a few words for this throughout the book.
+\begin{itemize}
+\item An \textbf{example} (also: row, sample, observation) is one item, such as one job posting.
+\item A \textbf{feature} (also: input, variable, column, $x$) is one measured property of it: years of
+  experience required, city, number of skills listed.
+\item The \textbf{target} (also: label, output, $y$) is what we want to predict: the salary.
+\item A \textbf{model} is a rule $f$ that takes features and returns a prediction $\hat y = f(x)$.
+  The hat on $\hat y$ always means ``predicted''.
+\item \textbf{Parameters} are the numbers inside the model that training adjusts (for example the slope of a
+  line). \textbf{Hyperparameters} are the settings \emph{we} choose before training (for example how
+  deep a tree may grow).
+\item A \textbf{loss} measures how wrong one prediction is. Training means adjusting the parameters to
+  make the average loss small on the examples we have.
+\end{itemize}
+
+\begin{example}[: the smallest possible model]
+Three past jobs: experience $x = 1, 2, 3$ years, salary $y = 4, 6, 8$ lakh. Try the rule ``salary $= 2x + 2$''.
+Predictions: $4, 6, 8$. Every error is zero, so the average loss is zero. A new job asking for $x=5$ years gets
+the prediction $2\cdot5+2 = 12$ lakh. That last step, predicting for an $x$ we have not seen, is the whole
+point. Fitting the three known points was only a means to it.
+\end{example}
+
+Two kinds of problem cover most of the syllabus.
+\begin{itemize}
+\item \textbf{Regression}: the target is a number (salary, property price, days to fill a vacancy).
+\item \textbf{Classification}: the target is a category (will the seeker apply: yes/no; which of 500 job
+  categories does this title belong to; is this message spam).
+\end{itemize}
+There is also \textbf{unsupervised} learning, where there is no target at all and we look for structure
+(clusters of similar candidates, a compressed representation of resumes). And \textbf{ranking}, where we
+order items (which 20 of 30 lakh candidates should a recruiter see first); ranking is central at InfoEdge
+because search and recommendation are its core products.
+
+\section{Generalisation: the only thing that matters}
+
+\subsection{Training error versus test error}
+The \textbf{training error} is the average loss on the examples used to fit the model. The
+\textbf{test error} (or generalisation error) is the average loss on \emph{new} examples from the same
+source. We care only about the second; the first is easy to make tiny and tells us little.
+
+\begin{intuition}[: the student who memorised the answer key]
+A student who memorises last year's answer key scores 100\% on last year's paper (training error zero) and
+fails this year's paper (test error high). A student who understood the chapter scores 85\% on both.
+We want the second student. Memorising is called \textbf{overfitting}; understanding is
+\textbf{generalising}.
+\end{intuition}
+
+\subsection{Why we split data}
+Because we cannot see the future, we \emph{simulate} it. We hide part of our data, fit on the rest, and
+measure error on the hidden part.
+\begin{itemize}
+\item \textbf{Training set} (typically 60--80\%): used to fit parameters.
+\item \textbf{Validation set} (10--20\%): used to choose hyperparameters and compare models.
+\item \textbf{Test set} (10--20\%): touched \emph{once}, at the end, to report an honest number.
+\end{itemize}
+Why three and not two? Every time you look at a set and make a choice because of it, that set stops being
+``unseen''. If you try 50 settings and keep the one with the best validation score, that score is
+optimistic: you picked the luckiest of 50. The untouched test set corrects for that.
+
+\begin{example}[: why the best of many is optimistic]
+Imagine 50 models that are all \emph{exactly} 80\% accurate in truth. On a validation set of 200 rows,
+each one's measured accuracy wobbles by chance, roughly $\pm 2.8\%$ (the standard error
+$\sqrt{0.8\cdot0.2/200}\approx 0.028$). The best of 50 such wobbles is usually about 2 standard errors
+above the truth, so you would report about 85--86\% for a model that is really 80\%. A fresh test set would
+show 80\%.
+\end{example}
+
+\subsection{Cross-validation}
+When data are scarce, a single validation split is noisy. \textbf{$k$-fold cross-validation} splits the
+training data into $k$ equal parts (folds). Train on $k-1$ folds, validate on the remaining one, repeat $k$
+times so every fold is the validation fold once, and average the $k$ scores.
+
+\begin{example}[: 5-fold CV on 1{,}000 rows]
+Each fold has 200 rows. Round 1: train on rows 201--1000, validate on 1--200. Round 2: train on 1--200 and
+401--1000, validate on 201--400, and so on. You get 5 scores, say 0.81, 0.79, 0.83, 0.80, 0.82. Report the
+mean 0.81 and the spread (standard deviation about 0.016). Every row was used for validation exactly once and
+for training four times.
+\end{example}
+
+Variants you should be able to name:
+\begin{itemize}
+\item \textbf{Stratified $k$-fold}: each fold keeps the class proportions (essential when only 2\% are
+  positive; otherwise a fold may contain no positives at all).
+\item \textbf{Group $k$-fold}: all rows of one group (one user, one company) stay in the same fold.
+  If one recruiter posted 300 jobs, splitting their jobs across train and validation lets the model
+  ``recognise the recruiter'' and look better than it is.
+\item \textbf{Time-series split}: always train on the past and validate on the future. Random splits on
+  time data let the model peek at tomorrow.
+\item \textbf{Leave-one-out}: $k = n$. Nearly unbiased but expensive and high-variance.
+\end{itemize}
+
+\subsection{Data leakage}
+\textbf{Leakage} is when information that would not be available at prediction time sneaks into
+training. It produces models that look brilliant offline and fail in production. It is the single most
+common reason real projects fail, which is why the InfoEdge coding round rewards spotting it first.
+
+\begin{practical}[: the reported Round 3 leakage]
+An MBA placement dataset had a \code{salary} column that was filled only for placed students. If you keep it,
+the model learns ``salary present $\Rightarrow$ placed'' and scores near 100\%. At prediction time (before
+placement) salary does not exist. The candidate who said ``drop salary, it leaks the target'' before writing
+any model code impressed the panel.
+\end{practical}
+
+Common leakage patterns:
+\begin{itemize}
+\item \textbf{Target leakage}: a feature that is a consequence of the target (salary after placement;
+  ``number of interview calls'' when predicting ``got the job'').
+\item \textbf{Preprocessing leakage}: computing the mean for imputation, the scaler, TF-IDF vocabulary or
+  PCA on the \emph{whole} dataset before splitting. The validation rows then influenced training.
+\item \textbf{Temporal leakage}: using features computed with future data (``total applications this job
+  will receive'').
+\item \textbf{Duplicate leakage}: the same resume uploaded twice landing in both train and test.
+\end{itemize}
+
+\section{Underfitting, overfitting and model capacity}
+
+\textbf{Capacity} (or complexity) is how flexible a model is: how many different shapes it can bend into.
+A straight line has low capacity; a degree-15 polynomial or a deep tree has high capacity.
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[width=0.62\linewidth,height=5.2cm,xlabel={model complexity},ylabel={error},
+  xmin=0,xmax=10,ymin=0,ymax=10,xtick=\empty,ytick=\empty,legend pos=north east,legend style={font=\small}]
+\addplot[domain=0.5:10,samples=60,thick,accent]{8*exp(-0.45*x)+0.3};
+\addlegendentry{training error}
+\addplot[domain=0.5:10,samples=60,thick,prframe]{8*exp(-0.45*x)+0.06*x^2+1.0};
+\addlegendentry{test error}
+\draw[dashed] (axis cs:4.3,0) -- (axis cs:4.3,10);
+\node[font=\small] at (axis cs:1.8,9.3) {underfit};
+\node[font=\small] at (axis cs:8.3,9.3) {overfit};
+\node[font=\small] at (axis cs:4.3,0.6) {sweet spot};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\begin{itemize}
+\item \textbf{Underfitting}: training error is high and test error is about as high. The model is too
+  simple to capture the pattern (a straight line through data that curve).
+\item \textbf{Overfitting}: training error is low but test error is much higher. The model learned the
+  noise in the particular sample.
+\item Training error falls steadily as complexity rises. Test error first falls, then rises: a U shape.
+  The bottom of the U is what we tune for.
+\end{itemize}
+
+\begin{example}[: reading the gap]
+\begin{tabular}{lccc}
+Model & Train acc. & Val. acc. & Diagnosis\\\hline
+A & 62\% & 61\% & underfit (both low, small gap)\\
+B & 99\% & 72\% & overfit (big gap)\\
+C & 88\% & 86\% & good (high and small gap)\\
+\end{tabular}
+\end{example}
+
+\section{The bias--variance decomposition, built slowly}
+
+\subsection{An experiment in your head}
+Imagine you could collect \emph{many} different training sets of the same size from the same world, and
+train the same kind of model on each. For one fixed test input $x$ (say a job with 5 years' experience in
+Pune), you would get many different predictions, one per training set. Look at that cloud of predictions.
+\begin{itemize}
+\item \textbf{Bias} is how far the \emph{centre} of the cloud is from the truth. A model that is
+  systematically wrong (a straight line for a curved truth) has high bias, however much data it gets.
+\item \textbf{Variance} is how \emph{spread out} the cloud is. A model that changes a lot when a few
+  training rows change (a deep tree) has high variance.
+\item \textbf{Noise} is the randomness in $y$ itself that no model can predict: two identical jobs can
+  pay differently because of negotiation.
+\end{itemize}
+
+\begin{intuition}[: the dartboard]
+Four archers. Low bias, low variance: tight cluster on the bullseye. High bias, low variance: tight cluster,
+but off-centre (consistently wrong). Low bias, high variance: centred on average but scattered. High bias,
+high variance: scattered and off-centre. Training many models on many datasets is throwing many darts.
+\end{intuition}
+
+\subsection{The formula, and what each piece means}
+For squared error, the expected test error at a point $x$ splits exactly into three parts:
+\[
+\E\big[(y - \hat f(x))^2\big] \;=\; \underbrace{\big(\E[\hat f(x)] - f(x)\big)^2}_{\text{bias}^2}
+\;+\; \underbrace{\E\big[(\hat f(x) - \E[\hat f(x)])^2\big]}_{\text{variance}}
+\;+\; \underbrace{\sigma^2}_{\text{noise}}.
+\]
+Here $f(x)$ is the true average target at $x$, $\hat f(x)$ is our model's prediction (random, because it
+depends on the random training set), $\E[\cdot]$ means ``average over many training sets'', and $\sigma^2$
+is the noise variance.
+
+\begin{example}[: computing the three parts]
+At $x$ = ``5 years, Pune'' the true average salary is $f(x) = 10$ lakh and the noise variance is
+$\sigma^2 = 1$. Over many training sets our model predicts $9, 11, 13, 11$ (four sets, for simplicity).
+Mean prediction $= 11$, so bias $= 11 - 10 = 1$ and bias$^2 = 1$. Variance $= \frac{(9-11)^2 + 0 + (13-11)^2 + 0}{4}
+= \frac{8}{4} = 2$. Expected error $= 1 + 2 + 1 = 4$, i.e. a typical miss of $\sqrt4 = 2$ lakh.
+\end{example}
+
+\subsection{Why there is a trade-off}
+Making a model more flexible lets its average move closer to the truth (bias falls) but also lets it chase
+the quirks of each sample (variance rises). Making it more rigid does the opposite. Total error is minimised
+somewhere in between. More \emph{data} is the one lever that lowers variance without raising bias, which is
+why ``get more data'' is the right answer to an overfitting model and the wrong answer to an underfitting one.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X}
+\toprule
+& High bias (underfit) & High variance (overfit)\\
+\midrule
+Symptom & train and val error both high, close together & train error low, val error much higher\\
+Typical models & linear model on curved data; very shallow tree; $k$-NN with huge $k$ & deep tree; $k$-NN with
+$k=1$; huge network on little data\\
+Fixes & more features, more flexible model, less regularisation, train longer &
+more data, regularisation, simpler model, bagging, dropout, early stopping, data augmentation\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Learning curves: the diagnostic picture}
+Plot training and validation error against the \emph{number of training examples}.
+\begin{itemize}
+\item High bias: both curves flatten quickly at a high error and nearly meet. More data will not help.
+\item High variance: a large gap that narrows slowly as data grow. More data will help.
+\end{itemize}
+A second curve InfoEdge reportedly asks about is error against \emph{training iterations} for a neural
+network: training error keeps falling; validation error falls, bottoms out, then rises. Stopping at the
+bottom is \textbf{early stopping}.
+
+\subsection{A modern footnote: double descent}
+Very large models (modern deep nets) can show a second descent: test error rises near the point where the
+model can just fit the training data exactly, then \emph{falls again} as the model grows far beyond it. The
+classical U-curve is still the right first answer in an interview; mention double descent as a nuance if
+asked about deep learning.
+
+\section{Regularisation: paying for complexity}
+
+\subsection{The idea}
+\textbf{Regularisation} is anything that discourages a model from becoming more complex than the data
+justify. The most common form adds a penalty to the loss:
+\[
+\text{minimise}\quad \underbrace{\text{average loss on training data}}_{\text{fit the data}}
+\;+\; \lambda \cdot \underbrace{\text{complexity}(\text{parameters})}_{\text{stay simple}}.
+\]
+$\lambda \ge 0$ (lambda) is a hyperparameter: $\lambda = 0$ means no penalty; large $\lambda$ means simplicity
+matters a lot.
+
+\begin{intuition}[: the budget]
+Think of every weight as costing money. A feature must ``earn'' its weight by reducing the loss more than it
+costs. Weak, noisy features cannot afford a large weight, so their influence shrinks. That is exactly how
+regularisation cuts variance.
+\end{intuition}
+
+\subsection{L2 (Ridge) and L1 (Lasso)}
+For a model with weights $w_1,\dots,w_d$:
+\begin{itemize}
+\item \textbf{L2 / Ridge / weight decay:} penalty $\lambda \sum_j w_j^2$. Shrinks all weights smoothly toward
+  zero but rarely makes any exactly zero.
+\item \textbf{L1 / Lasso:} penalty $\lambda \sum_j |w_j|$. Pushes many weights to \emph{exactly} zero, so it
+  also selects features.
+\item \textbf{Elastic net:} both. Useful when features come in correlated groups (Lasso alone picks one of
+  a group arbitrarily).
+\end{itemize}
+
+\begin{example}[: one weight, by hand]
+Suppose without a penalty the best weight would be $w = 3$, and the loss near it is $\frac12(w-3)^2$.
+\begin{itemize}
+\item Ridge with penalty $\frac{\lambda}{2}w^2$, $\lambda = 1$: minimise $\frac12(w-3)^2 + \frac12 w^2$. Derivative
+  $(w-3) + w = 0 \Rightarrow w = 1.5$. Shrunk by half, but not zero.
+\item Lasso with penalty $\lambda|w|$, $\lambda = 1$: for $w>0$ the derivative is $(w-3) + 1 = 0 \Rightarrow w = 2$.
+  If instead the unpenalised optimum were $w=0.8$ (a weak feature), the same calculation gives $w = -0.2$,
+  which contradicts $w>0$; the minimum is at exactly $w=0$. Lasso subtracts a fixed amount $\lambda$ and stops at
+  zero (``soft thresholding''): $w = \text{sign}(w_0)\max(|w_0| - \lambda, 0)$.
+\end{itemize}
+\end{example}
+
+\subsubsection{Why L1 gives exact zeros: the picture}
+Minimising loss $+\lambda\cdot$penalty is equivalent to minimising the loss subject to a budget
+``penalty $\le t$''. In two dimensions the L2 budget $w_1^2 + w_2^2 \le t$ is a circle; the L1 budget
+$|w_1|+|w_2| \le t$ is a diamond with corners on the axes. The loss contours are ellipses centred at the
+unpenalised solution; we expand them until they first touch the budget region. A circle is smooth, so the
+touching point is almost never on an axis. A diamond has sharp corners sticking out, and an expanding
+ellipse very often hits a corner first. A corner lies on an axis, so one weight is exactly zero.
+
+\begin{center}
+\begin{tikzpicture}[scale=0.85]
+\begin{scope}
+\draw[->] (-2,0)--(2.4,0) node[right]{$w_1$}; \draw[->] (0,-2)--(0,2.4) node[above]{$w_2$};
+\draw[thick,accent] (0,0) circle (1);
+\draw[prframe] (1.6,1.7) ellipse (1.25 and 0.6);
+\draw[prframe] (1.6,1.7) ellipse (0.8 and 0.35);
+\fill (0.72,0.69) circle (1.5pt);
+\node[font=\small] at (0,-2.4) {L2: touches off-axis};
+\end{scope}
+\begin{scope}[xshift=6cm]
+\draw[->] (-2,0)--(2.4,0) node[right]{$w_1$}; \draw[->] (0,-2)--(0,2.4) node[above]{$w_2$};
+\draw[thick,accent] (1,0)--(0,1)--(-1,0)--(0,-1)--cycle;
+\draw[prframe,rotate around={-25:(1.2,1.9)}] (1.2,1.9) ellipse (1.25 and 0.55);
+\draw[prframe,rotate around={-25:(1.2,1.9)}] (1.2,1.9) ellipse (0.7 and 0.3);
+\fill (0,1) circle (1.5pt);
+\node[font=\small] at (0,-2.4) {L1: touches a corner, $w_1=0$};
+\end{scope}
+\end{tikzpicture}
+\end{center}
+
+\subsubsection{The Bayesian view (one sentence, often asked)}
+L2 regularisation is the same as assuming a Gaussian prior on the weights (most weights small, centred at
+zero); L1 is the same as a Laplace prior (sharply peaked at zero). Chapter 12 derives this.
+
+\subsection{Other regularisers you must be able to name}
+\begin{itemize}
+\item \textbf{Early stopping}: stop training when validation error starts rising.
+\item \textbf{Dropout} (neural nets): randomly switch off units during training.
+\item \textbf{Data augmentation}: create plausible new training examples (flipped images, paraphrased text).
+\item \textbf{Tree limits}: maximum depth, minimum samples per leaf, pruning.
+\item \textbf{Ensembling} (bagging) reduces variance by averaging.
+\item \textbf{Label smoothing}, \textbf{weight sharing} (CNNs), \textbf{batch norm} (a mild side effect).
+\end{itemize}
+
+\begin{trap}
+Always \textbf{standardise features} before Ridge or Lasso. The penalty treats every weight equally, but a
+weight's size depends on the feature's units: ``salary in rupees'' needs a tiny weight, ``salary in crores''
+a huge one. Without scaling, the penalty unfairly punishes features measured in large-number units less and
+small-unit features more.
+\end{trap}
+
+\section{No free lunch, and why baselines matter}
+The \textbf{no free lunch theorem} says that averaged over \emph{all} possible problems, no learning algorithm
+beats any other. Every algorithm wins by making assumptions (smoothness, linearity, locality) that suit the
+problem. Practically: always start with a simple \textbf{baseline} (predict the mean; logistic regression;
+``most popular jobs'') and demand that a complex model beat it by a margin worth its cost.
+
+\stuck{StatQuest: Machine Learning Fundamentals, Cross Validation}{\ytid{fSytzGwwBVw}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{OA and INT: bias--variance graphs} Draw the error versus model complexity graph and
+explain it. Where is the best model?}
+\oneline{Training error falls monotonically with complexity; test error is U-shaped; the best model sits at
+the bottom of the test-error U, where the sum of bias$^2$ and variance is smallest.}
+\why
+On the x-axis is model complexity (depth of a tree, degree of a polynomial, number of parameters, or
+$1/\lambda$). On the y-axis, error.
+\begin{enumerate}
+\item The \textbf{training error} curve starts high (a very simple model cannot fit even the data it sees)
+  and keeps falling. A sufficiently complex model can memorise every training point, so it can reach zero.
+\item The \textbf{test error} curve first falls together with training error, because extra flexibility
+  is capturing real structure (bias falling). Beyond some point, extra flexibility only captures noise
+  specific to the sample (variance rising), so test error turns upward.
+\item The left region is \textbf{underfitting} (high bias), the right region \textbf{overfitting} (high
+  variance). The vertical gap between the curves is a measure of overfitting.
+\end{enumerate}
+The best model is at the minimum of the \emph{validation} curve (we estimate the test curve with a validation
+set or cross-validation).
+\worked A polynomial fitted to 20 noisy points from a sine curve: degree 1 has train MSE 0.30, val 0.32
+(underfit); degree 4 has 0.05 and 0.07 (good); degree 15 has 0.001 and 2.4 (overfit). Choose degree 4.
+\pushes
+\emph{``What if I plot against number of training examples instead?''} That is a learning curve: training
+error rises (harder to fit more points), validation error falls; they converge. A persistent big gap
+signals variance; both converging at a high value signals bias.
+\emph{``And against training iterations of a neural net?''} Training error keeps falling; validation error
+falls then rises: stop at its minimum (early stopping).
+\pitfall Saying ``test error decreases forever with complexity'' or putting the optimum at zero training
+error. Also do not confuse the x-axis: more \emph{data} is not more \emph{complexity}.
+\end{qa}
+
+\begin{qa}{\pyq{OA, IIT Roorkee ML section} A model has 99\% training accuracy and 72\% validation accuracy.
+What is happening, and what would you try, in order?}
+\oneline{It is overfitting (high variance); I would first check for leakage or a split problem, then add
+regularisation or reduce complexity, and get more or augmented data if possible.}
+\why
+A 27-point gap means the model's behaviour depends heavily on which rows it saw. Before changing the model I
+verify the measurement:
+\begin{enumerate}
+\item \textbf{Is the split sound?} Are there duplicates across train and validation? Is the validation set
+  from a different period or distribution (a time shift)? Is the validation set tiny and noisy?
+\item \textbf{Is there leakage in training only?} For example a feature that exists in the training extract
+  but is computed differently for validation.
+\end{enumerate}
+If the measurement is fine, reduce variance:
+\begin{enumerate}
+\item Simplify: shallower trees, fewer features, smaller network.
+\item Regularise: L1/L2, dropout, min-samples-per-leaf, early stopping.
+\item Average: bagging or a random forest instead of one tree.
+\item More data or augmentation: the only fix that reduces variance without adding bias.
+\item Feature selection: remove noisy features (high-cardinality IDs are classic culprits).
+\end{enumerate}
+\worked A decision tree on 5{,}000 Shiksha leads to predict ``will apply to a college'': unlimited depth gives
+99\%/72\%. Limiting \code{max\_depth=6} and \code{min\_samples\_leaf=50} gives 84\%/81\%. A random forest
+gives 90\%/85\%.
+\pushes \emph{``Why not just collect more data first?''} It is often slow and expensive; regularisation is
+free. But if a learning curve shows validation error still dropping steeply with more data, data collection
+is worth it.
+\pitfall Jumping straight to ``use a bigger model'' (that worsens variance), or to SMOTE, which addresses class
+imbalance, not overfitting.
+\end{qa}
+
+\begin{qa}{\pyq{INT: weight decay} What is weight decay? Is it the same as L2 regularisation?}
+\oneline{Weight decay shrinks every weight by a small fraction at each update; for plain gradient descent it is
+exactly equivalent to adding an L2 penalty, but for adaptive optimisers like Adam the two differ, which is why
+AdamW exists.}
+\why
+With L2, the loss becomes $L(w) + \frac{\lambda}{2}\norm{w}^2$, whose gradient is $\nabla L + \lambda w$. A
+gradient-descent step is
+\[ w \leftarrow w - \eta(\nabla L + \lambda w) = (1-\eta\lambda)\,w - \eta \nabla L. \]
+The factor $(1-\eta\lambda)$ multiplies (``decays'') the weight every step before the usual update. That is
+weight decay. So for SGD, ``weight decay with coefficient $\eta\lambda$'' and ``L2 with coefficient $\lambda$''
+are the same thing.
+
+In Adam, the gradient is divided by a running estimate of its size, per weight. If the L2 term is put
+inside the gradient, it also gets divided, so weights with large gradients are decayed \emph{less}. That is not
+what we want. \textbf{AdamW} applies the decay directly to the weights, outside the adaptive scaling
+(``decoupled weight decay''), and generalises better; it is the default for training Transformers.
+\worked $w = 1$, $\eta = 0.1$, $\lambda = 0.01$, and the data gradient happens to be 0. One SGD step: $w \leftarrow
+(1 - 0.001)\cdot 1 = 0.999$. With no data pushing it, the weight decays geometrically toward 0.
+\pushes \emph{``Why does shrinking weights reduce overfitting?''} Small weights make the function smoother: a
+small change in input causes a small change in output, so the model cannot carve sharp, data-specific
+wiggles. In a sigmoid/tanh network, small weights also keep units in their near-linear range.
+\pitfall Saying weight decay ``reduces the learning rate''. It shrinks the weights, not the step size.
+\end{qa}
+
+\begin{qa}{\pyq{INT and OA DL: overfitting} List the ways to reduce overfitting in a neural network and
+explain why each works.}
+\oneline{More data or augmentation, smaller network, L2/weight decay, dropout, early stopping, batch norm,
+label smoothing, and ensembling; each either limits the effective capacity or makes the training signal less
+specific to the sample.}
+\why
+\begin{itemize}
+\item \textbf{More data / augmentation}: noise patterns stop being repeatable, so memorising them stops paying.
+  Augmentation (crops, flips, synonym replacement) teaches invariances we know are true.
+\item \textbf{Smaller network}: fewer parameters, fewer ways to memorise.
+\item \textbf{Weight decay}: smooth functions (previous question).
+\item \textbf{Dropout}: randomly zeroes units each step with probability $p$, so no unit can rely on a
+  specific partner; it behaves like averaging many thinned networks (an implicit ensemble).
+\item \textbf{Early stopping}: weights start small and grow during training; stopping early limits how
+  far they move, acting like an L2 penalty.
+\item \textbf{Batch normalisation}: the batch statistics add a little noise per example, a mild regulariser.
+\item \textbf{Label smoothing}: replaces hard 0/1 targets with 0.05/0.95-style targets, so the network is not
+  rewarded for infinitely confident logits.
+\item \textbf{Ensembling / checkpoint averaging}: averaging reduces variance.
+\end{itemize}
+\worked A CNN classifying 2{,}000 property photos into 6 room types: 99\% train, 70\% val. Adding flips/crops
+and dropout 0.3 gives 93\%/82\%; switching to a pretrained ResNet fine-tuned with weight decay gives 95\%/91\%.
+Transfer learning is often the biggest single fix when data are small.
+\pitfall Listing techniques without the ``why''. The panel reported asking exactly this to test intuition.
+\end{qa}
+
+\begin{qa}{Explain the bias--variance trade-off to a non-technical product manager in under a minute.}
+\oneline{A model can be wrong because it is too rigid to see the pattern (bias) or because it is so eager that
+it mistakes coincidences for patterns (variance); we tune its flexibility to balance the two.}
+\why
+``Imagine predicting the price of flats in Noida. If I only use `price = average price', I am always off for
+big or small flats: that is \emph{bias}, a systematic blind spot. If I memorise every flat sold last month,
+including the one that sold cheap because the owner was in a hurry, my predictions jump around depending on
+which flats happened to sell: that is \emph{variance}. The sweet spot is a model that uses size, location and
+floor but ignores one-off stories. We find it by testing on flats the model has not seen.''
+\pushes \emph{``So which one is worse?''} Neither in general; the business question decides. For a salary
+estimate shown to users, high variance (estimates that jump week to week) erodes trust, so we would accept
+slightly more bias for stability.
+\end{qa}
+
+\begin{qa}{Compute the expected squared error at a point where the true value is 10, predictions over
+four training sets are 8, 12, 14, 10, and the noise variance is 2.}
+\oneline{Bias$^2$ = 1, variance = 5, noise = 2, so the expected error is 8.}
+\why Mean prediction $= (8+12+14+10)/4 = 11$. Bias $= 11 - 10 = 1$, bias$^2 = 1$.
+Variance $= \frac{(8-11)^2 + (12-11)^2 + (14-11)^2 + (10-11)^2}{4} = \frac{9+1+9+1}{4} = 5$.
+Total $= 1 + 5 + 2 = 8$.
+\pushes \emph{``Which part can no model remove?''} The noise, 2. \emph{``How would bagging change this?''} It
+averages models, cutting the variance term (towards $\rho\sigma^2$ if models are correlated) while leaving bias
+roughly unchanged.
+\end{qa}
+
+\begin{qa}{Why does L1 regularisation produce sparse weights but L2 does not? Answer both geometrically and
+with derivatives.}
+\oneline{The L1 penalty has a constant-size pull toward zero that does not fade as the weight shrinks, and its
+constraint region has corners on the axes; the L2 pull is proportional to the weight, so it fades to nothing
+near zero.}
+\why
+\textbf{Derivatives.} The L2 penalty $\lambda w^2$ has derivative $2\lambda w$: when $w$ is already small, the
+push toward zero is tiny, so $w$ settles at a small non-zero value wherever the data's pull balances it. The L1
+penalty $\lambda|w|$ has derivative $\lambda\cdot\text{sign}(w)$: a constant push of size $\lambda$ however small
+$w$ is. If the data's pull on a weight is weaker than $\lambda$, nothing can hold the weight away from zero, so it
+lands exactly at zero.
+
+\textbf{Geometry.} As drawn in Section 1.5, the L1 constraint region is a diamond whose corners lie on the
+axes; expanding loss ellipses usually touch a corner first, and corners have some coordinates equal to zero.
+The L2 region is a circle with no corners.
+\worked With an unpenalised optimum $w_0 = 0.8$ and $\lambda = 1$: Lasso gives $\max(0.8 - 1, 0) = 0$ (feature
+removed). Ridge with the same loss gives $0.8/(1+1) = 0.4$ (shrunk, kept).
+\pushes \emph{``When would you prefer Ridge anyway?''} When many features each carry a little signal (text
+features, embeddings) or features are highly correlated: Lasso arbitrarily keeps one of a correlated group and
+can be unstable; Ridge spreads weight across the group.
+\end{qa}
+
+\begin{qa}{What is data leakage? Give three concrete examples from a job-portal setting and how you would
+detect each.}
+\oneline{Leakage is using, during training, information that will not be available when the model makes real
+predictions; it inflates offline scores and collapses in production.}
+\why
+\begin{enumerate}
+\item \textbf{Target leakage}: predicting ``will this candidate be hired'' using ``number of offer letters
+  generated''. Detection: a single feature with almost perfect importance or AUC; ask ``when is this value
+  created, relative to the event?''
+\item \textbf{Preprocessing leakage}: fitting a scaler or TF-IDF on all resumes before splitting.
+  Detection: code review; enforce a \code{Pipeline} so every transform is fit inside each training fold.
+\item \textbf{Temporal leakage}: random train/test split on applications from 2023--2025 when the model
+  will predict 2026 behaviour; also features like ``total applies this job will get''. Detection: compare a
+  random split score with a time-based split score; a large drop signals leakage.
+\item \textbf{Group leakage}: the same candidate's multiple applications in both train and test.
+  Detection: group $k$-fold by candidate ID.
+\end{enumerate}
+\pushes \emph{``Your offline AUC is 0.99 on a hard problem. What do you think first?''} Leakage, before
+celebrating. Then I look at the top features and the split.
+\end{qa}
+
+\begin{qa}{Why do we need a separate test set if we already use cross-validation?}
+\oneline{Because choosing the best configuration using CV scores makes those scores optimistic; an untouched
+test set gives an unbiased final estimate.}
+\why CV is used to \emph{select} among hyperparameters and models. Selection on noisy scores favours lucky
+configurations (the maximum of noisy numbers is biased upward). The test set has not influenced any decision,
+so its score is an honest estimate of performance on new data. When data are very small, \textbf{nested
+cross-validation} replaces the single test set: an outer CV loop estimates performance, an inner CV loop tunes
+hyperparameters inside each outer training fold.
+\end{qa}
+
+\begin{qa}{When is a random train--test split wrong? Give two cases and the right split.}
+\oneline{When rows are not independent: time-ordered data (use a time-based split) and grouped data such as
+many rows per user (use a group split).}
+\why
+A random split assumes rows are exchangeable, i.e. the test rows look like unseen future rows. For time series
+(daily applications to a job), a random split puts tomorrow in training and yesterday in testing: the model
+interpolates rather than forecasts. Use a forward-chaining split. For grouped data (many sessions per seeker),
+a random split lets the model memorise each seeker's habits and get them ``right'' in test. Use
+\code{GroupKFold}. A third case is \textbf{distribution shift}: if the model will be deployed in a new city,
+validate on a held-out city.
+\end{qa}
+
+\begin{qa}{\deep Can adding a completely useless random feature ever \emph{improve} validation accuracy? Can it
+hurt?}
+\oneline{It can appear to help by chance on a small validation set, but in expectation it hurts slightly,
+because it adds variance without adding signal; how much it hurts depends on the model's regularisation.}
+\why
+A random feature has no relationship with the target in the population. A flexible model will still find
+spurious patterns in it on the training sample (pure noise always correlates a little with anything in a
+finite sample). Those patterns do not repeat on new data, so predictions get noisier: variance goes up. With
+strong regularisation (Lasso, a random forest that rarely picks it) the damage is small; with an unregularised
+model on few rows and many such features, it can be large. On a single small validation set, random chance can
+make the noisy model score higher, which is exactly why we use CV and look at the spread.
+\worked Linear regression with $n = 30$ rows: adding 20 random columns raises training $R^2$ from 0.60 to 0.85
+(it can only go up) while CV $R^2$ drops from 0.55 to 0.20.
+\pushes \emph{``How is this used in practice?''} A classic feature-selection trick: add a few random ``shadow''
+features (Boruta) and drop any real feature whose importance is not higher than the best random one.
+\end{qa}
+
+\begin{qa}{\deep A model has \emph{lower} validation loss than training loss. Is something wrong?}
+\oneline{Not necessarily; regularisation that is active only during training (dropout, augmentation), the timing
+of when training loss is averaged, or an easier validation set can all cause it, but it is worth checking for a
+leaky or unrepresentative validation set.}
+\why
+\begin{enumerate}
+\item \textbf{Dropout and augmentation} make training harder: training loss is computed on a crippled
+  network and distorted inputs; validation uses the full network on clean inputs.
+\item \textbf{Averaging timing}: training loss is often the average over the epoch while the weights were
+  still improving; validation loss is computed at the end of the epoch with the better weights.
+\item \textbf{Easier validation data}: by chance, or because of a bad split (validation drawn from a cleaner
+  source), or because of duplicates of training rows in validation (leakage).
+\end{enumerate}
+I would check the third explanation first, since the first two are benign.
+\end{qa}
+
+\begin{qa}{What is the difference between parameters and hyperparameters? Give three examples of each for
+three different models.}
+\oneline{Parameters are learned from data by the training algorithm; hyperparameters are chosen by us before
+training and control how learning happens.}
+\why
+\begin{center}\small
+\begin{tabular}{lll}
+\toprule
+Model & Parameters (learned) & Hyperparameters (chosen)\\
+\midrule
+Linear/logistic regression & weights, bias & $\lambda$ (or $C$), penalty type\\
+Decision tree & split features, thresholds, leaf values & max depth, min samples per leaf, criterion\\
+Neural network & weights and biases of every layer & learning rate, layers, width, dropout, batch size\\
+$k$-means & centroid positions & $k$, initialisation\\
+\bottomrule
+\end{tabular}
+\end{center}
+Hyperparameters are tuned on validation data (grid, random or Bayesian search), never on the test set.
+\end{qa}
+
+\begin{qa}{Your model has 62\% training and 61\% validation accuracy on a problem where humans get 95\%. What
+do you do?}
+\oneline{This is high bias (underfitting): increase capacity or improve features, and reduce regularisation;
+more data alone will not help.}
+\why The gap is tiny, so the model is consistent but systematically limited. Options in order:
+(1) richer features (interactions, text embeddings, domain features); (2) a more flexible model (gradient
+boosting instead of a linear model; a deeper network); (3) less regularisation (larger $C$, smaller
+$\lambda$, less dropout); (4) train longer if it is a neural network that has not converged;
+(5) check label quality: if labels are noisy, ``human 95\%'' may not be achievable with these labels.
+\pitfall Recommending more data. A learning curve that is flat at 61\% tells you more rows will not move it.
+\end{qa}
+
+\begin{qa}{\deep Is a model with 0\% training error always overfitting?}
+\oneline{No. Zero training error means the model can fit the sample; it is overfitting only if validation error is
+much worse than it could be. Many good models (boosted trees, large neural nets, 1-NN on a clean problem)
+reach zero training error and still generalise well.}
+\why Overfitting is defined by the \emph{gap and by comparison with alternatives}, not by training error alone.
+If the classes are perfectly separable and labels are clean (say, digit images), fitting every training point
+can be correct. Modern deep networks routinely interpolate the training set yet generalise, which is part of the
+double-descent story. Conversely, if labels are noisy (10\% mislabelled), zero training error means the model
+learned the mislabelled points too, which usually hurts.
+\end{qa}
+
+\begin{qa}{What is $k$-fold cross-validation, how do you choose $k$, and what does it cost?}
+\oneline{Split data into $k$ folds, train $k$ times each time holding one fold out, and average the scores;
+$k = 5$ or $10$ is the usual compromise between bias of the estimate, its variance, and compute.}
+\why Small $k$ (like 2) trains on only half the data each time, so each model is weaker than the final one
+(pessimistic, biased estimate). Large $k$ (like $n$, leave-one-out) trains on almost all data (low bias) but the
+$k$ models are nearly identical, so their errors are correlated and the estimate is noisy; it also costs $k$ full
+trainings. With 1 million rows, a single holdout is already precise, so CV is often unnecessary; with 2{,}000
+rows, 5- or 10-fold stratified CV is standard.
+\pushes \emph{``After CV, which model do you deploy?''} Usually retrain on all training data with the chosen
+hyperparameters (or average the $k$ fold models, common in competitions).
+\end{qa}
+
+\begin{qa}{\deep If regularisation always increases training error, why does it ever help?}
+\oneline{Because it trades a small increase in bias for a larger decrease in variance, and test error is the sum
+of both.}
+\why Training error measures fit to this sample. Regularisation deliberately stops the model from fitting the
+sample perfectly, so training error rises. But the parts of the sample it refuses to fit are disproportionately
+noise. On new data that noise is different, so not having fitted it is an advantage. In bias--variance terms:
+variance falls faster than bias$^2$ rises, until $\lambda$ becomes so large that the model ignores real signal
+too, after which test error rises again. That is why $\lambda$ is tuned on validation data.
+\worked Ridge on 50 rows, 40 features: $\lambda = 0$: train MSE 0.1, val 5.0. $\lambda = 1$: train 0.8, val 1.2.
+$\lambda = 100$: train 3.0, val 3.1 (now underfitting).
+\end{qa}
+
+\begin{qa}{What is the no-free-lunch theorem and what does it mean for a working data scientist?}
+\oneline{No algorithm is best on every possible problem; an algorithm wins only when its built-in assumptions
+match the data, so we must try sensible candidates and validate empirically.}
+\why A linear model assumes additive effects; a CNN assumes local, translation-equivariant patterns; $k$-NN
+assumes nearby points share labels; gradient-boosted trees assume axis-aligned, piecewise-constant structure.
+Each is excellent when its assumption holds and poor otherwise. Practically: (1) start with a baseline,
+(2) pick candidates whose assumptions fit the data type (trees for tabular, CNNs for images, Transformers for
+text), (3) compare on a sound validation scheme.
+\end{qa}
+
+\begin{qa}{\deep Two models have the same validation accuracy, 85\%. One is logistic regression, the other a
+2{,}000-tree gradient-boosted model. Which do you ship?}
+\oneline{Usually the simpler one: equal accuracy plus lower latency, easier debugging, better calibration and
+interpretability, and typically more stable behaviour under data shift.}
+\why Accuracy is one of several criteria. Ask: (1) Is the 85\% estimate equally certain for both? Look at CV
+spread. (2) Latency and cost: a model scoring 30 lakh Resdex candidates per search must be fast. (3)
+Interpretability: recruiters and compliance may need reasons. (4) Robustness: the simpler model has fewer
+ways to break when inputs drift. (5) Other metrics: compare calibration, recall at the operating point, and
+performance on important segments (freshers, tier-2 cities). If the complex model wins clearly on a metric
+that matters (say recall on rare high-value leads), it can be worth it.
+\end{qa}
+
+\begin{qa}{What is stratified sampling and when must you use it?}
+\oneline{Splitting so that each subset keeps the same class proportions as the whole; it is essential for
+imbalanced classification and small datasets.}
+\why With 1\% positives and 1{,}000 rows, a random 20\% validation split contains 2 positives on average and
+quite often 0 or 1, making recall meaningless and unstable. Stratification guarantees exactly 2 per fold.
+In scikit-learn: \code{train\_test\_split(..., stratify=y)} and \code{StratifiedKFold}.
+\end{qa}

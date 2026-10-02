@@ -1,0 +1,482 @@
+\chapter{Linear Regression, from a Line to the Normal Equations}
+\companion{StatQuest: Linear Regression, Clearly Explained}{\ytid{7ArmBVF2dCs}}
+
+Linear regression is the first model interviewers drill and the one they come back to in Round 4
+(``what are its assumptions? what if homoscedasticity fails?''). It is worth knowing completely: every idea
+in it (a loss, a gradient, a closed form, assumptions, diagnostics, regularisation) reappears in every other
+model.
+
+\section{The model in words and symbols}
+
+\subsection{One feature}
+We believe the target $y$ is roughly a straight-line function of one feature $x$:
+\[ \hat y = w x + b. \]
+$w$ is the \textbf{slope} (how much $\hat y$ rises when $x$ rises by one unit) and $b$ the \textbf{intercept}
+(the prediction when $x = 0$).
+
+\begin{example}[: reading the numbers]
+A fitted salary model: $\widehat{\text{salary}} = 1.8\times\text{experience} + 3.5$ (lakh). A fresher ($x=0$) is
+predicted 3.5 lakh. Each extra year adds 1.8 lakh. Someone with 4 years: $1.8\cdot4+3.5 = 10.7$ lakh.
+\end{example}
+
+\subsection{Many features}
+With $d$ features $x_1,\dots,x_d$ (experience, a city indicator, number of skills, \dots):
+\[ \hat y = w_1x_1 + w_2x_2 + \dots + w_dx_d + b = \mathbf{w}^\top\mathbf{x} + b. \]
+The symbol $\mathbf{w}^\top\mathbf{x}$ is a \textbf{dot product}: multiply matching entries and add them up.
+For $\mathbf{w} = (2, -1)$ and $\mathbf{x} = (3, 4)$, $\mathbf{w}^\top\mathbf{x} = 2\cdot3 + (-1)\cdot4 = 2$.
+
+Stack $n$ examples as rows of a matrix $X$ ($n$ rows, $d$ columns, plus a column of 1s to carry the
+intercept). Then all predictions at once are $\hat{\mathbf y} = X\mathbf w$.
+
+\subsection{Why it is called ``linear''}
+``Linear'' means linear in the \emph{parameters} $\mathbf w$, not in $x$. The model
+$\hat y = w_1 x + w_2 x^2 + w_3\log x + b$ is still linear regression: we simply created new features
+$x^2$ and $\log x$. This is how linear regression fits curves.
+
+\section{Choosing the line: least squares}
+
+\subsection{Residuals and the loss}
+For each example, the \textbf{residual} is the error $e_i = y_i - \hat y_i$. We want residuals small. We
+cannot just add them up (positive and negative errors would cancel), so we square them:
+\[ \text{SSE} = \sum_{i=1}^n (y_i - \hat y_i)^2, \qquad \text{MSE} = \frac{1}{n}\text{SSE}. \]
+\textbf{Ordinary least squares (OLS)} chooses $w, b$ to minimise this.
+
+Why squares and not absolute values?
+\begin{enumerate}
+\item Squares are smooth, so calculus gives a clean closed-form answer.
+\item Squares punish large errors heavily (an error of 4 costs 16, four errors of 1 cost 4). Often
+  appropriate, sometimes a weakness (outliers dominate).
+\item If the noise is Gaussian, least squares is exactly maximum likelihood (Chapter 12). That is the deep
+  reason.
+\end{enumerate}
+
+\subsection{Solving it with one feature, step by step}
+A \textbf{derivative} tells you the slope of a function: where a smooth function is at its lowest point, its
+slope is zero. So we take the derivative of SSE with respect to $b$ and $w$ and set each to zero.
+\begin{itemize}
+\item Setting $\partial\text{SSE}/\partial b = -2\sum(y_i - wx_i - b) = 0$ gives $b = \bar y - w\bar x$.
+  ($\bar x$ means the average of the $x$ values.) So the line always passes through $(\bar x, \bar y)$.
+\item Substituting and setting $\partial\text{SSE}/\partial w = 0$ gives
+  \[ w = \frac{\sum (x_i - \bar x)(y_i - \bar y)}{\sum (x_i - \bar x)^2} = \frac{\Cov(x,y)}{\Var(x)} = r\,\frac{s_y}{s_x}, \]
+  where $r$ is the correlation and $s_x, s_y$ the standard deviations.
+\end{itemize}
+
+\begin{example}[: fit a line to four Noida flats]
+Area $x$ (hundreds of sq ft): 5, 7, 9, 11. Price $y$ (lakh): 30, 40, 44, 54.
+$\bar x = 8$, $\bar y = 42$. Deviations: $x - \bar x = -3,-1,1,3$; $y-\bar y = -12,-2,2,12$.
+$\sum(x-\bar x)(y-\bar y) = 36+2+2+36 = 76$. $\sum(x-\bar x)^2 = 9+1+1+9 = 20$.
+$w = 76/20 = 3.8$ lakh per 100 sq ft. $b = 42 - 3.8\cdot8 = 11.6$.
+Line: $\hat y = 3.8x + 11.6$. A 1{,}000 sq ft flat ($x=10$): $49.6$ lakh.
+Predictions $30.6, 38.2, 45.8, 53.4$; residuals $-0.6, 1.8, -1.8, 0.6$; they sum to $0$, as they must.
+\end{example}
+
+\subsection{Many features: the normal equations}
+In matrix form, SSE $= \norm{\mathbf y - X\mathbf w}^2$. Its gradient (the vector of all partial derivatives)
+is $-2X^\top(\mathbf y - X\mathbf w)$. Setting it to zero:
+\[ X^\top X\,\mathbf w = X^\top\mathbf y \quad\Longrightarrow\quad \mathbf w = (X^\top X)^{-1}X^\top\mathbf y. \]
+These are the \textbf{normal equations}. They require $X^\top X$ to be invertible, which fails when one
+feature is an exact combination of others (perfect multicollinearity) or when there are more features than rows.
+
+\subsubsection{The geometric picture (a favourite interview follow-up)}
+Think of $\mathbf y$ as one point in $n$-dimensional space (one coordinate per example). Every possible
+prediction $X\mathbf w$ lies in the flat subspace spanned by the columns of $X$ (the \textbf{column space}).
+Least squares picks the point in that subspace closest to $\mathbf y$: the \textbf{orthogonal projection}. So
+the residual vector $\mathbf y - X\hat{\mathbf w}$ is perpendicular to every column of $X$. That is exactly what
+$X^\top(\mathbf y - X\mathbf w) = 0$ says. With a column of ones in $X$, perpendicular to it means the residuals
+sum to zero.
+
+\subsubsection{Cost and alternatives}
+Forming $X^\top X$ costs about $nd^2$ operations and inverting it about $d^3$. Fine for $d$ in the thousands.
+For huge $d$ or streaming data, use gradient descent (Chapter 5). In practice libraries use a QR or SVD
+decomposition rather than an explicit inverse, which is numerically safer.
+
+\section{Measuring the fit}
+
+\subsection{$R^2$: fraction of variance explained}
+Compare our model with the dumbest possible model, ``always predict $\bar y$''.
+\[ R^2 = 1 - \frac{\text{SS}_{res}}{\text{SS}_{tot}} = 1 - \frac{\sum(y_i - \hat y_i)^2}{\sum(y_i - \bar y)^2}. \]
+$R^2 = 1$: perfect; $R^2 = 0$: no better than the mean; on test data $R^2$ can be negative (worse than the mean).
+For simple regression with an intercept, $R^2 = r^2$.
+
+\begin{example}[: $R^2$ for the flats]
+SS$_{res} = 0.36 + 3.24 + 3.24 + 0.36 = 7.2$. SS$_{tot} = 144+4+4+144 = 296$. $R^2 = 1 - 7.2/296 = 0.976$.
+\end{example}
+
+\subsection{Adjusted $R^2$}
+Training $R^2$ never decreases when you add a feature (OLS can always give it weight 0). Adjusted $R^2$
+penalises features: $\bar R^2 = 1 - (1-R^2)\frac{n-1}{n-d-1}$. It goes down if a new feature adds less than
+chance would.
+
+\subsection{Error metrics}
+\begin{itemize}
+\item \textbf{MAE} $=\frac1n\sum|y-\hat y|$: in target units, robust to outliers; minimised by the median.
+\item \textbf{RMSE} $=\sqrt{\text{MSE}}$: in target units, punishes large errors; minimised by the mean.
+\item \textbf{MAPE} $=\frac1n\sum|y-\hat y|/|y|$: percentage, scale-free, explodes near $y=0$ and penalises
+  over-prediction more than under-prediction.
+\end{itemize}
+
+\section{Assumptions: what OLS needs, and for what}
+
+A crucial distinction interviewers love: some assumptions are needed for the \emph{coefficients to be
+right on average} (unbiased), others only for \emph{p-values and confidence intervals to be valid}.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X X}
+\toprule
+Assumption & Plain meaning & How to check & If violated\\
+\midrule
+\textbf{L}inearity & the average of $y$ moves linearly with the features (after any transforms) & residuals vs
+fitted plot shows a curve & add $x^2$, $\log x$, interactions, or use a non-linear model\\
+\textbf{I}ndependence & errors of different rows are unrelated & Durbin--Watson; residuals vs time & time-series
+models, clustered standard errors, mixed models\\
+\textbf{N}ormality & errors are bell-shaped & Q--Q plot, Shapiro--Wilk & matters only for small-sample inference;
+transform $y$, bootstrap, or robust methods\\
+\textbf{E}qual variance (homoscedasticity) & spread of errors is the same everywhere & residual plot shows a
+funnel; Breusch--Pagan test & transform $y$ (log), weighted least squares, robust SEs, or a GLM\\
+No perfect multicollinearity & no feature is an exact combination of others & VIF, correlation matrix & drop or
+combine features, PCA, Ridge\\
+Exogeneity & errors are uncorrelated with features (no omitted confounder) & domain reasoning & coefficients
+biased; add the confounder, instrumental variables\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Mnemonic: \textbf{LINE} plus ``no multicollinearity''. For unbiased coefficients you need linearity,
+exogeneity and no perfect multicollinearity. Independence and homoscedasticity make OLS the \emph{best}
+(minimum-variance) linear unbiased estimator (the Gauss--Markov theorem) and make the usual standard errors
+correct. Normality is only for exact small-sample t- and F-tests.
+
+\subsection{Heteroscedasticity, slowly}
+``Hetero'' means different, ``scedastic'' means spread. Salaries are the textbook case: freshers' salaries vary by
+$\pm1$ lakh, senior leaders' by $\pm20$ lakh. A residual plot fans out like a funnel.
+\begin{itemize}
+\item \textbf{What breaks:} coefficients stay unbiased, but OLS standard errors (and hence p-values) are wrong,
+  and OLS gives too much influence to the noisiest points.
+\item \textbf{Fixes:}
+  \begin{enumerate}
+  \item \emph{Transform $y$}: model $\log(\text{salary})$. Multiplicative noise ($\pm10\%$) becomes additive,
+    roughly constant noise. (This is what the reported interviewer wanted.)
+  \item \emph{Weighted least squares}: give each point weight $1/\sigma_i^2$, so noisy points count less.
+  \item \emph{Robust (``sandwich'', HC) standard errors}: keep OLS coefficients, fix the inference.
+  \item \emph{A GLM} with a variance that grows with the mean, such as Gamma regression with a log link
+    (what the candidate proposed; Chapter 4 explains it fully).
+  \end{enumerate}
+\end{itemize}
+
+\subsection{Multicollinearity and VIF}
+If two features move together (``years of experience'' and ``age''), the model cannot tell which one deserves
+credit. Predictions stay fine, but individual coefficients become unstable: they can swing wildly or flip sign
+between samples. The \textbf{variance inflation factor} of feature $j$ comes from regressing $x_j$ on all other
+features and taking its $R_j^2$:
+\[ \text{VIF}_j = \frac{1}{1 - R_j^2}. \]
+VIF $=1$: no collinearity; VIF $>5$ or $>10$: worrying. The standard error of $w_j$ is inflated by $\sqrt{\text{VIF}_j}$.
+
+\section{Regularised linear regression}
+\begin{itemize}
+\item \textbf{Ridge}: minimise SSE $+\lambda\norm{\mathbf w}^2$. Closed form $\mathbf w = (X^\top X + \lambda I)^{-1}X^\top\mathbf y$.
+  Adding $\lambda$ to the diagonal makes the matrix always invertible, which is why Ridge cures multicollinearity.
+\item \textbf{Lasso}: minimise SSE $+\lambda\sum|w_j|$. No closed form; solved by coordinate descent. Sets some
+  weights exactly to zero.
+\item \textbf{Elastic net}: both penalties.
+\end{itemize}
+The intercept is not penalised, and features must be standardised first (Chapter 1).
+
+\section{Outliers, leverage and influence}
+\begin{itemize}
+\item An \textbf{outlier} has an unusual $y$ given its $x$ (large residual).
+\item A \textbf{high-leverage point} has an unusual $x$ (far from the other $x$ values). It has the power to
+  tilt the line.
+\item An \textbf{influential point} actually does tilt it: high leverage \emph{and} a large residual.
+  \textbf{Cook's distance} measures how much all fitted values change when that point is deleted.
+\end{itemize}
+Remedies: check whether it is a data error; use robust losses (Huber, MAE); or keep it if it is real and
+important. Deleting genuine extreme values is a mistake the InfoEdge coding round specifically tested.
+
+\begin{practical}[: where linear regression lives at InfoEdge]
+\begin{itemize}
+\item \textbf{Salary engine} (Data Factory slide): estimating a fair salary range for a title, city and
+  experience. Log-salary linear models with many one-hot features are a strong, interpretable baseline.
+\item \textbf{99acres price estimates}: price per square foot by locality, floor, age, amenities.
+\item As a \textbf{diagnostic tool}: coefficients answer ``how much does one more year of experience add, holding
+  city fixed?'', which product teams ask constantly.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: R-squared, Clearly Explained}{\ytid{2AQKmw14mHM}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{INT, Round 4 follow-up} What are the assumptions of linear regression?}
+\oneline{Linearity in the parameters, independent errors, constant error variance (homoscedasticity), normally
+distributed errors, no perfect multicollinearity, and errors uncorrelated with the features (exogeneity).}
+\why
+I like to group them by what they buy us.
+\begin{enumerate}
+\item \textbf{For coefficients to be correct on average (unbiased):}
+  \begin{itemize}
+  \item \emph{Linearity:} $\E[y\mid x]$ is a linear combination of the features we included. Note: features can
+    be transformed ($x^2$, $\log x$), so this is about the specification.
+  \item \emph{Exogeneity:} the error has mean zero given the features. Violated when an omitted variable affects
+    both $x$ and $y$ (omit ``company tier'' from a salary model and the ``IIT degree'' coefficient absorbs part of
+    its effect).
+  \item \emph{No perfect multicollinearity:} otherwise the coefficients are not even uniquely defined.
+  \end{itemize}
+\item \textbf{For OLS to be the most efficient linear unbiased estimator, and for standard errors to be right:}
+  \emph{independence} of errors and \emph{homoscedasticity} (Gauss--Markov).
+\item \textbf{For exact small-sample t-tests and confidence intervals:} \emph{normality} of errors. With large $n$
+  the central limit theorem makes this matter little.
+\end{enumerate}
+\worked For each I state a check: residual vs fitted plot (linearity, homoscedasticity), Durbin--Watson or
+residuals vs time (independence), Q--Q plot (normality), VIF (multicollinearity).
+\pushes \emph{``Do the features need to be normally distributed?''} No; the assumptions are about the errors.
+Binary features are perfectly fine. \emph{``Does $y$ need to be normal?''} Not marginally; only the errors given
+$x$.
+\pitfall Saying ``the data must be normal''. Also listing assumptions without saying which consequences follow
+from violating each.
+\end{qa}
+
+\begin{qa}{\pyq{INT, Round 4} Homoscedasticity is violated in your model. What do you do?}
+\oneline{First confirm it with a residual plot or Breusch--Pagan test; then either transform the target (log or
+Box--Cox), use weighted least squares, keep OLS with heteroscedasticity-robust standard errors, or switch to a GLM
+whose variance grows with the mean.}
+\why
+\textbf{What goes wrong.} The coefficients are still unbiased, so predictions of the mean are fine. But OLS treats
+every point as equally reliable, so it is no longer the most efficient estimator, and the usual standard-error
+formula (which assumes one common $\sigma^2$) is wrong: p-values and confidence intervals cannot be trusted.
+Prediction intervals are also wrong: too wide for small values, too narrow for large ones.
+
+\textbf{Fix 1, transform $y$.} If the noise is proportional to the level (salaries vary by about $\pm15\%$), take
+logs: $\log(y) = \log(\text{level}) + \log(1\pm0.15)$, and the second term has roughly constant spread. Box--Cox
+searches over power transforms $y^\lambda$. Back-transforming needs care: $\exp(\E[\log y]) \ne \E[y]$; multiply by
+a smearing factor such as $\exp(\hat\sigma^2/2)$.
+
+\textbf{Fix 2, weighted least squares.} If the variance of point $i$ is $\sigma_i^2$, minimise
+$\sum (y_i - \hat y_i)^2/\sigma_i^2$. Noisy points get less weight. Usually $\sigma_i$ is modelled (for instance
+proportional to $\hat y_i$).
+
+\textbf{Fix 3, robust standard errors.} Keep OLS, but compute standard errors with the White/HC formula that does
+not assume constant variance. Good when the goal is inference and the coefficients themselves are fine.
+
+\textbf{Fix 4, a GLM.} Model $y$ with a distribution whose variance is tied to the mean: Gamma (variance $\propto$
+mean$^2$, constant coefficient of variation) or Poisson for counts (variance $=$ mean), usually with a log link.
+This models the mean on the original scale, avoiding the back-transformation problem.
+\worked Salary vs experience: residual spread is about 1 lakh at 1 year and 8 lakh at 15 years. Fit
+$\log(\text{salary})$; the residual plot becomes a flat band; the coefficient $0.08$ means ``each year adds about 8\%''.
+\pushes \emph{``Which would you choose?''} For prediction with a multiplicative structure, log or Gamma-log GLM; for
+explaining effects with valid p-values, robust SEs.
+\pitfall Claiming heteroscedasticity biases the coefficients. It does not (unless it comes from misspecification).
+\end{qa}
+
+\begin{qa}{\pyq{INT: multicollinearity and VIF} What is multicollinearity, why is it a problem, and how do you
+detect and fix it?}
+\oneline{It is strong correlation among features; it makes individual coefficients unstable and their standard
+errors large, though predictions are largely unaffected; detect it with VIF and fix it by dropping, combining,
+PCA or Ridge.}
+\why
+If $x_1$ and $x_2$ almost always move together, many combinations of $(w_1, w_2)$ give nearly the same predictions
+($w_1 + w_2 \approx$ constant). The data cannot pin down the split, so small changes in the sample swing the
+coefficients, sometimes flipping signs. Mathematically, $X^\top X$ is nearly singular, so its inverse (which sets
+the coefficient variances) has huge entries.
+
+\textbf{Detect:} pairwise correlations miss three-way relations, so use VIF$_j = 1/(1-R_j^2)$. Also the condition
+number of $X$. \textbf{Fix:} drop one of the pair; combine them (an index); use PCA; use Ridge (which adds $\lambda I$ and
+stabilises the inverse); or collect data where they vary independently.
+\worked Regressing ``years of experience'' on ``age'' and ``graduation year'' gives $R^2 = 0.96$, so VIF $= 25$: the
+standard error of the experience coefficient is $5\times$ what it would be without collinearity.
+\pushes \emph{``Does it matter for a random forest?''} Prediction is fine, but importance gets split between the
+correlated features, so each looks less important than it is.
+\end{qa}
+
+\begin{qa}{Derive the OLS slope and intercept for a single feature.}
+\oneline{Set the derivatives of the squared-error sum with respect to $b$ and $w$ to zero; you get $b = \bar y - w\bar x$
+and $w = \sum(x-\bar x)(y-\bar y)/\sum(x-\bar x)^2$.}
+\why
+$S(w,b) = \sum(y_i - wx_i - b)^2$.
+\[ \frac{\partial S}{\partial b} = -2\sum(y_i - wx_i - b) = 0 \;\Rightarrow\; \sum y_i = w\sum x_i + nb \;\Rightarrow\; b = \bar y - w\bar x. \]
+Substitute $b$: residual $= (y_i - \bar y) - w(x_i - \bar x)$.
+\[ \frac{\partial S}{\partial w} = -2\sum x_i\big[(y_i-\bar y) - w(x_i-\bar x)\big] = 0. \]
+Because $\sum \bar x[(y_i-\bar y) - w(x_i - \bar x)] = 0$, we can replace $x_i$ by $(x_i - \bar x)$:
+\[ \sum(x_i-\bar x)(y_i-\bar y) = w\sum(x_i-\bar x)^2 \;\Rightarrow\; w = \frac{S_{xy}}{S_{xx}}. \]
+The second derivative $2\sum(x_i - \bar x)^2 > 0$, so this is a minimum.
+\worked See the Noida flats example: $w = 76/20 = 3.8$, $b = 11.6$.
+\end{qa}
+
+\begin{qa}{Derive the normal equations and give their geometric meaning.}
+\oneline{Minimising $\norm{\mathbf y - X\mathbf w}^2$ gives $X^\top X\mathbf w = X^\top\mathbf y$; geometrically, the fitted
+vector is the orthogonal projection of $\mathbf y$ onto the column space of $X$, so residuals are perpendicular to every
+feature column.}
+\why Expand $L = (\mathbf y - X\mathbf w)^\top(\mathbf y - X\mathbf w) = \mathbf y^\top\mathbf y - 2\mathbf w^\top X^\top\mathbf y + \mathbf w^\top X^\top X\mathbf w$.
+Gradient: $-2X^\top\mathbf y + 2X^\top X\mathbf w = 0$. If $X^\top X$ is invertible, $\mathbf w = (X^\top X)^{-1}X^\top\mathbf y$.
+The \textbf{hat matrix} $H = X(X^\top X)^{-1}X^\top$ maps $\mathbf y$ to $\hat{\mathbf y}$; it is a projection ($H^2 = H$),
+and its diagonal entries are the leverages. Its trace equals the number of parameters.
+\pushes \emph{``What if $X^\top X$ is not invertible?''} Infinitely many solutions fit equally well; use the
+pseudo-inverse (minimum-norm solution, via SVD), drop redundant columns, or add a Ridge penalty.
+\end{qa}
+
+\begin{qa}{What does $R^2$ mean? Can it be negative? Why do we need adjusted $R^2$?}
+\oneline{$R^2$ is the fraction of the target's variance the model explains relative to predicting the mean; on new
+data it can be negative; adjusted $R^2$ corrects for the fact that training $R^2$ never falls when features are added.}
+\why $R^2 = 1 - \text{SS}_{res}/\text{SS}_{tot}$. On training data with an intercept, OLS can always do at least as
+well as the mean, so $0 \le R^2 \le 1$. On test data a bad model can have SS$_{res} > $ SS$_{tot}$. Adjusted
+$R^2 = 1 - (1-R^2)\frac{n-1}{n-d-1}$ rises only if a new feature improves fit more than expected by chance.
+\worked $n = 50$, $d = 4$, $R^2 = 0.80$: adjusted $= 1 - 0.2\cdot49/45 = 0.782$.
+\pitfall ``$R^2 = 0.9$ means the model is good/causal.'' A high $R^2$ can come from leakage or a trend, and a low
+$R^2$ can still be very useful (noisy human behaviour).
+\end{qa}
+
+\begin{qa}{\deep Can linear regression fit a curve? Can it fit $y = a e^{bx}$?}
+\oneline{Yes: ``linear'' means linear in the parameters, so adding $x^2$, $x^3$ or $\log x$ features fits curves; an
+exponential with multiplicative noise becomes linear after taking logs.}
+\why A polynomial model $\hat y = w_0 + w_1x + w_2x^2$ is a weighted sum of fixed functions of $x$, so OLS solves it
+with the same normal equations. For $y = ae^{bx}\varepsilon$ (multiplicative noise $\varepsilon$), $\log y = \log a + bx +
+\log\varepsilon$: regress $\log y$ on $x$; the slope estimates $b$ and the intercept estimates $\log a$. If the
+noise is \emph{additive} ($y = ae^{bx} + \varepsilon$), log-transforming distorts it; then use non-linear least
+squares or a GLM with a log link (Poisson/Gamma), which models $\log\E[y] = \log a + bx$ directly.
+\worked Number of applications to a job vs days since posting decays exponentially: regressing $\log(\text{applies}+1)$
+on days gives slope $-0.12$, i.e. about $11\%$ fewer applies per extra day ($e^{-0.12} = 0.887$).
+\end{qa}
+
+\begin{qa}{\deep Linear regression on a 0/1 target: what goes wrong? Is it ever acceptable?}
+\oneline{Predictions can fall outside $[0,1]$, errors are heteroscedastic by construction, and far-away easy points
+tilt the line; it is acceptable (the ``linear probability model'') for quick effect estimates near the middle of the
+range, but logistic regression is the right default.}
+\why For a binary $y$, the error variance is $p(1-p)$, which depends on $x$, so homoscedasticity fails automatically.
+Squared loss also penalises a correctly classified but extreme point (predicted 1.7 for a true 1) and pulls the line
+toward it, moving the 0.5 threshold. Economists still use the linear probability model because its coefficients read
+directly as ``change in probability'' and with robust SEs it is fine near $p\approx0.5$.
+\end{qa}
+
+\begin{qa}{What is the difference between correlation and the regression slope? When are they equal?}
+\oneline{Slope $= r\cdot s_y/s_x$; it carries units and direction of prediction, correlation is unit-free and symmetric;
+they are equal when both variables are standardised.}
+\why Regressing $y$ on $x$ gives slope $r s_y/s_x$; regressing $x$ on $y$ gives $r s_x/s_y$; the two lines differ
+unless $|r| = 1$. Their product is $r^2$. After converting both variables to z-scores, the slope is exactly $r$.
+\worked If $r = 0.6$, $s_y = 5$ lakh, $s_x = 2$ years, the slope is $0.6\cdot5/2 = 1.5$ lakh per year.
+\end{qa}
+
+\begin{qa}{Explain Ridge regression and why it handles multicollinearity.}
+\oneline{Ridge adds $\lambda\norm{\mathbf w}^2$ to the squared error; its solution $(X^\top X + \lambda I)^{-1}X^\top\mathbf y$ always
+exists, and the added $\lambda$ stabilises directions in which the data carry little information.}
+\why With collinear features $X^\top X$ has a tiny eigenvalue along the direction where features cancel ($w_1 -
+w_2$). Inverting divides by that tiny number, so coefficients explode along that direction. Ridge adds $\lambda$ to
+every eigenvalue, so the smallest becomes at least $\lambda$, and the explosion stops. Equivalently it shrinks the
+coefficients most along low-variance principal directions. The price is a little bias.
+\worked One standardised feature, $\sum x_i^2 = 10$, $\sum x_iy_i = 20$: OLS $w = 2$; Ridge $\lambda = 10$: $w =
+20/(10+10) = 1$.
+\end{qa}
+
+\begin{qa}{Lasso vs Ridge vs Elastic net: when would you use each?}
+\oneline{Lasso when you believe few features matter and want selection; Ridge when many features each matter a little
+or are correlated; Elastic net when you want sparsity but have correlated groups.}
+\why Lasso's L1 penalty zeroes weights (feature selection) but with correlated features it keeps one arbitrarily and
+can be unstable, and it can select at most $n$ features when $d > n$. Ridge never zeroes but is stable. Elastic net
+($\alpha$L1 $+ (1-\alpha)$L2) groups correlated features and still sparsifies.
+\inpractice For a salary model with 5{,}000 one-hot skill features, Elastic net gives a compact, stable model whose
+non-zero skills are explainable to product teams (``Kubernetes adds 6\%'').
+\end{qa}
+
+\begin{qa}{What are leverage, outliers and influential points? How do you detect them?}
+\oneline{Leverage is unusualness in $x$, an outlier is unusualness in $y$ given $x$, and an influential point is one whose
+removal changes the fit a lot; leverage comes from the hat matrix diagonal, influence from Cook's distance.}
+\why A high-leverage point that lies on the trend does no harm and even improves precision. A high-leverage point
+off the trend acts like a long lever and pulls the line. Cook's distance combines residual size and leverage;
+values above $4/n$ are commonly flagged. Studentised residuals flag outliers.
+\pushes \emph{``Would you delete it?''} Only if it is an error (a price of Rs.~1, a negative area). If it is a real
+luxury villa, keep it, and consider a robust loss or a separate model for that segment.
+\end{qa}
+
+\begin{qa}{\deep You fit a regression of salary on ``number of certifications'' and get a negative coefficient.
+Does that mean certifications reduce salary?}
+\oneline{Not necessarily: it is a correlation conditional on the other included features, and it can be driven by
+confounding (juniors collect more certificates) or by collinearity with other features.}
+\why A coefficient measures the association of a feature with the target \emph{holding the other features fixed}.
+If experience is not in the model, ``many certificates'' may simply indicate a junior person (omitted-variable
+bias). If experience is in the model and highly collinear, the sign can flip between samples. Causal claims need
+either an experiment or a careful causal design (controls for confounders, instrumental variables, difference in
+differences).
+\worked Without experience: coefficient $-0.4$ lakh/cert. Adding experience: $+0.3$ lakh/cert. This is Simpson's
+paradox in regression form.
+\end{qa}
+
+\begin{qa}{Gradient descent or normal equations for linear regression: which and when?}
+\oneline{Normal equations (via QR/SVD) for small to medium $d$ because they are exact and need no tuning; gradient
+descent (or SGD) for very large $d$, very large or streaming $n$, or when you add penalties without closed forms.}
+\why Normal equations cost about $O(nd^2 + d^3)$ and need the whole data in memory. Gradient descent costs
+$O(nd)$ per pass, can stream mini-batches, but needs a learning rate, feature scaling and many iterations.
+With $d = 100$ and $n = 10^6$: normal equations are instant. With $d = 10^6$ sparse text features: SGD.
+\end{qa}
+
+\begin{qa}{\deep Why do we minimise squared error and not absolute error? When would absolute error be better?}
+\oneline{Squared error is smooth, has a closed form, and is the maximum-likelihood loss for Gaussian noise;
+absolute error is better when there are outliers or heavy-tailed noise, and it targets the median instead of the mean.}
+\why The value $c$ that minimises $\sum(y_i - c)^2$ is the mean; the one that minimises $\sum|y_i - c|$ is the
+median. So OLS estimates the conditional mean and least-absolute-deviation regression estimates the conditional
+median. With one data-entry error of Rs.~10 crore in a property dataset, the mean (and OLS) moves a lot; the median
+barely moves. Huber loss is a compromise: squared for small errors, absolute for large ones.
+\worked Values $\{3, 4, 5, 6, 100\}$: mean $= 23.6$, median $= 5$.
+\end{qa}
+
+\begin{qa}{Interpret the coefficient $0.08$ in a regression of $\log(\text{salary})$ on years of experience.
+What if both sides were logged?}
+\oneline{Each extra year multiplies salary by $e^{0.08}\approx1.083$, about $+8.3\%$; in a log--log model the coefficient
+is an elasticity: a 1\% increase in $x$ gives about a $\beta$\% increase in $y$.}
+\why $\log y = \beta_0 + 0.08x$; raising $x$ by 1 adds 0.08 to $\log y$, i.e. multiplies $y$ by $e^{0.08}$. For small
+$\beta$, $e^\beta - 1 \approx \beta$. In $\log y = \beta_0 + \beta\log x$, $\frac{d\log y}{d\log x} = \beta$ (elasticity).
+\worked Price per sq ft vs area in log--log with $\beta = -0.15$: a 10\% larger flat has about 1.5\% lower price per
+sq ft (bulk discount).
+\end{qa}
+
+\begin{qa}{How would you check the assumptions of a fitted linear model in Python?}
+\oneline{Plot residuals against fitted values and against time, draw a Q--Q plot, compute VIFs, and run
+Breusch--Pagan and Durbin--Watson tests using statsmodels.}
+\why
+\begin{lstlisting}
+import statsmodels.api as sm
+from statsmodels.stats.diagnostic import het_breuschpagan
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+Xc = sm.add_constant(X)
+m = sm.OLS(y, Xc).fit()
+print(m.summary())                     # coefficients, p-values, R2, Durbin-Watson
+resid, fitted = m.resid, m.fittedvalues
+# plt.scatter(fitted, resid)  -> look for curves (linearity) and funnels (heteroscedasticity)
+sm.qqplot(resid, line="s")            # normality
+print(het_breuschpagan(resid, Xc))    # small p-value -> heteroscedastic
+vifs = [variance_inflation_factor(Xc.values, i) for i in range(1, Xc.shape[1])]
+m_robust = sm.OLS(y, Xc).fit(cov_type="HC3")   # robust standard errors
+\end{lstlisting}
+\end{qa}
+
+\begin{qa}{\deep Your linear model's training $R^2$ is 0.35. A colleague says linear regression is useless here.
+How do you respond?}
+\oneline{A low $R^2$ only says much of the variance is unexplained; the model can still be useful if its coefficients are
+reliable or its ranking or average predictions are good enough for the decision, and the gap may be closable with better
+features rather than a different model.}
+\why Human behaviour (who applies, who buys) is noisy; an $R^2$ of 0.35 can be excellent. Ask: (1) what is the
+business metric? For ranking leads, ordering matters, not exact values; (2) is it underfitting? Compare with a
+gradient-boosted model: if it also gets 0.37, the ceiling is the noise, not linearity; if it gets 0.60, add
+non-linear terms or switch; (3) are features missing? Domain features (price-band concentration in 99acres) often
+beat model changes.
+\end{qa}
+
+\begin{qa}{What does the intercept mean, and should you ever remove it?}
+\oneline{The intercept is the prediction when all features are zero; remove it only when theory demands the line pass
+through the origin, because forcing it biases the slope otherwise.}
+\why Without an intercept, residuals no longer need to sum to zero and $R^2$ can be misleading (some software reports
+an uncentred $R^2$). If features are centred, the intercept equals $\bar y$, which is easy to interpret. A case for
+no intercept: cost $=$ price $\times$ quantity, where zero quantity truly means zero cost.
+\end{qa}
+
+\begin{qa}{What is the Gauss--Markov theorem, in plain words?}
+\oneline{Among all estimators that are linear in $\mathbf y$ and unbiased, OLS has the smallest variance, provided errors have
+mean zero, constant variance and are uncorrelated; it is ``BLUE''.}
+\why ``Best linear unbiased estimator.'' It does not require normality. It does not say OLS beats biased estimators:
+Ridge is biased but can have lower total error, which is the bias--variance trade-off again.
+\end{qa}
+
+\begin{qa}{\deep Can you do linear regression when you have more features than rows ($d > n$)?}
+\oneline{Not with plain OLS, because $X^\top X$ is singular and infinitely many weight vectors fit the data exactly; with
+Ridge, Lasso, PCA regression or the minimum-norm solution you can.}
+\why With 1{,}000 skill features and 200 salaries, any 200-dimensional pattern can be fitted perfectly, so the
+training error is zero and meaningless. Ridge makes the problem well-posed; Lasso selects at most $n$ features;
+the pseudo-inverse picks the smallest-norm exact fit (which, interestingly, is what gradient descent from zero
+converges to). Always validate, since all of these can still overfit.
+\end{qa}

@@ -1,0 +1,102 @@
+\documentclass[11pt,openany]{book}
+\input{preamble}
+
+\hypersetup{pdftitle={InfoEdge DS Interview Companion: Classical ML, Deep Learning, Python and Case Studies},
+  pdfauthor={Prepared for Nishant}}
+
+\begin{document}
+\frontmatter
+\pagenumbering{roman}
+
+% ---------------- cover ----------------
+\begin{titlepage}
+\stuck{StatQuest: Machine Learning playlist}{https://www.youtube.com/@statquest}
+\centering
+\vspace*{1.2cm}
+{\color{accent}\rule{\linewidth}{1.5pt}}\par\vspace{0.6cm}
+{\Huge\bfseries\color{accent} The InfoEdge Interview Companion\par}
+\vspace{0.4cm}
+{\LARGE\bfseries Classical ML, Deep Learning, Python (Round 3)\\ and Case Studies (Round 4)\par}
+\vspace{0.4cm}
+{\color{accent}\rule{\linewidth}{1.5pt}}\par
+\vspace{0.8cm}
+{\large Every concept taught from zero, with small hand-worked examples and real\\
+Naukri, 99acres and Jeevansathi style use cases.\par}
+\vspace{0.4cm}
+{\large Interview questions answered the way a strong candidate answers them aloud:\\
+one-line answer first, then the full logic, a worked example, the follow-ups and the traps.\par}
+\vspace{1cm}
+\begin{tcolorbox}[colback=accentlight,colframe=accent,width=0.86\linewidth,arc=2pt,boxrule=0.6pt]
+\small
+\textbf{What this book covers} (exactly the InfoEdge Pre-Placement Talk 2025--26 syllabus, minus SQL as requested):\\[3pt]
+\textbf{Rounds 1 and 2, Classical ML and Deep Learning (66.66\%):} Bagging, Boosting, Gradient Descent,
+Decision Trees, Linear and Logistic Regression, Random Forests, Gradient Boosting Machines, XGBoost, LightGBM,
+SVM and the Kernel Trick, Regularisation, Bias--Variance Tradeoff, Metrics (Precision, Recall, F1, TPR \dots),
+Confusion Matrix, Missing Data Imputation, Matrix Factorisations, Density Estimation (KDE, K-Means \dots),
+MAP, MLE, Basic NLP, TF-IDF, Embeddings (Word2Vec, FastText, BERT), Architectures (LSTM, CNN, RNN,
+Transformers, GANs).\\[3pt]
+\textbf{Round 3, Programming:} Python, NumPy, Pandas: data reading, column naming, statistical parameters,
+group-by, basic visualisation, basic text processing; scikit-learn: train--test split, training a model,
+performance testing.\\[3pt]
+\textbf{Round 4, Case Study:} real world data science problems: data challenges, modelling and design choices,
+model assessment, thought process.\\[3pt]
+\textbf{Plus} the ``unconventional variants'' InfoEdge rewards (GLMs, Poisson regression, SVR, quantile
+regression, kernel methods beyond SVM \dots) and basic GenAI/LLM knowledge mentioned in the 2026--27 talk.
+\end{tcolorbox}
+\vfill
+{\large Prepared for Nishant, M.Tech AI, IIT Jodhpur\par}
+{\large October 2026\par}
+\end{titlepage}
+
+\input{chapters/00_front}
+
+\tableofcontents
+
+\mainmatter
+\pagenumbering{arabic}
+
+\part{Foundations of Machine Learning}
+\input{chapters/01_learning}
+\input{chapters/02_linear}
+\input{chapters/03_logistic}
+\input{chapters/04_glm}
+\input{chapters/05_gd}
+
+\part{Classical Models}
+\input{chapters/06_trees}
+\input{chapters/07_bagging_rf}
+\input{chapters/08_boosting}
+\input{chapters/09_svm}
+\input{chapters/10_knn_nb_lda}
+\input{chapters/11_metrics}
+\input{chapters/12_mle_map}
+\input{chapters/13_missing}
+\input{chapters/14_matfact}
+\input{chapters/15_density}
+
+\part{Natural Language Processing}
+\input{chapters/16_nlp}
+\input{chapters/17_embeddings}
+
+\part{Deep Learning}
+\input{chapters/18_nn}
+\input{chapters/19_cnn}
+\input{chapters/20_rnn}
+\input{chapters/21_transformers}
+\input{chapters/22_generative}
+\input{chapters/23_genai}
+
+\part{Round 3: Programming in Python}
+\input{chapters/24_python}
+\input{chapters/25_numpy}
+\input{chapters/26_pandas}
+\input{chapters/27_sklearn}
+
+\part{Round 4: Case Studies and the Final Conversation}
+\input{chapters/28_case_framework}
+\input{chapters/29_cases}
+\input{chapters/30_hr}
+
+\backmatter
+\input{chapters/99_end}
+\end{document}

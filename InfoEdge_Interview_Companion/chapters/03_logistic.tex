@@ -1,0 +1,352 @@
+\chapter{Logistic Regression and Multiclass Classification}
+\companion{StatQuest: Logistic Regression}{\ytid{yIYKR4sgzI8}}
+
+Logistic regression was the model the InfoEdge Round 3 candidate trained in the coding round, and it is
+still the baseline for click, apply and lead-conversion prediction across the industry. Know it well enough
+to derive its gradient on paper and to interpret every coefficient.
+
+\section{Why not just use a straight line for yes/no?}
+
+Suppose $y = 1$ if a seeker applies to a job we show them and $0$ otherwise. We would like a model that outputs
+the \emph{probability} of applying. A straight line $w^\top x + b$ can output $-3$ or $7$, which are not
+probabilities. We need a function that takes any real number and squeezes it into $(0,1)$.
+
+\section{The sigmoid: squeezing a score into a probability}
+
+\[ \sigma(z) = \frac{1}{1 + e^{-z}}. \]
+\begin{itemize}
+\item $z$ very negative: $e^{-z}$ is huge, so $\sigma(z)\approx 0$.
+\item $z = 0$: $\sigma(0) = 1/2$.
+\item $z$ very positive: $e^{-z}\approx0$, so $\sigma(z)\approx 1$.
+\item Handy values: $\sigma(1) = 0.731$, $\sigma(2) = 0.881$, $\sigma(-2) = 0.119$, $\sigma(\ln 3) = 0.75$.
+\item Its derivative is beautifully simple: $\sigma'(z) = \sigma(z)(1-\sigma(z))$, largest (0.25) at $z = 0$.
+\end{itemize}
+
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[width=0.6\linewidth,height=4.2cm,xlabel={$z = w^\top x + b$},ylabel={$\sigma(z)$},
+  xmin=-6,xmax=6,ymin=0,ymax=1,ytick={0,0.5,1},grid=major,grid style={black!8}]
+\addplot[domain=-6:6,samples=80,very thick,accent]{1/(1+exp(-x))};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+
+\textbf{Logistic regression} computes a linear score $z = \mathbf w^\top\mathbf x + b$ and outputs
+$p = \sigma(z) = P(y = 1\mid \mathbf x)$.
+
+\section{Odds and log-odds: how to read the coefficients}
+
+The \textbf{odds} of an event with probability $p$ are $p/(1-p)$. Probability 0.8 means odds $4$ (``4 to 1'').
+Inverting the sigmoid gives
+\[ \log\frac{p}{1-p} = \mathbf w^\top\mathbf x + b. \]
+The left side is the \textbf{log-odds} or \textbf{logit}. So logistic regression is a \emph{linear model for
+the log-odds}. This gives the standard interpretation: \emph{increasing $x_j$ by one unit adds $w_j$ to the
+log-odds, i.e. multiplies the odds by $e^{w_j}$}, holding other features fixed.
+
+\begin{example}[: interpreting a coefficient]
+In an apply-prediction model, the feature ``job is in the seeker's preferred city'' (0/1) has $w = 1.1$.
+$e^{1.1} = 3.0$: the odds of applying triple. If a seeker's base probability was $0.10$ (odds $0.111$), the
+new odds are $0.333$ and the new probability is $0.333/1.333 = 0.25$. The probability did not triple; the
+\emph{odds} did.
+\end{example}
+
+\section{The decision boundary is a straight line}
+To turn a probability into a class we use a threshold $t$, often $0.5$. Predict 1 when $\sigma(z)\ge0.5$, i.e.
+when $z \ge 0$. The set $\mathbf w^\top\mathbf x + b = 0$ is a line (a hyperplane in higher dimensions). So,
+despite the curved sigmoid, logistic regression is a \textbf{linear classifier}. A different threshold $t$ just
+moves the line parallel to itself ($z \ge \log\frac{t}{1-t}$). Curved boundaries need engineered features
+($x_1^2$, $x_1x_2$).
+
+\section{Training: maximum likelihood and log loss}
+
+\subsection{From probabilities to a loss}
+For one example, the model assigns probability $p$ to $y = 1$ and $1-p$ to $y = 0$. The probability it assigns
+to what actually happened is $p^y(1-p)^{1-y}$ (this is $p$ if $y=1$ and $1-p$ if $y = 0$). Assuming examples
+are independent, the probability of the whole dataset is the product of these. \textbf{Maximum likelihood} picks
+the weights that make the observed data most probable. Products are awkward, so take logs (which turns
+products into sums and does not move the maximum) and flip the sign to get something to minimise:
+\[ L(\mathbf w) = -\frac1n\sum_{i=1}^n\Big[y_i\log p_i + (1-y_i)\log(1-p_i)\Big]. \]
+This is the \textbf{log loss}, also called \textbf{binary cross-entropy}.
+
+\begin{example}[: how log loss punishes confidence]
+True label $y=1$. If $p = 0.9$: loss $= -\ln 0.9 = 0.105$. If $p = 0.5$: $0.693$. If $p = 0.1$: $2.303$.
+If $p = 0.01$: $4.605$. Being confidently wrong is punished brutally, which forces honest probabilities.
+\end{example}
+
+\subsection{The gradient, derived}
+With $p = \sigma(z)$ and $z = \mathbf w^\top\mathbf x + b$, for one example
+$\ell = -[y\log p + (1-y)\log(1-p)]$. By the chain rule:
+\[ \frac{\partial\ell}{\partial p} = -\frac{y}{p} + \frac{1-y}{1-p},\qquad \frac{\partial p}{\partial z} = p(1-p),\qquad
+\frac{\partial z}{\partial w_j} = x_j. \]
+Multiplying, $\frac{\partial\ell}{\partial z} = -y(1-p) + (1-y)p = p - y$, so
+\[ \boxed{\frac{\partial\ell}{\partial w_j} = (p - y)\,x_j,\qquad \frac{\partial\ell}{\partial b} = p - y.} \]
+``Prediction minus truth, times the input'': exactly the same form as linear regression's gradient. The $p(1-p)$
+from the sigmoid cancelled perfectly; this is why log loss and sigmoid are a natural pair.
+
+\subsection{No closed form, but a convex problem}
+Setting the gradient to zero gives equations with no algebraic solution, so we iterate: gradient descent, or
+Newton's method (called \textbf{IRLS}, iteratively reweighted least squares, because each Newton step is a
+weighted least-squares fit). The log loss is \textbf{convex} in $\mathbf w$: shaped like a bowl, with no false
+valleys, so any of these methods reaches the global optimum.
+
+\begin{example}[: one gradient step by hand]
+One feature, $w=0.5$, $b=0$, learning rate $\eta = 0.1$, example $x = 2$, $y = 0$.
+$z = 1$, $p = \sigma(1) = 0.731$. Gradients: $(p-y)x = 1.462$ and $p - y = 0.731$.
+Update: $w = 0.5 - 0.1462 = 0.354$, $b = -0.073$. Both moved to lower $p$, correctly, since the true label is 0.
+\end{example}
+
+\subsection{Why not squared error with a sigmoid?}
+\begin{enumerate}
+\item It is non-convex in $\mathbf w$: there can be flat plateaus and local minima.
+\item Its gradient contains $p(1-p)$, which is near zero when $p\approx0$ or $1$. A confidently wrong model
+  ($p=0.001$ for a positive) barely learns: the gradient vanishes exactly when the error is largest.
+\item Log loss is the maximum-likelihood loss for Bernoulli labels; squared error corresponds to Gaussian noise,
+  which binary labels do not have.
+\end{enumerate}
+
+\section{Regularisation and separable data}
+If the classes can be perfectly separated by a line, the log loss can be pushed toward zero by making $\norm{\mathbf w}$
+larger and larger (the sigmoid gets steeper; every probability approaches 0 or 1). Unregularised training never
+converges: weights grow without bound. An L2 penalty fixes this. scikit-learn's \code{LogisticRegression} applies L2
+by default with \code{C=1.0}, where $C = 1/\lambda$: \emph{smaller $C$ means stronger regularisation}.
+
+\section{Probabilities and calibration}
+A model is \textbf{calibrated} if, among cases where it says 0.3, about 30\% are positive. Logistic regression fitted
+by maximum likelihood tends to be well calibrated when its features are adequate, which is a big reason it is still used
+for bidding, ranking and expected-value decisions (``expected applies $=$ sum of probabilities''). Two things break
+calibration: heavy regularisation, and resampling the classes (training on 50/50 data when reality is 1/99 shifts the
+intercept; correct it with $b \leftarrow b + \log\frac{\pi_{true}/(1-\pi_{true})}{\pi_{train}/(1-\pi_{train})}$).
+
+\section{More than two classes}
+\subsection{Softmax (multinomial) regression}
+One score per class, $z_k = \mathbf w_k^\top\mathbf x + b_k$, turned into probabilities that sum to one:
+\[ p_k = \frac{e^{z_k}}{\sum_j e^{z_j}}. \]
+Loss: $-\log p_{\text{true class}}$ (categorical cross-entropy).
+\begin{example}[: softmax by hand]
+Scores $(2, 1, 0)$: $e^2 = 7.389$, $e^1 = 2.718$, $e^0 = 1$, sum $11.107$. Probabilities
+$(0.665, 0.245, 0.090)$. If the true class is the second, loss $= -\ln 0.245 = 1.41$.
+Subtracting the maximum score before exponentiating gives the same probabilities and avoids overflow.
+\end{example}
+With two classes softmax reduces exactly to the sigmoid on $z_1 - z_2$.
+
+\subsection{One-vs-Rest and One-vs-One}
+For any binary classifier:
+\begin{itemize}
+\item \textbf{One-vs-Rest (OvR, OvA)}: $K$ classifiers, ``class $k$ vs everything else''; predict the class with the
+  highest score. Each model sees all data but is imbalanced.
+\item \textbf{One-vs-One (OvO)}: $\binom{K}{2} = K(K-1)/2$ classifiers, one per pair, each trained only on those two
+  classes; predict by majority vote. Used by kernel SVMs because many small problems are cheaper than a few large ones.
+\end{itemize}
+For 5 classes: OvR trains 5 models, OvO trains 10.
+
+\section{Multi-label is different}
+\textbf{Multiclass}: exactly one label (a job belongs to one function: IT, Sales, \dots). \textbf{Multi-label}:
+any number of labels (a resume can have many skills). Multi-label uses an independent sigmoid per label with binary
+cross-entropy each, not a softmax.
+
+\begin{practical}[: logistic regression at InfoEdge scale]
+\begin{itemize}
+\item \textbf{Apply / click prediction} in the Apply Generation engine and job recommendation: billions of rows,
+  sparse one-hot and hashed features, logistic regression trained with SGD. Fast to score, calibrated, and the
+  coefficients explain behaviour.
+\item \textbf{99acres telecalling}: ``probability this user is a high-intent buyer'' ranks whom to call first.
+  Calibration lets the business compute expected conversions per caller-hour.
+\item \textbf{Spam / fake profile detection} as a binary classifier, where the panel explicitly said to look at recall.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: Logistic Regression Details Pt 2, Maximum Likelihood}{\yts{StatQuest+Logistic+Regression+Details+Pt+2+Maximum+Likelihood}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{Round 3 coding round} Walk me through logistic regression: what it models, how it is trained,
+and how you would evaluate it on the placement dataset.}
+\oneline{It models the log-odds of the positive class as a linear function of the features, is trained by minimising
+log loss (maximum likelihood) with gradient-based optimisation, and is evaluated with a confusion matrix, precision,
+recall, F1 and ROC AUC on a held-out set.}
+\why
+\textbf{Model.} Score $z = \mathbf w^\top\mathbf x + b$, probability $p = \sigma(z)$. Equivalently
+$\log\frac{p}{1-p} = \mathbf w^\top\mathbf x + b$.
+\textbf{Training.} Minimise $-\frac1n\sum[y\log p + (1-y)\log(1-p)]$ plus an L2 penalty. The gradient is
+$(p - y)\mathbf x$; the problem is convex, so the optimiser (lbfgs by default in scikit-learn) finds the global minimum.
+\textbf{Workflow on the placement data.} Drop the leaking \code{salary} column; one-hot encode board, stream and work
+experience; scale the percentage columns (the penalty treats all weights alike); stratified train/test split; fit;
+predict; print confusion matrix and classification report; look at ROC AUC; choose a threshold to suit the cost of
+errors.
+\worked
+\begin{lstlisting}
+X = df.drop(columns=["status", "salary"])          # salary leaks the target
+y = (df["status"] == "Placed").astype(int)
+num = X.select_dtypes("number").columns; cat = X.columns.difference(num)
+pre = ColumnTransformer([("num", StandardScaler(), num),
+                         ("cat", OneHotEncoder(handle_unknown="ignore"), cat)])
+clf = Pipeline([("pre", pre), ("lr", LogisticRegression(max_iter=1000))])
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+clf.fit(Xtr, ytr); pred = clf.predict(Xte)
+print(confusion_matrix(yte, pred)); print(classification_report(yte, pred))
+print(roc_auc_score(yte, clf.predict_proba(Xte)[:, 1]))
+\end{lstlisting}
+\pushes \emph{``How do you read the coefficients?''} After scaling, $e^{w_j}$ is the odds multiplier per one standard
+deviation of feature $j$. \emph{``Why scale?''} For the penalty's fairness and for faster convergence.
+\end{qa}
+
+\begin{qa}{Derive the gradient of the log loss for logistic regression.}
+\oneline{By the chain rule the derivative with respect to the score is $p - y$, so the gradient with respect to $w_j$ is
+$(p - y)x_j$.}
+\why Written out in the theory section: $\partial\ell/\partial p = -y/p + (1-y)/(1-p)$; $\partial p/\partial z =
+p(1-p)$; product $= -y(1-p) + (1-y)p = p - y$; times $\partial z/\partial w_j = x_j$. For the whole dataset,
+$\nabla_{\mathbf w}L = \frac1n X^\top(\mathbf p - \mathbf y)$.
+\pushes \emph{``What is the Hessian?''} $\frac1n X^\top S X$ with $S = \text{diag}(p_i(1-p_i))$. It is positive
+semi-definite, which proves convexity, and it is what Newton/IRLS uses.
+\end{qa}
+
+\begin{qa}{Why is it called logistic \emph{regression} if it is a classifier?}
+\oneline{Because it regresses (fits a linear model for) the log-odds of the outcome, producing a continuous probability;
+it becomes a classifier only when you add a threshold.}
+\why It is a generalised linear model: a linear predictor, a link function (logit) and a Bernoulli distribution
+(Chapter 4). The output is a probability, a continuous quantity; classification is a decision we layer on top.
+\end{qa}
+
+\begin{qa}{A coefficient for ``has premium account'' is $0.693$. Interpret it.}
+\oneline{Premium users have twice the odds of applying ($e^{0.693} = 2$), other features held fixed; this is not a doubling
+of probability.}
+\why Log-odds increase by 0.693, so odds multiply by 2. From $p = 0.5$ (odds 1) the new odds are 2 and $p = 2/3$; from
+$p=0.05$ (odds 0.0526) the new odds are 0.105 and $p = 0.095$. Near small probabilities, odds ratios approximate risk
+ratios.
+\end{qa}
+
+\begin{qa}{Why do we not use mean squared error to train logistic regression?}
+\oneline{Because with a sigmoid output MSE is non-convex and its gradient vanishes when the model is confidently wrong,
+whereas log loss is convex, is the maximum-likelihood loss for binary labels, and gives the clean gradient $(p-y)x$.}
+\why The MSE gradient is $(p - y)\,p(1-p)\,x$. For a positive example predicted $p = 0.001$, $p(1-p)\approx0.001$, so
+the update is a thousand times weaker than it should be. Log loss cancels that factor.
+\worked $y = 1$, $p = 0.01$: log-loss gradient w.r.t.\ $z$ is $-0.99$; MSE gradient is $-0.99\cdot0.0099\approx -0.0098$.
+\end{qa}
+
+\begin{qa}{What happens when the training data are perfectly separable?}
+\oneline{The unregularised maximum-likelihood solution does not exist: weights grow without bound as the optimiser keeps
+steepening the sigmoid; regularisation gives a finite answer.}
+\why If a line separates the classes, scaling $\mathbf w$ by $c>1$ keeps the same boundary but makes every probability
+more extreme and every loss term smaller, so the loss keeps decreasing toward 0. Software prints convergence warnings
+and coefficients with huge standard errors. L2 penalty, early stopping, or Firth's correction fixes it.
+\end{qa}
+
+\begin{qa}{\deep Is logistic regression a linear model? Can it learn XOR?}
+\oneline{It is linear in its decision boundary (a hyperplane in feature space), so on raw features it cannot learn XOR;
+with an interaction feature $x_1x_2$ it can.}
+\why For XOR points $(0,0)\to0,(1,1)\to0,(0,1)\to1,(1,0)\to1$, no line separates the classes. Adding $x_3 = x_1x_2$:
+the score $z = 10x_1 + 10x_2 - 20x_3 - 5$ gives $-5, 5, 5, -5$ for the four points: correct. The model is still
+linear in its parameters; the feature space was enriched. This is the same idea as kernels (Chapter 9) and hidden layers
+(Chapter 18).
+\end{qa}
+
+\begin{qa}{\pyq{OA: one-vs-one and one-vs-all} You have 6 job functions. How many binary classifiers do OvR and OvO
+train, and when would you prefer each?}
+\oneline{OvR trains 6, OvO trains 15; OvR is simpler and cheaper for most models, OvO suits algorithms whose cost grows
+faster than linearly with data size, like kernel SVMs.}
+\why OvO: $\binom62 = 15$, each on only two classes' data (about a third of the rows here). For kernel SVMs, training
+cost is between $O(n^2)$ and $O(n^3)$, so 15 small problems can be cheaper than 6 big ones. OvR gives each model a
+heavily imbalanced problem (one class vs five) and its scores may not be comparable across models. For logistic
+regression, use true multinomial softmax instead of either.
+\end{qa}
+
+\begin{qa}{Softmax vs independent sigmoids: when do you use which?}
+\oneline{Softmax when classes are mutually exclusive (exactly one is true); independent sigmoids when labels can co-occur
+(multi-label).}
+\why Softmax probabilities sum to 1, so raising one lowers the others; that is right for ``which job function'' and wrong
+for ``which skills does this resume contain''. For skills, use one sigmoid per skill with binary cross-entropy, and
+tune a threshold per skill.
+\end{qa}
+
+\begin{qa}{How does the decision threshold affect precision and recall? How do you choose it?}
+\oneline{Raising the threshold makes the model predict positive less often: precision usually rises and recall falls;
+choose it from business costs, a target recall or precision, or by maximising F1 on validation data.}
+\why The model's probabilities are fixed; the threshold only decides where to cut. For spam the panel wanted recall
+considered; for a telecalling queue with 100 calls per day, choose the cut that fills the queue with the highest
+probabilities. Formally, with cost $C_{FP}$ and $C_{FN}$ and calibrated $p$, predict positive when
+$p > C_{FP}/(C_{FP} + C_{FN})$.
+\worked If missing a fraudulent recruiter costs 10 times a false alarm, threshold $= 1/(1+10) = 0.09$.
+\end{qa}
+
+\begin{qa}{\deep Your training set was rebalanced from 2\% positives to 50\% by undersampling. What happens to the
+predicted probabilities and how do you fix them?}
+\oneline{They become inflated, because the model learned a 50\% base rate; the ranking is mostly unaffected, and you fix
+the probabilities by shifting the intercept by the log of the odds ratio between true and training base rates (or by
+recalibrating on untouched data).}
+\why Undersampling negatives by a factor $\beta$ multiplies the odds of every prediction by $1/\beta$, which in a
+logistic model only changes the intercept. With true rate $\pi = 0.02$ (odds $0.0204$) and training rate $0.5$ (odds 1),
+subtract $\log(1/0.0204) = 3.89$ from $b$. Alternatively fit isotonic or Platt calibration on a validation set with the
+real class balance.
+\worked A raw output of $0.6$ (log-odds 0.405) corrects to log-odds $0.405 - 3.89 = -3.49$, i.e. $p = 0.030$.
+\end{qa}
+
+\begin{qa}{What is $C$ in scikit-learn's LogisticRegression? What are the defaults?}
+\oneline{$C$ is the inverse regularisation strength ($C = 1/\lambda$); the default is L2 with $C = 1.0$, so smaller $C$
+means stronger shrinkage.}
+\why The objective is $\frac12\norm{\mathbf w}^2 + C\sum_i \ell_i$. Large $C$ trusts the data more (less regularisation),
+small $C$ shrinks more. Default solver is lbfgs (L2 only); \code{liblinear} or \code{saga} support L1. Tune $C$ on a log
+grid such as $10^{-3},\dots,10^{3}$ with \code{LogisticRegressionCV}.
+\end{qa}
+
+\begin{qa}{\deep Logistic regression vs a linear SVM: what is really different?}
+\oneline{Both learn a linear boundary with an L2 penalty; they differ only in the loss: log loss (smooth, every point
+contributes, outputs probabilities) versus hinge loss (zero for points beyond the margin, only support vectors matter,
+outputs scores).}
+\why Hinge $\max(0, 1 - yz)$ with $y\in\{-1,1\}$ is exactly zero once a point is correctly classified with margin, so
+confidently correct points stop influencing the boundary. Log loss $\log(1+e^{-yz})$ never reaches zero, so all points
+keep a small influence. In practice accuracy is often similar; logistic regression is preferred when calibrated
+probabilities are needed, SVM when the margin-based robustness to far-away points helps or with kernels.
+\end{qa}
+
+\begin{qa}{What is the decision boundary of logistic regression with features $x_1$ and $x_2$ and weights $w = (2,
+-1)$, $b = 1$? Classify the point $(1, 4)$.}
+\oneline{The boundary is the line $2x_1 - x_2 + 1 = 0$; the point $(1,4)$ has score $-1$, probability $0.269$, so it is
+class 0 at threshold 0.5.}
+\why $z = 2\cdot1 - 4 + 1 = -1$; $\sigma(-1) = 1/(1 + e) = 0.269$. Points above the line $x_2 = 2x_1 + 1$ are class 0.
+\end{qa}
+
+\begin{qa}{How would you handle a categorical feature with 3{,}000 levels (for example company name) in logistic
+regression?}
+\oneline{One-hot encode it with regularisation (sparse is fine for linear models), or group rare levels, hash it, or use
+target encoding computed out-of-fold.}
+\why One-hot creates 3{,}000 sparse columns; with L2 and enough data per level this works well and is standard in click
+models. Rare companies (a few rows) get weights shrunk toward 0, which is sensible. Alternatives: map to a taxonomy
+(the SilverSkAI-style normalisation collapses variants like ``TCS'', ``Tata Consultancy''), an ``other'' bucket for
+levels with $<20$ rows, feature hashing, or out-of-fold target encoding (never in-fold: that leaks the label).
+\end{qa}
+
+\begin{qa}{\deep Can logistic regression be used for regression of a proportion (for example the fraction of
+recruiters who open a profile)?}
+\oneline{Yes: fit a binomial GLM with the logit link, using counts of successes and trials, or a fractional logit;
+the sigmoid keeps predictions inside $[0,1]$.}
+\why The binomial GLM models $k$ successes out of $n$ trials with $P = \sigma(\mathbf w^\top\mathbf x)$; the log loss
+weighted by $n$ is its likelihood. scikit-learn's \code{LogisticRegression} accepts only 0/1 labels but you can expand
+rows or use \code{sample\_weight}; statsmodels' \code{GLM(family=Binomial())} accepts proportions with
+\code{var\_weights}. This avoids the main weaknesses of linear regression on proportions (predictions outside $[0,1]$
+and non-constant variance $p(1-p)/n$).
+\end{qa}
+
+\begin{qa}{What is the log loss of a model that always predicts the base rate $\pi$? Why is it a useful baseline?}
+\oneline{It is the entropy of the labels, $-[\pi\log\pi + (1-\pi)\log(1-\pi)]$; any useful model must beat it.}
+\why With $\pi = 0.1$: $-(0.1\ln0.1 + 0.9\ln0.9) = 0.230 + 0.095 = 0.325$. A model at 0.30 is only modestly
+informative. Normalised cross-entropy (model log loss divided by this) is a common metric in ad/click teams.
+\end{qa}
+
+\begin{qa}{How do you get feature importance from logistic regression, and what can go wrong?}
+\oneline{Use the absolute values of coefficients after standardising features (or odds ratios), and their confidence
+intervals; collinearity, unscaled features and regularisation can all distort the picture.}
+\why Without scaling, a coefficient depends on units. With correlated features, credit is split arbitrarily. With
+L1, one of a correlated group survives. Permutation importance on validation data is a model-agnostic check.
+\end{qa}
+
+\begin{qa}{\deep Logistic regression gives probability 0.97 for a profile being fake. Should you auto-ban the user?}
+\oneline{Only if the model is calibrated at that range, the cost of a false ban has been weighed, and the precision at
+that threshold is verified on recent labelled data; otherwise route to human review.}
+\why A probability is only meaningful if calibrated (check a reliability curve on recent data). Even at 97\% precision,
+3\% of bans are wrong; for paying recruiters that may be unacceptable. A common design: auto-action above a very high
+threshold with measured precision $>99.5\%$, human review between, no action below. Monitor drift, because fraud adapts.
+\end{qa}
+
+\begin{qa}{Compute the probability and log loss for $z = 1.2$ and true label 1.}
+\oneline{$p = \sigma(1.2) = 0.769$, log loss $= -\ln 0.769 = 0.263$.}
+\why $e^{-1.2} = 0.301$; $p = 1/1.301 = 0.769$; $-\ln(0.769) = 0.263$.
+\end{qa}
