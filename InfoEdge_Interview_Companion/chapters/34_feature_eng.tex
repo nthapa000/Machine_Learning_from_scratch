@@ -1,0 +1,253 @@
+\chapter{EDA IV: Scaling, Transforming Skew, Binning, Encoding and Imbalance}
+\companion{scikit-learn User Guide: Preprocessing data}{https://scikit-learn.org/stable/modules/preprocessing.html}
+
+This chapter turns the raw columns that EDA has understood into model-ready features. Each technique comes with the reason it exists, a small numeric
+example (computed with scikit-learn/SciPy), and which models need it.
+
+\section{Why scale at all?}
+Many algorithms compare features through distances, dot products or gradient steps. If one feature is salary in rupees (range $10^6$) and another is years of
+experience (range 30), the salary dominates every distance and creates a stretched loss surface. Scaling puts features on comparable ranges.
+\begin{center}\small
+\begin{tabularx}{\linewidth}{X X}
+\toprule
+Needs scaling & Does not need scaling\\
+\midrule
+$k$-NN, K-Means, SVM (especially RBF), PCA, linear/logistic regression with regularisation, neural networks, anything trained by gradient descent &
+decision trees, random forests, gradient-boosted trees (split on order), Naive Bayes (per-feature models)\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{The scalers, compared on one column}
+Column: 10, 20, 30, 40, 1000 (one extreme value).
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l l X l}
+\toprule
+Scaler & Formula & Result & Behaviour\\
+\midrule
+Standardisation (z-score) & $\frac{x - \mu}{\sigma}$ & $-0.54, -0.51, -0.49, -0.46, 2.00$ & mean 0, sd 1; outlier squashes the rest\\
+Min--max normalisation & $\frac{x - \min}{\max - \min}$ & $0, 0.01, 0.02, 0.03, 1$ & range $[0,1]$; very outlier-sensitive\\
+Robust scaling & $\frac{x - \text{median}}{\text{IQR}}$ & $-1, -0.5, 0, 0.5, 48.5$ & normal values keep their spread; outlier stays extreme\\
+Max-abs & $\frac{x}{\max|x|}$ & $0.01, 0.02, 0.03, 0.04, 1$ & keeps zeros (sparse data friendly)\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\subsection{Standardisation vs normalisation: the difference}
+\begin{itemize}
+\item \textbf{Standardisation} centres to mean 0 and scales to standard deviation 1. No fixed range. Natural for algorithms that assume centred data or use
+  variances (PCA, linear models with penalties, SVM, neural networks). Less distorted by outliers than min--max, but still affected.
+\item \textbf{Normalisation} usually means \textbf{min--max scaling} to $[0, 1]$. Fixed range; useful when a bounded input is needed (image pixels $/255$, some
+  neural-network inputs, distance-based methods on features with known bounds). One outlier compresses all other values near 0.
+\item ``Normalisation'' is also used for \textbf{row-wise L2 normalisation}: scale each \emph{row} to unit length, $(3, 4)\to(0.6, 0.8)$, used for TF-IDF vectors
+  and embeddings before cosine similarity.
+\end{itemize}
+\textbf{Robust scaling} (median and IQR) is the choice when outliers exist and you do not want them to dictate the scale.
+
+\begin{trap}
+Fit every scaler on the training data only and apply it to test data (Pipeline). Scaling does not change the shape of a distribution: a skewed feature stays
+skewed after standardisation; that needs a transformation.
+\end{trap}
+
+\section{Curing skew: log, power, Box--Cox, Yeo--Johnson}
+\subsection{Why}
+Right-skewed variables (salary, price, counts) make linear models chase the few large values, inflate the influence of outliers, produce heteroscedastic
+residuals, and make distances dominated by the tail. Transforming toward symmetry often helps linear models, $k$-NN and neural networks (not trees).
+
+\subsection{Log transform}
+$x' = \log x$ (or $\log(1 + x)$ when zeros exist). It turns multiplicative differences into additive ones: 1, 2, 4, 8, 16 becomes 0, 0.69, 1.39, 2.08, 2.77: equally
+spaced. Skewness $0.89\to0$. Requires $x > 0$ (or $x\ge0$ with \code{log1p}).
+
+\subsection{Other power transforms}
+Square root (milder, for counts), reciprocal $1/x$ (strong), square (for left skew).
+
+\subsection{Box--Cox}
+A family indexed by $\lambda$, chosen by maximum likelihood to make the data as normal as possible:
+\[ x^{(\lambda)} = \begin{cases}\frac{x^\lambda - 1}{\lambda} & \lambda\ne0\\ \log x & \lambda = 0\end{cases}\qquad (x > 0). \]
+$\lambda = 1$: no change (shift); $\lambda = 0.5$: square-root-like; $\lambda = 0$: log; $\lambda = -1$: reciprocal-like.
+\begin{example}[: Box--Cox]
+Fibonacci-like values 1, 2, 3, 5, 8, 13, 21, 34, 55 (skewness 1.25). SciPy picks $\lambda = 0.028$ (almost a log); skewness after $\approx -0.01$.
+With $\lambda = 0.5$: 1, 2, 4, 8, 16 become 0, 0.83, 2, 3.66, 6.
+\end{example}
+
+\subsection{Yeo--Johnson}
+A Box--Cox variant that also accepts zero and negative values (profit/loss, change in salary). scikit-learn's \code{PowerTransformer} uses it by default and
+standardises the result. \textbf{Quantile transformer}: maps values to a uniform or normal distribution by ranks; very strong, removes outliers' influence, but
+non-linear distortion of distances.
+
+\subsection{Transforming the target}
+If you log-transform $y$ for training, predictions must be back-transformed with $\exp$, and $\exp(\E[\log y])$ underestimates $\E[y]$ (Chapter 2): apply a
+smearing correction or use a Gamma/Tweedie GLM objective instead. scikit-learn: \code{TransformedTargetRegressor(func=np.log1p, inverse\_func=np.expm1)}.
+
+\section{Numerical to categorical: binning}
+\textbf{Why bin?} To capture non-linear effects in linear models (age bands), to reduce the influence of noise and outliers, to make results explainable
+(``freshers'', ``mid'', ``senior''), or because the business thinks in bands (salary slabs).
+\begin{itemize}
+\item \textbf{Equal-width}: split the range into equal intervals (\code{pd.cut}). Simple; sensitive to outliers (most points in one bin).
+\item \textbf{Equal-frequency (quantile)}: each bin has the same count (\code{pd.qcut}). Robust to skew; bin edges are data-dependent.
+\item \textbf{Domain-based}: experience 0, 1--3, 4--7, 8--12, 13+.
+\item \textbf{Clustering-based}: run 1-D K-Means on the values and use cluster IDs as bins (\code{KBinsDiscretizer(strategy="kmeans")}): edges fall in natural gaps.
+\item \textbf{Supervised / tree-based}: fit a shallow decision tree of the target on the feature and use its split points (optimal binning, used in credit scoring with
+  weight of evidence).
+\end{itemize}
+\textbf{Costs}: loss of information within bins, arbitrary edges, more parameters. Tree models do not need binning.
+\begin{example}[: three binnings of MBA \%]
+Values 51.6, 53.3, 55.5, 57.8, 58.8, 59.4, 62.1, 66.3. Edges [0, 55, 60, 100] (domain): counts 2, 4, 2. Quartiles (\code{qcut(q=4)}): 2, 2, 2, 2.
+Equal-width into 3 over $[51.6, 66.3]$ (width 4.9): $[51.6, 56.5)$ has 3, $[56.5, 61.4)$ has 3, $[61.4, 66.3]$ has 2.
+\end{example}
+
+\section{Categorical to numerical: encodings}
+Models need numbers. The encoding must not invent information that is not there (a fake order) and must not leak the target.
+
+\subsection{Label / ordinal encoding}
+Map categories to integers. Correct for \textbf{ordinal} variables where order matters: junior $\to$ 0, mid $\to$ 1, senior $\to$ 2. For \textbf{nominal} variables
+(city), integers create a fake order and fake distances (``Pune $=$ 2 is between Delhi $=$ 1 and Agra $=$ 3''), which misleads linear models and $k$-NN; tree models
+tolerate it somewhat (they can split repeatedly), and it is memory-efficient for very high cardinality in GBMs.
+
+\subsection{One-hot encoding (OHE)}
+One binary column per category. City $\in\{$Delhi, Pune, Agra$\}$: Pune $\to(0,1,0)$. No fake order. Drawbacks: many columns for high cardinality (50{,}000 companies),
+sparse; unseen categories at test time (\code{handle\_unknown="ignore"}).
+
+\subsection{The dummy variable trap}
+With $k$ one-hot columns and an intercept, the columns always sum to 1, which equals the intercept column: \textbf{perfect multicollinearity}. In OLS, $X^\top X$ is singular
+and coefficients are not unique (adding $c$ to every city coefficient and subtracting $c$ from the intercept gives identical predictions).
+\textbf{Fix}: drop one dummy (\code{drop\_first=True}); the dropped category becomes the \textbf{reference level} and each remaining coefficient is ``the difference from the
+reference''. Regularised models (Ridge, Lasso, logistic regression in scikit-learn) and trees do not need the drop (the penalty picks a unique solution), and keeping all
+$k$ is more interpretable for them.
+\begin{example}[: the trap in numbers]
+Rows Delhi, Pune, Agra encoded $(1,0,0)$, $(0,1,0)$, $(0,0,1)$ plus intercept 1: column sum $d + p + a = 1 = $ intercept. Coefficients (intercept 5, Delhi 1, Pune 2, Agra 3)
+and (intercept 6, Delhi 0, Pune 1, Agra 2) predict exactly the same.
+\end{example}
+
+\subsection{Frequency (count) encoding}
+Replace each category by its frequency (or count) in training data. Pune, Pune, Pune, Delhi, Delhi, Agra $\to$ 0.5, 0.5, 0.5, 0.333, 0.333, 0.167. One column whatever the
+cardinality; captures ``popularity'' (common companies vs rare); different categories with equal frequency collide.
+
+\subsection{Target (mean) encoding}
+Replace each category by the mean of the target for that category. Powerful for high-cardinality features (company, skill, locality), but dangerous:
+\begin{itemize}
+\item \textbf{Leakage}: computing a row's encoding with its own label lets the model ``see'' the answer; rare categories become perfect predictors. Use \textbf{out-of-fold}
+  encoding (each row's value computed from the other folds) or ordered/leave-one-out schemes.
+\item \textbf{Noise for rare categories}: smooth toward the global mean:
+  \[ \text{enc}(c) = \frac{n_c\,\bar y_c + m\,\bar y}{n_c + m}. \]
+\end{itemize}
+\begin{example}[: smoothed target encoding]
+Placed (1/0) by city: Pune $1,1,0$; Delhi $0,1$; Agra $1$. Global mean $4/6 = 0.667$, smoothing $m = 2$. Agra: raw 1.0 from one student; smoothed $\frac{1\cdot1 + 2\cdot0.667}{3}
+= 0.778$. Delhi: raw 0.5, smoothed $0.583$. Pune: raw and smoothed 0.667. Rare categories are pulled toward the global mean.
+\end{example}
+It is the MAP/empirical-Bayes idea of Chapter 12. scikit-learn's \code{TargetEncoder} cross-fits automatically; CatBoost does ordered target statistics.
+
+\subsection{Other encodings}
+\textbf{Binary encoding} (integer code written in binary bits: $\log_2k$ columns), \textbf{hashing} (hash categories into a fixed number of columns; collisions but constant memory;
+used in large click models), \textbf{weight of evidence} $\ln\frac{P(\text{cat}\mid y=1)}{P(\text{cat}\mid y=0)}$ (credit scoring), \textbf{learned embeddings} (neural networks: each
+category gets a trainable vector; the standard for user/job IDs).
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+Situation & Encoding\\
+\midrule
+Ordered categories & ordinal\\
+Few nominal categories, linear model & one-hot (drop one if unregularised with intercept)\\
+Many categories, tree model & native categorical (LightGBM/CatBoost), target or frequency encoding\\
+Many categories, linear model & target encoding (out-of-fold, smoothed), hashing, or grouping rare levels into ``Other''\\
+Neural network with IDs & embeddings\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Imbalanced datasets: the complete toolkit}
+Chapter 13 introduced the main ideas; here is the full list the checklist names.
+\begin{itemize}
+\item \textbf{Random undersampling} (``random deletion''): randomly delete majority-class rows until the ratio is acceptable. Fast; throws away information; good with
+  huge data.
+\item \textbf{Random oversampling}: duplicate minority rows. Keeps all data; risk of overfitting the duplicated points.
+\item \textbf{Weighting the dataset (class weights / sample weights)}: multiply each row's loss by a weight, larger for the minority class
+  ($w_c = \frac{n}{K\,n_c}$). No data changed; supported by most models (\code{class\_weight="balanced"}, \code{scale\_pos\_weight}).
+\item \textbf{NearMiss} (informed undersampling): keep majority points that are \emph{close} to minority points (version 1: smallest average distance to the 3 nearest minority
+  points), so the model focuses on the boundary. Sensitive to noise.
+\item \textbf{Tomek links}: pairs of opposite-class points that are each other's nearest neighbours; removing the majority member cleans the boundary. \textbf{Edited nearest
+  neighbours} removes majority points misclassified by their neighbours.
+\item \textbf{SMOTE}: synthetic minority points by interpolating between a minority point and one of its $k$ minority neighbours: $\mathbf x + u(\mathbf x_{nn} - \mathbf x)$.
+\item \textbf{Borderline-SMOTE}: first find minority points ``in danger'': those for which more than half (but not all) of their $m$ nearest neighbours (of any class) are
+  majority; generate synthetic points only from those. Points surrounded entirely by majority are treated as noise and skipped. Focuses effort where the boundary is.
+\item \textbf{ADASYN}: generate more synthetic points for minority points that have more majority neighbours (harder to learn), in proportion to that difficulty.
+\item \textbf{SMOTE-NC} (categorical features), \textbf{SMOTE + Tomek / SMOTE + ENN} (oversample then clean).
+\item \textbf{Threshold moving} and \textbf{proper metrics} (PR AUC, recall at precision): often the most effective and simplest step.
+\item \textbf{Algorithm-level}: focal loss, balanced random forest, EasyEnsemble (many undersampled subsets, ensembled).
+\end{itemize}
+\begin{example}[: Borderline-SMOTE danger set]
+$m = 5$. Minority point A has neighbours: 3 majority, 2 minority (3/5 $>$ half, not all): \emph{danger}, used for synthesis. Point B: 1 majority, 4 minority: \emph{safe},
+skipped. Point C: 5 majority: \emph{noise}, skipped.
+\end{example}
+Always resample only the training fold (imblearn \code{Pipeline}); never the test set; recalibrate probabilities afterwards if they are used.
+
+\begin{practical}[: where these choices matter in ML at InfoEdge]
+Salary engine: log or Box--Cox target, robust scaling of experience, target-encoded company with smoothing. Resdex ranking: frequency-encoded skills, embeddings of titles.
+Fraud detection: class weights and threshold tuning rather than heavy SMOTE (fraud patterns change, synthetic points can mislead). Seeker segmentation: robust scaling before
+K-Means.
+\end{practical}
+
+\stuck{imbalanced-learn User Guide: Over-sampling}{https://imbalanced-learn.org/stable/over_sampling.html}
+\section{Interview questions}
+
+\begin{qa}{What is the difference between standardisation and normalisation? When do you use each?}
+\oneline{Standardisation rescales to mean 0 and standard deviation 1, with no fixed range; normalisation (min--max) rescales to $[0, 1]$; use standardisation for most
+models (linear with penalties, SVM, PCA, neural networks), min--max when a bounded range is needed and there are no extreme outliers, and robust scaling when outliers exist.}
+\worked Column 10, 20, 30, 40, 1000: min--max gives 0, 0.01, 0.02, 0.03, 1 (normal values crushed); robust gives $-1, -0.5, 0, 0.5, 48.5$ (normal values keep their spread).
+\end{qa}
+
+\begin{qa}{Which models need feature scaling, and why don't tree models?}
+\oneline{Distance-, dot-product- and gradient-based models (k-NN, K-Means, SVM, PCA, regularised linear models, neural networks) need it; trees split on thresholds of single features, and
+a monotone rescaling does not change which rows fall on each side, so they are unaffected.}
+\end{qa}
+
+\begin{qa}{How do you fix a right-skewed feature? Explain Box--Cox.}
+\oneline{Apply a log (or $\log(1+x)$), square root, or a fitted power transform; Box--Cox is the family $(x^\lambda - 1)/\lambda$ (log at $\lambda = 0$) with $\lambda$ chosen by maximum
+likelihood to make the data as normal as possible; it needs positive data, and Yeo--Johnson extends it to zero and negative values.}
+\worked Values 1--55 with skewness 1.25: Box--Cox chooses $\lambda\approx0.03$, skewness $\approx0$.
+\end{qa}
+
+\begin{qa}{\deep Does standardising a skewed feature make it normal?}
+\oneline{No: standardisation is a linear shift and rescale, so it preserves the shape, including skewness and kurtosis; only non-linear transforms (log, Box--Cox, quantile) change shape.}
+\end{qa}
+
+\begin{qa}{What is the dummy variable trap and how do you avoid it?}
+\oneline{With one dummy per category plus an intercept, the dummies sum to the intercept column, creating perfect multicollinearity, so OLS coefficients are not unique; drop one category
+(the reference level) or omit the intercept; regularised models and trees do not need the drop.}
+\end{qa}
+
+\begin{qa}{One-hot vs ordinal vs target vs frequency encoding: when do you use each?}
+\oneline{Ordinal for genuinely ordered categories; one-hot for low-cardinality nominal features (especially for linear models); target encoding for high-cardinality features when done
+out-of-fold and smoothed; frequency encoding when popularity itself is informative and you need a single compact column.}
+\end{qa}
+
+\begin{qa}{\deep Why is naive target encoding dangerous, and how do you do it safely? Compute the smoothed value for a city with one student (placed) when the overall placement rate is
+0.667 and $m = 2$.}
+\oneline{Because each row's encoding includes its own label, rare categories become perfect fake predictors (leakage and overfitting); compute encodings out-of-fold and smooth toward
+the global mean: $(1\cdot1 + 2\cdot0.667)/(1 + 2) = 0.778$.}
+\end{qa}
+
+\begin{qa}{How do you convert a numeric feature into categories, and why would you?}
+\oneline{Bin it: equal-width, equal-frequency (quantiles), domain-defined bands, clustering-based (1-D K-Means), or tree-based optimal bins; useful to capture non-linearity in linear
+models, reduce noise, and produce explainable segments, at the cost of within-bin information.}
+\end{qa}
+
+\begin{qa}{List the techniques for imbalanced data and when you would use each.}
+\oneline{Class/sample weighting (first choice, no data change), random undersampling or ``random deletion'' (very large data), random oversampling, SMOTE and its variants
+(Borderline-SMOTE near the boundary, ADASYN for hard regions), NearMiss and Tomek links (informed undersampling/cleaning), ensembles of undersampled sets, threshold tuning and
+the right metrics.}
+\end{qa}
+
+\begin{qa}{How does Borderline-SMOTE differ from SMOTE and ADASYN?}
+\oneline{SMOTE interpolates from all minority points; Borderline-SMOTE only from minority points ``in danger'' (more than half but not all neighbours are majority), ignoring safe and noisy
+points; ADASYN creates more points for minority samples with more majority neighbours, in proportion to their difficulty.}
+\end{qa}
+
+\begin{qa}{\deep After class weighting your model's predicted probabilities are too high. Why?}
+\oneline{Weighting (like oversampling) changes the effective class prior seen in training, so the model learns an inflated base rate; the ranking is fine but probabilities must be recalibrated
+on unweighted validation data (or the intercept corrected) if used as probabilities.}
+\end{qa}
+
+\begin{qa}{What is row-wise L2 normalisation and where is it used?}
+\oneline{Dividing each row vector by its length so it has norm 1, e.g. $(3,4)\to(0.6,0.8)$; used for TF-IDF and embedding vectors so that dot products equal cosine similarities.}
+\end{qa}

@@ -1,0 +1,221 @@
+\chapter{EDA II: Bivariate and Multivariate Analysis, Correlations and Multicollinearity}
+\companion{StatQuest: Pearson's Correlation, Clearly Explained}{\ytid{xZ_z8KWkhXE}}
+
+Univariate analysis describes one column. Bivariate analysis asks how \emph{two} variables move together (``does MBA percentage relate to placement?''),
+and multivariate analysis asks how many variables relate at once (``are experience, age and graduation year telling the same story?''). The checklist
+names Pearson, Spearman (with ranks), point-biserial and phi correlations, reading a correlation matrix, multicollinearity and the VIF formula in terms of
+$R$. Each is derived here with a worked example.
+
+\section{Which measure for which pair of variable types?}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+Variable 1 & Variable 2 & Measure\\
+\midrule
+numeric & numeric & Pearson $r$ (linear), Spearman $\rho$ or Kendall $\tau$ (monotonic, robust)\\
+numeric & binary & point-biserial correlation (a special case of Pearson)\\
+numeric & multi-class categorical & ANOVA $F$-test, correlation ratio $\eta^2$, box plots\\
+binary & binary & phi coefficient $\phi$; odds ratio\\
+categorical & categorical & chi-square test, Cram\'er's $V$\\
+ordinal & ordinal / numeric & Spearman, Kendall\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Covariance}
+Covariance measures whether two variables move together:
+\[ \Cov(x,y) = \frac{1}{n-1}\sum_i(x_i - \bar x)(y_i - \bar y). \]
+If above-average $x$ tends to come with above-average $y$, the products are mostly positive: positive covariance. Its size depends on units (rupees vs lakh),
+so it is hard to interpret alone; correlation fixes this.
+
+\section{Pearson correlation}
+\[ r = \frac{\Cov(x,y)}{s_xs_y} = \frac{\sum(x_i - \bar x)(y_i - \bar y)}{\sqrt{\sum(x_i - \bar x)^2}\sqrt{\sum(y_i - \bar y)^2}}. \]
+It is the covariance of the standardised variables: unit-free, between $-1$ and $+1$.
+\begin{example}[: Pearson by hand]
+Years of experience $x = 1,2,3,4,5$; rating $y = 2,4,5,4,5$. $\bar x = 3$, $\bar y = 4$.
+Deviations $x$: $-2,-1,0,1,2$; $y$: $-2,0,1,0,1$. Products: $4, 0, 0, 0, 2$; sum $= 6$.
+$\sum(x - \bar x)^2 = 10$, $\sum(y - \bar y)^2 = 4 + 0 + 1 + 0 + 1 = 6$.
+$r = 6/\sqrt{10\cdot6} = 6/7.746 = 0.775$. Covariance $= 6/4 = 1.5$.
+\end{example}
+\textbf{Properties and cautions}
+\begin{itemize}
+\item $r = \pm1$: points exactly on a line; $r = 0$: no \emph{linear} relationship (there may be a strong curved one: $y = x^2$ on symmetric $x$ has $r = 0$).
+\item Unchanged by shifting or positive scaling of either variable (rupees or lakh: same $r$).
+\item Sensitive to outliers: one extreme point can create or destroy a correlation.
+\item $r^2$ is the fraction of variance of $y$ explained by a linear fit on $x$ (Chapter 2).
+\item Correlation is not causation: ice-cream sales and drownings correlate through temperature (a confounder).
+\end{itemize}
+
+\section{Spearman rank correlation}
+Replace each variable's values by their \textbf{ranks}, then compute Pearson on the ranks. It measures \textbf{monotonic} association (does $y$ tend to rise when
+$x$ rises, in any shape?) and is robust to outliers and to non-linear but monotone relationships. Without ties, a shortcut:
+\[ \rho = 1 - \frac{6\sum d_i^2}{n(n^2 - 1)},\qquad d_i = \text{rank}(x_i) - \text{rank}(y_i). \]
+\begin{example}[: Spearman by hand (no ties)]
+Interview scores $a = 10, 20, 30, 40, 50$ (ranks 1--5); manager ratings $b = 1, 3, 2, 5, 4$ (ranks 1, 3, 2, 5, 4).
+$d = 0, -1, 1, -1, 1$; $\sum d^2 = 4$. $\rho = 1 - \frac{6\cdot4}{5\cdot24} = 1 - 0.2 = 0.8$.
+\end{example}
+\begin{example}[: ties]
+For $y = 2, 4, 5, 4, 5$ the two 4s share ranks 2 and 3: both get 2.5; the two 5s get 4.5. Ranks: $1, 2.5, 4.5, 2.5, 4.5$. With ties, compute Pearson on these ranks
+(the shortcut is only approximate): $\rho = 0.738$ against $x = 1,\dots,5$, slightly lower than Pearson's 0.775 here.
+\end{example}
+\textbf{Kendall's $\tau$}: based on concordant vs discordant pairs; more robust with small samples and many ties.
+
+\section{Point-biserial correlation (numeric vs binary)}
+Code the binary variable as 0/1 and compute Pearson; equivalently
+\[ r_{pb} = \frac{\bar x_1 - \bar x_0}{s_x}\sqrt{p(1-p)}, \]
+where $\bar x_1$, $\bar x_0$ are the means of the numeric variable in the two groups, $s_x$ its (population) standard deviation and $p$ the fraction in group 1.
+\begin{example}[: point-biserial]
+MBA \% $= 60, 65, 70, 75, 80, 85$; placed $= 0, 0, 1, 0, 1, 1$. $\bar x_1 = 78.33$, $\bar x_0 = 66.67$, $s_x = 8.54$, $p = 0.5$.
+$r_{pb} = \frac{11.67}{8.54}\times0.5 = 0.683$. Placed students have clearly higher MBA scores.
+\end{example}
+It is the natural measure of how a numeric feature relates to a binary target; a $t$-test between the two groups tests the same thing.
+
+\section{Phi coefficient (binary vs binary)}
+For a $2\times2$ table $\begin{pmatrix}a & b\\c & d\end{pmatrix}$:
+\[ \phi = \frac{ad - bc}{\sqrt{(a+b)(c+d)(a+c)(b+d)}}. \]
+\begin{example}[: phi]
+Rows: work experience yes/no; columns: placed yes/no. $a = 30$ (exp, placed), $b = 10$ (exp, not), $c = 20$ (no exp, placed), $d = 40$ (no exp, not).
+$\phi = \frac{1200 - 200}{\sqrt{40\cdot60\cdot50\cdot50}} = \frac{1000}{2449.5} = 0.408$. Also $\phi = \sqrt{\chi^2/n} = \sqrt{16.67/100} = 0.408$.
+\end{example}
+For larger tables, \textbf{Cram\'er's $V$} $= \sqrt{\chi^2/(n(k - 1))}$ with $k = \min(\text{rows}, \text{cols})$, between 0 and 1.
+
+\section{Numeric vs multi-class categorical: ANOVA and $\eta^2$}
+Compare the means of a numeric variable across several groups (MBA \% by degree type). The \textbf{correlation ratio} $\eta^2 = \frac{\text{between-group sum of squares}}
+{\text{total sum of squares}}$ is the fraction of variance explained by the group; the ANOVA $F$-test asks whether the differences are larger than chance (Chapter 39).
+
+\section{Reading a correlation matrix}
+A correlation matrix lists the correlation of every pair of numeric variables; usually shown as a heatmap.
+\begin{center}\small
+\begin{tabular}{l|ccccc}
+& ssc & hsc & degree & mba & placed\\\hline
+ssc & 1.00 & 0.51 & 0.54 & 0.39 & 0.61\\
+hsc & 0.51 & 1.00 & 0.43 & 0.35 & 0.49\\
+degree & 0.54 & 0.43 & 1.00 & 0.40 & 0.48\\
+mba & 0.39 & 0.35 & 0.40 & 1.00 & 0.08\\
+placed & 0.61 & 0.49 & 0.48 & 0.08 & 1.00\\
+\end{tabular}
+\end{center}
+(Illustrative values.) How to read it, in order:
+\begin{enumerate}
+\item The diagonal is 1; the matrix is symmetric, so read one triangle.
+\item \textbf{Target row/column} first: ssc has the strongest linear association with placement (0.61); mba almost none (0.08), surprisingly.
+\item \textbf{Feature--feature} cells: high values ($|r| > 0.8$) warn of multicollinearity or redundancy; here moderate (0.4--0.54): the academic scores share a
+  common ``academic ability'' factor.
+\item \textbf{Blocks} of mutually correlated features suggest groups (PCA would find one component for them).
+\item \textbf{Caveats}: only linear relationships (use Spearman for monotone), sensitive to outliers, hides non-linear and interaction effects, and with many variables
+  some correlations are large by chance. Low correlation with the target does not make a feature useless (it may matter in interaction or non-linearly).
+\end{enumerate}
+
+\section{Simpson's paradox: when aggregate correlation lies}
+A trend can reverse when data are split by a third variable. Overall, more certifications might correlate with lower salary; within each experience band the
+correlation is positive, because juniors collect more certificates. Always check important relationships within key segments.
+
+\section{Multicollinearity}
+\subsection{What and why it matters}
+Features are \textbf{multicollinear} when one can be (nearly) predicted from the others: age, years of experience and graduation year. Effects:
+\begin{itemize}
+\item Linear/logistic regression coefficients become unstable, with huge standard errors and sometimes the wrong sign; interpretation breaks.
+\item Predictions are usually still fine, as long as the collinearity pattern holds in new data.
+\item Tree models are unaffected in accuracy, but importance is split among the correlated features.
+\end{itemize}
+Pairwise correlations can miss it: $x_3 = x_1 + x_2$ may have only moderate pairwise correlations yet be perfectly collinear.
+
+\subsection{VIF, derived}
+Regress feature $j$ on all the other features and record its $R_j^2$ (how well the others explain it). Then
+\[ \text{VIF}_j = \frac{1}{1 - R_j^2},\qquad \text{tolerance}_j = 1 - R_j^2. \]
+The variance of the coefficient $\hat w_j$ is multiplied by VIF$_j$ compared with uncorrelated features; its standard error by $\sqrt{\text{VIF}_j}$.
+\textbf{With only two predictors}, $R_j^2$ is just the squared correlation between them: VIF $= \frac{1}{1 - r^2}$.
+\begin{example}[: VIF values]
+Two predictors with $r = 0.9$: VIF $= 1/(1 - 0.81) = 5.26$; standard errors $2.3\times$ larger. $R_j^2 = 0.9$ gives VIF 10; $R_j^2 = 0.99$ gives 100.
+\end{example}
+Rules of thumb: VIF $>5$ worth a look, $>10$ serious. \textbf{Condition number} of $X$ (ratio of largest to smallest singular value, Chapter 14) $>30$ also signals it.
+
+\subsection{Fixes}
+Drop one of a correlated group (keep the most interpretable); combine them (an index, or ``experience $-$ age''); PCA; Ridge regression; collect data where they vary
+independently; for prediction-only tasks, often leave it.
+
+\subsection{The dummy-variable trap is perfect multicollinearity}
+One-hot encoding a $k$-level category gives $k$ columns that always sum to 1, the same as the intercept column: perfect collinearity, $X^\top X$ singular
+(Chapter 34). Drop one dummy (\code{drop\_first=True}) when the model has an intercept and no regularisation.
+
+\begin{practical}[: where these measures are used in ML]
+\begin{itemize}
+\item \textbf{Feature screening}: rank features by $|r|$ or point-biserial correlation with the target as a first pass (then confirm with model-based importance).
+\item \textbf{Redundancy removal}: drop one of each pair with $|r| > 0.95$ before linear models; check VIF.
+\item \textbf{Categorical features}: Cram\'er's $V$ between candidate features (city and state are nearly the same information).
+\item \textbf{Monitoring}: a change in the correlation between a feature and the target after deployment signals concept drift.
+\item \textbf{Leakage detection}: a single feature with $|r| \approx 1$ with the target is suspicious (the salary-placement case).
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: Pearson's Correlation, Clearly Explained}{\ytid{xZ_z8KWkhXE}}
+\section{Interview questions}
+
+\begin{qa}{Compute the Pearson correlation of $x = 1,2,3,4,5$ and $y = 2,4,5,4,5$, and interpret it.}
+\oneline{$r = 6/\sqrt{10\times6} = 0.775$: a fairly strong positive linear association; about $0.775^2 = 60\%$ of the variance in $y$ is explained by a straight line in $x$.}
+\end{qa}
+
+\begin{qa}{Pearson vs Spearman: what does each measure, and when do you prefer Spearman?}
+\oneline{Pearson measures linear association of the raw values; Spearman is Pearson on ranks and measures monotonic association; prefer Spearman for ordinal data, non-linear
+but monotone relationships, and data with outliers or heavy skew.}
+\worked $y = e^x$ on $x = 1..5$: Spearman exactly 1 (perfectly monotone), Pearson about 0.89 (not linear).
+\end{qa}
+
+\begin{qa}{Write the Spearman formula and compute it for ranks $(1,2,3,4,5)$ and $(1,3,2,5,4)$.}
+\oneline{$\rho = 1 - 6\sum d^2/(n(n^2 - 1)) = 1 - 6\cdot4/120 = 0.8$.}
+\pushes \emph{``With ties?''} Assign average ranks and compute Pearson on ranks.
+\end{qa}
+
+\begin{qa}{How do you measure the association between a numeric feature and a binary target? Compute it for the MBA example.}
+\oneline{With the point-biserial correlation, $r_{pb} = \frac{\bar x_1 - \bar x_0}{s_x}\sqrt{p(1-p)}$; for the example it is $0.683$.}
+\why It equals Pearson with the binary variable coded 0/1. Significance via a two-sample $t$-test; a model-free alternative is the AUC of the feature alone.
+\end{qa}
+
+\begin{qa}{What is the phi coefficient? Compute it for the $2\times2$ table $[[30,10],[20,40]]$.}
+\oneline{The correlation between two binary variables, $\phi = (ad - bc)/\sqrt{(a+b)(c+d)(a+c)(b+d)} = 1000/2449.5 = 0.408$; it equals $\sqrt{\chi^2/n}$.}
+\end{qa}
+
+\begin{qa}{How would you measure association between two categorical variables with many levels, like city and job function?}
+\oneline{Use the chi-square test of independence for significance and Cram\'er's $V = \sqrt{\chi^2/(n(k-1))}$ for strength.}
+\end{qa}
+
+\begin{qa}{\deep $r = 0$ between two variables. Are they independent?}
+\oneline{Not necessarily: $r = 0$ only rules out a linear relationship; a strong non-linear dependence (like $y = x^2$ for $x$ symmetric around 0) can have zero correlation.
+For jointly normal variables, zero correlation does imply independence.}
+\why Use mutual information, Spearman (for monotone), or plots to detect non-linear dependence.
+\end{qa}
+
+\begin{qa}{How do you read a correlation matrix in an interview?}
+\oneline{Ignore the diagonal, read one triangle, look first at the target column for candidate predictors, then at feature pairs with high $|r|$ for redundancy and
+multicollinearity, look for blocks of related features, and remember it shows only linear, pairwise, possibly confounded relationships.}
+\end{qa}
+
+\begin{qa}{Define VIF, write it in terms of $R$, and compute it for two predictors with correlation 0.9.}
+\oneline{VIF$_j = 1/(1 - R_j^2)$ where $R_j^2$ is from regressing feature $j$ on the others; with two predictors $R_j^2 = r^2$, so VIF $= 1/(1 - 0.81) = 5.26$.}
+\why It is the factor by which collinearity inflates the variance of the coefficient estimate.
+\end{qa}
+
+\begin{qa}{\deep Why can pairwise correlations miss multicollinearity?}
+\oneline{Because collinearity can involve three or more variables jointly; for example $x_3 = x_1 + x_2$ with independent $x_1$, $x_2$ gives pairwise correlations of only
+about 0.71, yet $x_3$ is perfectly predictable from the other two (VIF infinite).}
+\end{qa}
+
+\begin{qa}{Does multicollinearity hurt prediction? Does it hurt random forests?}
+\oneline{It mainly hurts coefficient interpretation and stability in linear models, not prediction accuracy (if the pattern persists); random forests predict fine but split
+importance among correlated features, making each look less important.}
+\end{qa}
+
+\begin{qa}{What is Simpson's paradox? Give a job-portal example.}
+\oneline{A relationship that holds in every subgroup reverses (or vanishes) when the groups are combined, because of a confounder; for example, recommendations might have a lower
+apply rate overall but a higher rate within each experience band because they are shown more to juniors, who apply less.}
+\end{qa}
+
+\begin{qa}{\deep A feature has correlation 0.02 with the target. Should you drop it?}
+\oneline{Not on that alone: correlation captures only linear marginal effects, and the feature may matter non-linearly or through interactions (for example only for one city);
+check model-based importance, mutual information and segment-wise plots first.}
+\end{qa}
+
+\begin{qa}{Why is correlation not causation? How could you establish causation?}
+\oneline{Because a correlation can come from a confounder, reverse causation, selection bias or chance; causation is established by randomised experiments (A/B tests) or, failing
+that, by careful causal designs (controlling for confounders, instrumental variables, difference-in-differences, regression discontinuity).}
+\end{qa}

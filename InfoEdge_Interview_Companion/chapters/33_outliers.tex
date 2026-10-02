@@ -1,0 +1,221 @@
+\chapter{EDA III: Outliers, Missing Values and Leaky Variables, in Depth}
+\companion{StatQuest: The Normal Distribution, Clearly Explained (search)}{\yts{StatQuest+The+Normal+Distribution+Clearly+Explained}}
+
+Chapter 13 introduced missing data, outliers and imbalance from a modelling angle. The checklist asks for more detail: the 68--95--99.7 rule behind the
+z-score, the IQR formula and box-plot interpretation, the pros and cons of mean, median and mode imputation, ML models that predict missing values (``XGB
+imputer''), and leaky variables. This chapter completes those, with numbers.
+
+\section{The normal curve and the 68--95--99.7 rule}
+Many measurements (heights, test scores, measurement errors, averages of many things) follow a bell-shaped \textbf{normal distribution} with mean $\mu$ and
+standard deviation $\sigma$ (Chapter 38). The \textbf{empirical rule}:
+\begin{itemize}
+\item about \textbf{68\%} of values lie within $\mu\pm1\sigma$,
+\item about \textbf{95\%} within $\mu\pm2\sigma$ (exactly 95\% within $\pm1.96\sigma$),
+\item about \textbf{99.7\%} within $\mu\pm3\sigma$.
+\end{itemize}
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[width=0.75\linewidth,height=4.2cm,axis lines=left,ytick=\empty,xtick={-3,-2,-1,0,1,2,3},
+  xticklabels={$\mu{-}3\sigma$,$\mu{-}2\sigma$,$\mu{-}\sigma$,$\mu$,$\mu{+}\sigma$,$\mu{+}2\sigma$,$\mu{+}3\sigma$},ymin=0,ymax=0.45,
+  tick label style={font=\scriptsize}]
+\addplot[domain=-3.5:3.5,samples=80,thick,accent]{exp(-x^2/2)/sqrt(2*pi)};
+\addplot[fill=accent,fill opacity=0.25,draw=none,domain=-1:1,samples=40]{exp(-x^2/2)/sqrt(2*pi)}\closedcycle;
+\addplot[fill=accent,fill opacity=0.12,draw=none,domain=-2:2,samples=40]{exp(-x^2/2)/sqrt(2*pi)}\closedcycle;
+\node[font=\scriptsize] at (axis cs:0,0.15) {68\%};
+\node[font=\scriptsize] at (axis cs:1.5,0.06) {95\%};
+\node[font=\scriptsize] at (axis cs:2.6,0.03) {99.7\%};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+\begin{example}[: using the rule]
+MBA percentage $\sim$ normal with mean 60, sd 5. About 68\% of students score 55--65; 95\% score 50--70; 99.7\% score 45--75. Of 1{,}000 students we expect
+about 683, 954 and 997 in those ranges; only about 3 outside 45--75, so a score of 80 ($z = 4$) is genuinely rare. Also: by symmetry, 16\% score above 65
+($\frac{100 - 68}{2}$) and 2.5\% above 70.
+\end{example}
+
+\section{z-scores}
+\[ z = \frac{x - \mu}{\sigma} \]
+says ``how many standard deviations from the mean''. It puts different variables on one scale and, for normal data, converts directly into rarity via the empirical rule.
+\begin{example}[: z-score outlier check]
+Daily applications to a job: mean 50, sd 8. A day with 76: $z = 26/8 = 3.25$: beyond 3, flagged (for a normal variable, $P(|Z|>3) = 0.27\%$).
+\end{example}
+\textbf{Limitations}: (1) assumes roughly normal data; for skewed data (salaries) many genuine values exceed 3; (2) \textbf{masking}: the outlier inflates the mean and sd it is
+judged by, so in small samples an outlier may not even reach $|z| = 3$ (the 40 in Chapter 13 had $z = 2.4$).
+\textbf{Modified z-score} (robust): $M_i = 0.6745\,\frac{x_i - \text{median}}{\text{MAD}}$, flag $|M_i| > 3.5$. The constant 0.6745 makes MAD comparable to $\sigma$ for normal data.
+\begin{example}[: modified z]
+Salaries 4, 5, 5, 6, 7, 9, 20: median 6, MAD 1. For 20: $M = 0.6745\times14/1 = 9.4$: clearly flagged, while the ordinary $z = (20 - 8)/5.54 = 2.2$ is not.
+\end{example}
+
+\section{IQR rule and box plots}
+\[ \text{IQR} = Q_3 - Q_1,\qquad \text{lower fence} = Q_1 - 1.5\,\text{IQR},\qquad \text{upper fence} = Q_3 + 1.5\,\text{IQR}. \]
+Points outside the fences are outliers (``far out'' beyond $3\times$IQR). It uses quartiles, so it is robust and does not assume normality; it is what box-plot
+whiskers show (Chapter 31). For right-skewed data it flags many points on the high side only, which is correct behaviour (the high tail is long), but those
+points are usually genuine.
+\begin{example}[: IQR]
+Data 3, 5, 7, 8, 9, 11, 13, 40 with $Q_1 = 6$, $Q_3 = 12$: IQR 6, fences $-3$ and 21: 40 is an outlier.
+\end{example}
+
+\section{Multivariate and model-based detection}
+A point can look normal on every single feature but be unusual in combination (age 22 with 15 years of experience). Methods:
+\textbf{Mahalanobis distance} $\sqrt{(\mathbf x - \boldsymbol\mu)^\top\Sigma^{-1}(\mathbf x - \boldsymbol\mu)}$ (a z-score that accounts for correlations; squared, it follows a
+$\chi^2_d$ for normal data); \textbf{Isolation Forest} (Chapter 7); \textbf{Local Outlier Factor} (density relative to neighbours); \textbf{DBSCAN} noise points;
+autoencoder reconstruction error.
+
+\section{What to do with an outlier: a decision procedure}
+\begin{enumerate}
+\item \textbf{Is it impossible?} (negative age, percentage 105, price Rs.~1) $\to$ data error: correct from source or set to missing.
+\item \textbf{Is it genuine but extreme?} (a 2-crore salary for a CTO) $\to$ keep; reduce its influence: log transform, winsorise, robust loss (Huber, MAE),
+  robust scaler, tree models.
+\item \textbf{Is it from a different population?} (bulk staffing agencies among recruiters) $\to$ segment or add an indicator.
+\item \textbf{Is it the signal?} (fraud) $\to$ anomaly detection; never remove.
+\end{enumerate}
+Always decide using training data only and apply the same rule to test data; never drop test rows.
+
+\section{Missing values: the full picture}
+\subsection{Diagnosing the mechanism}
+MCAR, MAR, MNAR (Chapter 13). Practical checks: compare the distributions of other variables for rows with and without the missing value (if they differ, it is not
+MCAR); compare target rates for missing vs present; ask how the data were collected. Little's MCAR test exists but is rarely decisive.
+
+\subsection{Dropping}
+\begin{itemize}
+\item \textbf{Listwise deletion} (drop rows): unbiased only under MCAR; loses data fast with many columns ($0.95^{12} = 54\%$ complete rows).
+\item \textbf{Pairwise deletion} (use available pairs for each correlation): keeps more data but statistics can be inconsistent with each other.
+\item \textbf{Dropping a column}: when mostly missing \emph{and} uninformative.
+\item Never drop rows whose missingness is tied to the target (salary missing for every non-placed student).
+\end{itemize}
+
+\subsection{Mean, median and mode imputation: advantages and disadvantages}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X}
+\toprule
+Method & Advantages & Disadvantages\\
+\midrule
+Mean & simple; keeps the mean unchanged; fine for symmetric data, small missing fractions, MCAR & pulled by outliers; shrinks variance; weakens correlations; distorts
+distribution (spike at the mean); ignores relationships with other features; biased under MAR/MNAR\\
+Median & robust to outliers and skew (salary, price); simple & same variance shrinkage and correlation weakening; spike at the median\\
+Mode & works for categoricals and discrete values & over-represents the most frequent category; can be arbitrary when several modes; hides the signal in
+missingness (better: a separate ``Unknown'' category)\\
+Constant ($-999$, 0) & preserves the information ``was missing'' for tree models & meaningless for linear models and distances unless paired with an indicator\\
+\bottomrule
+\end{tabularx}
+\end{center}
+\begin{example}[: variance shrinkage, simulated]
+500 salaries, 20\% removed at random, true variance 29.2. After mean imputation the column's variance is 21.5: the filled values sit at the centre and pretend we are more
+certain than we are.
+\end{example}
+
+\subsection{ML models that predict missing values}
+The idea: treat the column with gaps as a \emph{target}, learn it from the other columns on rows where it is observed, then predict it where it is missing.
+\begin{itemize}
+\item \textbf{KNN imputer}: average of the $k$ most similar rows (scale first).
+\item \textbf{Regression imputation}: linear model from the other columns (add noise for stochastic imputation).
+\item \textbf{MICE / IterativeImputer}: cycle through every incomplete column, modelling each from all the others, for several rounds.
+\item \textbf{MissForest}: IterativeImputer with random forests: handles non-linearity, interactions and mixed types.
+\item \textbf{``XGB imputer''}: the same idea with gradient boosting (XGBoost, LightGBM, \code{HistGradientBoosting}), whose ability to accept NaN in the
+  \emph{predictor} columns means rows with several gaps can still be used.
+\end{itemize}
+\begin{lstlisting}
+from sklearn.experimental import enable_iterative_imputer   # noqa: enables the class
+from sklearn.impute import IterativeImputer, KNNImputer
+from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor
+
+knn  = KNNImputer(n_neighbors=5)
+mice = IterativeImputer(random_state=0)                             # Bayesian ridge per column
+miss_forest = IterativeImputer(estimator=RandomForestRegressor(n_estimators=50), max_iter=5)
+
+def gbm_impute(df, col):                 # "XGB imputer" for one column
+    obs = df[col].notna()
+    feats = df.columns.drop(col)
+    m = HistGradientBoostingRegressor().fit(df.loc[obs, feats], df.loc[obs, col])
+    out = df[col].copy()
+    out[~obs] = m.predict(df.loc[~obs, feats])
+    return out
+\end{lstlisting}
+\begin{example}[: how much better? (simulated)]
+Salary depends on experience; 20\% of salaries removed at random. RMSE of the imputed values: mean 5.81, median 5.79, KNN 1.69, MICE 1.64, MissForest 1.72,
+gradient-boosting imputer 1.68. Model-based imputation is more than 3 times more accurate because it uses the relationship with experience.
+\end{example}
+Cautions: fit the imputer on training data only (inside a Pipeline); model-based imputations are ``too clean'' (no noise), which can understate uncertainty; for
+inference prefer multiple imputation; add a missing indicator when missingness may be informative; for GBM models, native NaN handling is often as good and simpler.
+
+\section{Leaky variables}
+A \textbf{leaky variable} contains information about the target that would not be available at prediction time. Catalogue with detection tips:
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X}
+\toprule
+Type & Example & How to catch it\\
+\midrule
+Outcome recorded after the event & salary for placement; ``offer letter generated'' for hiring; ``refund issued'' for fraud & ask ``when is this value created?'';
+missingness perfectly tied to the target\\
+Proxy of the target & ``number of interviews'' when predicting ``hired''; account status ``closed'' for churn & suspiciously high importance or AUC of one feature\\
+Future information & features aggregated over the full period including after the prediction date & time-based validation drops sharply\\
+Preprocessing on all data & scaler, imputer, TF-IDF, target encoding fitted before the split & always use Pipelines; fit transforms in folds\\
+Duplicates / same entity & same candidate in train and test & group split by entity\\
+ID or timestamp ordering & row ID correlated with label due to sorted export & drop IDs; check importance\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{practical}[: where this chapter shows up in ML]
+z-scores standardise features (StandardScaler) and power anomaly alerts on metrics dashboards (``applications today are 4 sd below normal: check the pipeline'');
+IQR rules drive winsorising; imputation choices change model accuracy directly; and most ``too good to be true'' offline results are leakage.
+\end{practical}
+
+\stuck{Kaggle Learn: Missing Values}{https://www.kaggle.com/code/alexisbcook/missing-values}
+\section{Interview questions}
+
+\begin{qa}{State the 68--95--99.7 rule and use it: MBA scores are normal with mean 60 and sd 5. What fraction score above 70? Between 55 and 65?}
+\oneline{About 68\%, 95\% and 99.7\% of a normal variable lie within 1, 2 and 3 standard deviations of the mean; above 70 is $z > 2$, about 2.5\%; between 55 and 65 is
+within $\pm1\sigma$, about 68\%.}
+\why Above $\mu + 2\sigma$: $(100 - 95)/2 = 2.5\%$ by symmetry.
+\end{qa}
+
+\begin{qa}{How do you detect outliers with the z-score, and what are its weaknesses?}
+\oneline{Standardise $z = (x - \mu)/\sigma$ and flag $|z| > 3$ (or 2.5); it assumes approximate normality and suffers from masking because the outlier inflates $\mu$ and
+$\sigma$; robust alternatives are the modified z-score with median and MAD, or the IQR rule.}
+\worked Salaries with 20: ordinary $z = 2.2$ (missed), modified $z = 9.4$ (caught).
+\end{qa}
+
+\begin{qa}{Write the IQR rule and explain why the multiplier is 1.5.}
+\oneline{Outliers lie below $Q_1 - 1.5\,$IQR or above $Q_3 + 1.5\,$IQR; with 1.5 the fences fall at about $\pm2.7\sigma$ for normal data, flagging roughly 0.7\% of points,
+a sensible threshold for ``unusual'' without assuming normality for the rule itself.}
+\end{qa}
+
+\begin{qa}{Would you remove outliers before training? Explain your decision process.}
+\oneline{Only data errors; genuine extremes are information, so I reduce their influence (transforms, winsorising, robust losses, tree models) and treat
+target-relevant anomalies as signal; decisions are made on training data and applied consistently.}
+\end{qa}
+
+\begin{qa}{Give the advantages and disadvantages of mean, median and mode imputation.}
+\oneline{All are fast and simple; mean preserves the average but is outlier-sensitive; median is robust for skewed data; mode works for categories; all shrink variance, weaken
+correlations, create artificial spikes, ignore other features and are biased unless data are MCAR.}
+\end{qa}
+
+\begin{qa}{\deep How can an ML model be used to impute missing values? Describe an ``XGB imputer''.}
+\oneline{Treat the incomplete column as a target, train a model (KNN, linear, random forest, gradient boosting) on rows where it is observed using the other columns as features,
+and predict it for rows where it is missing; with gradient boosting, the predictor columns may themselves contain NaNs, which the trees handle natively; iterating over all
+incomplete columns gives MICE/MissForest-style imputation.}
+\worked Simulated: RMSE 5.8 for mean imputation vs about 1.7 for model-based.
+\pushes \emph{``Risks?''} Leakage if fitted on test data; using the target as an imputation feature for test rows (not available at prediction time); understated
+uncertainty; extra complexity.
+\end{qa}
+
+\begin{qa}{\deep Should you use the target variable when imputing features?}
+\oneline{For pure prediction, no: at prediction time the target is unknown, so an imputer that relied on it cannot be applied consistently and leaks; for statistical inference with
+multiple imputation, including the outcome in the imputation model is actually recommended, because the analysis model will condition on it.}
+\end{qa}
+
+\begin{qa}{What is a leaky variable? Give three examples and how you would detect each.}
+\oneline{A feature carrying information about the target that would not exist at prediction time; e.g. salary for placement (missingness perfectly tied to the label),
+``number of interviews'' for hiring (a post-outcome proxy with extreme importance), and full-period aggregates for forecasting (validation collapses with a time split).}
+\end{qa}
+
+\begin{qa}{What is the Mahalanobis distance and why is it better than per-feature z-scores for multivariate outliers?}
+\oneline{It measures distance from the mean in units that account for the covariance between features, so it flags combinations that are unusual given the correlations (age 22 with
+15 years of experience) even when each value alone is normal.}
+\end{qa}
+
+\begin{qa}{Listwise vs pairwise deletion?}
+\oneline{Listwise drops any row with a missing value (consistent but wasteful); pairwise uses all available data for each pair of variables (keeps more data but different statistics
+use different subsets and a correlation matrix may not be valid).}
+\end{qa}

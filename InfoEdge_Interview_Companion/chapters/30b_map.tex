@@ -1,0 +1,62 @@
+\chapter*{Part VII Guide: the Checklist from an InfoEdge Data Scientist}
+\addcontentsline{toc}{chapter}{Part VII Guide: Checklist Coverage Map}
+\stuck{InfoEdge DS interview experience (full video)}{\ytid{nWyBQhGnHaM}}
+
+A candidate who secured an InfoEdge data scientist offer shared the checklist below of what to know for the interviews. This page maps every item to
+where it is taught. Items that the earlier chapters already covered fully point there; items that were missing or only touched on are taught in the
+new chapters 31--40, which follow the same pattern as the rest of the book: concepts from zero, many small examples, a ``where this is used in ML''
+section, and interview questions with full answers at the end. Probability, statistics and linear algebra are also covered at OA depth in your
+separate Maths book; here they are taught again with an interview and ML-application focus.
+
+\begin{center}\small
+\begin{tabularx}{\linewidth}{>{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{4.6cm}}
+\toprule
+\textbf{Checklist item} & \textbf{Where}\\
+\midrule
+\multicolumn{2}{l}{\textbf{\color{accent}EDA}}\\
+Reason behind every step; data visualisations and how to read each graph & Ch.\ 31 (new), Ch.\ 26\\
+Univariate statistics: mean, median, mode, range, standard deviation, variance & Ch.\ 31 (new)\\
+Missing values: MCAR/MAR/MNAR, dropping, mean/median/mode imputation pros and cons & Ch.\ 13, Ch.\ 33 (new)\\
+ML models to predict missing values (KNN, MICE, MissForest, XGBoost imputer) & Ch.\ 33 (new), Ch.\ 13\\
+Leaky variables & Ch.\ 1, Ch.\ 27, Ch.\ 33 (new)\\
+Outliers: z-score, 68--95--99.7 rule, IQR formula, box plot interpretation & Ch.\ 33 (new), Ch.\ 13\\
+Scaling: standardisation vs normalisation, min--max, robust & Ch.\ 34 (new)\\
+Numerical to categorical: binning, clustering & Ch.\ 34 (new)\\
+Categorical to numerical: ordinal, one-hot, target, frequency encoding; dummy variable trap & Ch.\ 34 (new)\\
+Imbalanced data: under/oversampling, weighting, NearMiss, random deletion, SMOTE, Borderline-SMOTE, ADASYN & Ch.\ 13, Ch.\ 34 (new)\\
+Bivariate: Pearson, Spearman (ranks), point-biserial, phi; correlation matrix & Ch.\ 32 (new)\\
+Multivariate: multicollinearity, VIF in terms of $R$ & Ch.\ 32 (new), Ch.\ 2\\
+Skewed data: log, power, Box--Cox transforms & Ch.\ 34 (new), Ch.\ 31\\
+\midrule
+\multicolumn{2}{l}{\textbf{\color{accent}Basic ML}}\\
+OLS, 5 assumptions (detect and fix), MLE for linear regression, loss & Ch.\ 2, Ch.\ 12\\
+L1, L2, elastic net; Huber; homo-/heteroscedasticity & Ch.\ 1, Ch.\ 2, Ch.\ 4\\
+GLM maths; Poisson and logistic as GLMs & Ch.\ 4, Ch.\ 3\\
+SVM, hinge, kernels (polynomial, Gaussian/RBF), Mercer, SVR, margin, hyperplane & Ch.\ 9, Ch.\ 4\\
+Naive Bayes (3 types), Laplace smoothing, independence assumption & Ch.\ 10\\
+K-Means and variants (k-medoids, k-modes, k-prototypes, k-means++), soft vs hard clustering & Ch.\ 15, Ch.\ 35 (new)\\
+GMM, EM, DBSCAN, Swiss roll & Ch.\ 15, Ch.\ 35 (new)\\
+PCA (scree, explained variance, eigen intuition), SVD, Fisher LDA & Ch.\ 14, Ch.\ 10, Ch.\ 40 (new)\\
+t-SNE, SNE, perplexity, Student-t; linear vs non-linear and deterministic vs non-deterministic DR & Ch.\ 14, Ch.\ 35 (new)\\
+Decision trees, Gini, entropy, information gain, Extra Trees, RF, bagging, boosting, AdaBoost vs GB & Ch.\ 6--8\\
+Bias vs variance with graphs; tackling under- and overfitting & Ch.\ 1\\
+\midrule
+\multicolumn{2}{l}{\textbf{\color{accent}Deep Learning}}\\
+ANN, perceptron structure, activations, training, backprop & Ch.\ 18, Ch.\ 36 (new: perceptron algorithm)\\
+GD variants (stochastic, batch, mini-batch), momentum, Adam; loss functions & Ch.\ 5, Ch.\ 18\\
+Transfer learning, CNN layers, $\frac{n+2p-f}{s}+1$ & Ch.\ 19\\
+RNN, GRU, LSTM & Ch.\ 20\\
+Basics of CV, NLP, reinforcement learning, federated learning & Ch.\ 36 (new), Ch.\ 16--17\\
+Time series: ANOVA, ARIMA, SARIMAX & Ch.\ 37 (new), Ch.\ 20\\
+\midrule
+\multicolumn{2}{l}{\textbf{\color{accent}Statistics, Probability, Linear Algebra}}\\
+Descriptive vs inferential, population vs sample, CLT, p-value, hypothesis testing & Ch.\ 39 (new)\\
+Distributions with real-life examples; PDF, PMF; expectation, variance, moments & Ch.\ 38 (new)\\
+Skewness and kurtosis and their types & Ch.\ 31 (new), Ch.\ 38 (new)\\
+Eigenvectors, eigenvalues, rank & Ch.\ 40 (new)\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+The checklist also says that what is asked in time series and applied deep learning ``completely depends on the projects you put in your resume''.
+Use Chapter 30's resume drill for those.

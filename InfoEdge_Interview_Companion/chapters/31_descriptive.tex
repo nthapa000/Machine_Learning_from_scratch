@@ -1,0 +1,291 @@
+\chapter{EDA I: Univariate Analysis, Descriptive Statistics and Reading Graphs}
+\companion{StatQuest: Histograms, Clearly Explained (search)}{\yts{StatQuest+Histograms+Clearly+Explained}}
+
+The checklist's first line is ``should know the reason behind all things''. Exploratory data analysis (EDA) is not a ritual of plots: every
+statistic and every graph answers a specific question that changes a modelling decision. This chapter teaches the one-variable (univariate)
+toolkit from zero and, for every tool, says \emph{why} you compute it and \emph{what you would do differently} depending on the answer.
+
+\section{Why we do EDA at all}
+Before modelling, we need to know:
+\begin{enumerate}
+\item \textbf{Is the data what we think it is?} Units, ranges, types, duplicates, impossible values. (A percentage of 105 is an error; 98.5 is a topper.)
+\item \textbf{What does each variable look like?} Centre, spread, shape, outliers. This decides scaling, transformations, robust losses.
+\item \textbf{What is missing and why?} Decides imputation (Chapter 33).
+\item \textbf{How do variables relate to the target and to each other?} Decides features, leakage checks, multicollinearity handling (Chapter 32).
+\item \textbf{Is the target balanced?} Decides metrics and sampling (Chapters 11, 34).
+\end{enumerate}
+Every finding should end in a sentence of the form ``\emph{because} I saw X, I will do Y''.
+
+\section{Types of variables}
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X X X}
+\toprule
+Type & Meaning & Example & What you may compute\\
+\midrule
+Nominal & categories with no order & city, job function & counts, mode\\
+Ordinal & ordered categories, unequal gaps & seniority (junior $<$ mid $<$ senior), rating 1--5 & median, percentiles, mode\\
+Discrete numeric & countable values & number of applications & everything; often skewed\\
+Continuous numeric & any value in a range & salary, MBA percentage & everything\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Numeric scales are also called \textbf{interval} (differences meaningful, zero arbitrary: temperature in \textdegree C) or \textbf{ratio} (true zero: salary;
+``twice as much'' makes sense).
+
+\section{Measures of central tendency: where is the middle?}
+Running example: salaries (lakh per year) of seven Data Analysts: \textbf{4, 5, 5, 6, 7, 9, 20}.
+
+\subsection{Mean}
+$\bar x = \frac1n\sum_ix_i = \frac{4+5+5+6+7+9+20}{7} = \frac{56}{7} = 8$. The balancing point: the sum of deviations $\sum(x_i - \bar x)$ is always 0.
+It uses every value, so one extreme value (20) drags it: here 6 of 7 people earn less than the mean.
+
+\subsection{Median}
+Sort and take the middle value (average of the two middle values if $n$ is even). Here the 4th of 7: \textbf{6}. Robust: change 20 to 200 and the median
+is still 6. It minimises the sum of absolute deviations (that is why MAE regression predicts medians).
+
+\subsection{Mode}
+The most frequent value: \textbf{5}. The only centre for nominal data (``most common city''). Can have several modes (\textbf{bimodal}: freshers and seniors).
+
+\subsection{Others}
+\textbf{Weighted mean} $\sum w_ix_i/\sum w_i$ (average CTR across jobs weighted by impressions). \textbf{Trimmed mean} (drop top and bottom 5\%).
+\textbf{Geometric mean} $(\prod x_i)^{1/n}$ for growth rates (10\% then 20\% growth: $\sqrt{1.1\times1.2} = 1.149$, i.e. 14.9\% per year, not 15\%).
+\textbf{Harmonic mean} $n/\sum(1/x_i)$ for rates (F1 score is the harmonic mean of precision and recall).
+
+\begin{recap}[: which centre to report]
+Symmetric, no outliers: mean. Skewed or outliers (salary, price, time): median. Categories: mode. Always report mean \emph{and} median for money: their gap
+tells you about skew.
+\end{recap}
+
+\section{Measures of spread: how scattered?}
+\subsection{Range}
+max $-$ min $= 20 - 4 = 16$. Simple, but determined by the two most extreme points only.
+
+\subsection{Variance and standard deviation}
+Variance is the average squared distance from the mean. Deviations from 8: $-4, -3, -3, -2, -1, 1, 12$; squares $16, 9, 9, 4, 1, 1, 144$; sum $184$.
+\begin{itemize}
+\item \textbf{Population variance} (data are the whole population): $\sigma^2 = \frac{184}{7} = 26.29$, $\sigma = 5.13$.
+\item \textbf{Sample variance} (data are a sample used to estimate the population): $s^2 = \frac{184}{n-1} = \frac{184}{6} = 30.67$, $s = 5.54$.
+\end{itemize}
+\textbf{Why $n-1$ (Bessel's correction)?} We measured deviations from the \emph{sample} mean, which is by construction the point closest to the sample;
+deviations from it are systematically a bit smaller than deviations from the true population mean. Dividing by $n-1$ instead of $n$ corrects that
+under-estimate exactly (on average). Another view: once $\bar x$ is fixed, only $n-1$ deviations are free (they must sum to 0): $n-1$
+\textbf{degrees of freedom}. pandas \code{.std()} uses $n-1$; NumPy \code{np.std} uses $n$ unless \code{ddof=1}.
+
+The standard deviation is in the same units as the data (lakh), which is why we report it rather than the variance (lakh$^2$).
+
+\subsection{Quartiles, IQR and MAD}
+Quartiles split sorted data into four parts. With NumPy's default (linear interpolation) on our data: $Q_1 = 5$, $Q_2 = 6$, $Q_3 = 8$; \textbf{IQR} $= Q_3 - Q_1 = 3$.
+The IQR is the spread of the middle 50\%: robust to the 20. (Different software uses slightly different quartile conventions; in an exam, state the one you use.)
+\textbf{Median absolute deviation} (MAD): median of $|x_i - \text{median}|$ $=$ median of $2,1,1,0,1,3,14$ $= 1$. Very robust.
+
+\subsection{Coefficient of variation}
+CV $= s/\bar x$: spread relative to the level, unit-free. Compare variability of fresher salaries ($\bar x = 4$, $s = 1$, CV 25\%) with senior salaries
+($\bar x = 40$, $s = 8$, CV 20\%): seniors vary more in lakh but less relative to their level.
+
+\section{Shape: skewness and kurtosis}
+\subsection{Moments}
+The $k$-th \textbf{central moment} is $\mu_k = \frac1n\sum(x_i - \bar x)^k$. The 1st is 0, the 2nd is the variance, the 3rd measures asymmetry, the 4th measures
+tail heaviness. Standardising them gives skewness and kurtosis.
+
+\subsection{Skewness}
+\[ \text{skewness} = \frac{\mu_3}{\sigma^3} = \frac{\frac1n\sum(x_i - \bar x)^3}{\sigma^3}. \]
+Cubing keeps the sign: big positive deviations dominate if the right tail is long.
+\begin{center}
+\begin{tikzpicture}
+\begin{axis}[width=0.33\linewidth,height=3.4cm,axis lines=left,xtick=\empty,ytick=\empty,title={\small negative (left) skew},ymin=0]
+\addplot[domain=0:1,samples=60,thick,accent]{x^4*(1-x)*30};
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}
+\begin{axis}[width=0.33\linewidth,height=3.4cm,axis lines=left,xtick=\empty,ytick=\empty,title={\small symmetric},ymin=0]
+\addplot[domain=-3:3,samples=60,thick,accent]{exp(-x^2/2)};
+\end{axis}
+\end{tikzpicture}
+\begin{tikzpicture}
+\begin{axis}[width=0.33\linewidth,height=3.4cm,axis lines=left,xtick=\empty,ytick=\empty,title={\small positive (right) skew},ymin=0]
+\addplot[domain=0:1,samples=60,thick,accent]{x*(1-x)^4*30};
+\end{axis}
+\end{tikzpicture}
+\end{center}
+\begin{itemize}
+\item \textbf{Positive (right) skew}: long tail to the right; typically \textbf{mean $>$ median $>$ mode}. Salaries, house prices, time on site, applications
+  per job, income. Our data: mean 8 $>$ median 6 $>$ mode 5; skewness $= 1.70$ (population formula).
+\item \textbf{Negative (left) skew}: long tail to the left; mean $<$ median $<$ mode. Marks in an easy exam (most score high, a few very low), age at retirement.
+\item \textbf{Zero skew}: symmetric (normal distribution, heights).
+\end{itemize}
+Rule of thumb: $|$skew$| < 0.5$ roughly symmetric, 0.5--1 moderate, $>1$ highly skewed. \textbf{Pearson's second skewness coefficient}
+$3(\bar x - \text{median})/s = 3(8 - 6)/5.54 = 1.08$: a quick check without cubes.
+
+\subsection{Kurtosis}
+\[ \text{kurtosis} = \frac{\mu_4}{\sigma^4},\qquad \text{excess kurtosis} = \frac{\mu_4}{\sigma^4} - 3. \]
+The normal distribution has kurtosis 3 (excess 0). Kurtosis is mainly about \textbf{tails} (how often extreme values occur), not ``peakedness''.
+\begin{itemize}
+\item \textbf{Mesokurtic}: excess $\approx0$ (normal).
+\item \textbf{Leptokurtic}: excess $>0$, heavy tails, more outliers than normal (stock returns, claim sizes, daily traffic spikes; Student-$t$, Laplace).
+\item \textbf{Platykurtic}: excess $<0$, light tails, fewer extremes (uniform distribution: excess $-1.2$).
+\end{itemize}
+Our salaries: excess kurtosis $1.38$ (population formula): heavier tails than normal, driven by the 20.
+
+\begin{trap}
+Libraries differ: \code{scipy.stats.kurtosis} returns \emph{excess} kurtosis by default; pandas \code{.kurt()} also returns excess kurtosis but with a
+small-sample correction (it gives 5.11 for our data, versus 1.38 for the plain population formula). Always say which definition you use.
+\end{trap}
+
+\section{Reading graphs: what each plot answers}
+\subsection{Histogram}
+Bars over bins; height $=$ count (or density). \textbf{Read}: centre, spread, number of peaks (modes), skew direction (where the tail is), gaps,
+impossible values, spikes at round numbers (``salary $=$ 10 lakh'' entered by many people: rounding; spike at 0: missing coded as 0). \textbf{Caution}:
+bin width changes the story; try several.
+
+\subsection{Density plot (KDE)}
+A smoothed histogram (Chapter 15). Good for comparing distributions of two groups (placed vs not placed MBA scores) on one plot.
+
+\subsection{Box plot}
+Five-number summary in one picture.
+\begin{center}
+\begin{tikzpicture}[xscale=0.55]
+\draw[->] (0,0)--(22,0) node[right]{\small salary};
+\foreach \t in {0,4,8,12,16,20} \draw (\t,0.1)--(\t,-0.1) node[below]{\scriptsize\t};
+\draw[thick,accent,fill=accentlight] (5,0.6) rectangle (8,1.6);
+\draw[very thick,prframe] (6,0.6)--(6,1.6);
+\draw[thick] (4,1.1)--(5,1.1); \draw[thick] (4,0.85)--(4,1.35);
+\draw[thick] (8,1.1)--(9,1.1); \draw[thick] (9,0.85)--(9,1.35);
+\fill (20,1.1) circle (3pt);
+\node[font=\scriptsize,above] at (5,1.6) {$Q_1=5$};
+\node[font=\scriptsize,above] at (6.5,1.95) {median 6};
+\node[font=\scriptsize,above] at (8.4,1.6) {$Q_3=8$};
+\node[font=\scriptsize,below] at (4,0.75) {min 4};
+\node[font=\scriptsize,below] at (9.5,0.75) {whisker 9};
+\node[font=\scriptsize,above] at (20,1.3) {outlier 20};
+\draw[dashed,trframe] (12.5,0.3)--(12.5,2.0) node[above,font=\scriptsize]{upper fence $Q_3+1.5\,$IQR $=12.5$};
+\end{tikzpicture}
+\end{center}
+\begin{itemize}
+\item The box spans $Q_1$ to $Q_3$ (the middle 50\%); the line inside is the median.
+\item Whiskers extend to the most extreme data points within $Q_1 - 1.5\,\text{IQR}$ and $Q_3 + 1.5\,\text{IQR}$ (the \textbf{fences}); here the fences are
+  $0.5$ and $12.5$, so the upper whisker stops at 9 (the largest value $\le12.5$).
+\item Points beyond the fences are drawn individually as \textbf{outliers}: 20.
+\item \textbf{Reading skew}: median closer to $Q_1$ and a longer upper whisker/outliers $\Rightarrow$ right skew (our case).
+\item Side-by-side box plots compare groups (MBA \% by placement status): non-overlapping boxes mean a strong difference.
+\end{itemize}
+Why 1.5? For normal data, the fences sit at about $\pm2.7\sigma$, flagging roughly 0.7\% of points: a sensible ``unusual'' level.
+
+\subsection{Violin plot}
+Box plot plus a mirrored KDE: shows bimodality that a box plot hides.
+
+\subsection{Bar chart and count plot}
+For categorical variables: counts or means per category. Sort bars; use horizontal bars for long labels. \textbf{Pie charts}: only for 2--3 parts of a whole;
+humans compare angles poorly.
+
+\subsection{Q--Q plot}
+Plots the quantiles of your data against those of a theoretical distribution (usually normal). Points on the straight line $\Rightarrow$ the distribution
+matches. \textbf{Read}: an upward curve at the right end (points above the line) $\Rightarrow$ heavy right tail; S-shape $\Rightarrow$ heavy (or light) tails on both
+sides. Used to check the normality of regression residuals.
+
+\subsection{ECDF}
+Empirical cumulative distribution: for each value, the fraction of data $\le$ it. Reads percentiles directly (``80\% of jobs get fewer than 30 applies'');
+no binning choices.
+
+\subsection{Line plot}
+Values over time: trend, seasonality, sudden level shifts (a tracking change), missing periods.
+
+\begin{practical}[: where univariate EDA changes ML decisions]
+\begin{itemize}
+\item Right-skewed salary target $\to$ log-transform or use a Gamma/Tweedie objective; report MAPE not RMSE (Chapters 4, 34).
+\item Heavy tails (leptokurtic) in a feature $\to$ robust scaling, winsorising, tree models.
+\item Bimodal feature $\to$ maybe two populations: add a segment feature or model separately.
+\item Spike at 0 or at a round number $\to$ disguised missing values; recode.
+\item Near-constant column (99.9\% one value) $\to$ drop (no information) unless the rare value is the signal.
+\item High-cardinality categorical (50{,}000 companies) $\to$ grouping, frequency or target encoding (Chapter 34).
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: Boxplots (search)}{\yts{StatQuest+boxplots+clearly+explained}}
+\section{Interview questions}
+
+\begin{qa}{Compute the mean, median, mode, range, population and sample variance and standard deviation of salaries 4, 5, 5, 6, 7, 9, 20 (lakh). Which centre
+would you report and why?}
+\oneline{Mean 8, median 6, mode 5, range 16, population variance 26.29 (sd 5.13), sample variance 30.67 (sd 5.54); report the median because the
+distribution is right-skewed by one large salary, so the mean overstates what a typical analyst earns.}
+\why Deviations from 8 sum to 0; squared deviations sum to 184. Divide by 7 for population, 6 for sample. The mean exceeds the median, signalling right skew.
+\pushes \emph{``What if 20 were a data-entry error (should be 2.0)?''} Mean becomes $(56 - 20 + 2)/7 = 5.43$, median 5: the error moved the mean by 2.6 lakh,
+the median by 1.
+\end{qa}
+
+\begin{qa}{Why do we divide by $n-1$ for the sample variance?}
+\oneline{Because deviations are measured from the sample mean, which is fitted to the same data and so sits closer to the points than the true mean; dividing
+by $n$ would underestimate the population variance on average, and $n-1$ (the degrees of freedom left after estimating the mean) makes it unbiased.}
+\why $\E\big[\sum(x_i - \bar x)^2\big] = (n-1)\sigma^2$. Intuition with $n = 1$: one point has zero deviation from its own mean, which says nothing about spread;
+dividing by $n - 1 = 0$ correctly refuses to estimate.
+\end{qa}
+
+\begin{qa}{When is the median better than the mean, and when is the mean better?}
+\oneline{The median is better for skewed data or data with outliers (salaries, prices, durations) because it is robust; the mean is better for symmetric data and
+when totals matter (expected revenue = mean $\times$ count), and it is statistically more efficient when the data are roughly normal.}
+\end{qa}
+
+\begin{qa}{What are the types of skewness? Give the order of mean, median and mode for each, with real examples.}
+\oneline{Positive (right) skew: long right tail, mean $>$ median $>$ mode (salaries, property prices, applications per job); negative (left) skew: long left
+tail, mean $<$ median $<$ mode (scores on an easy exam); zero skew: symmetric, all three equal (heights).}
+\pushes \emph{``Is the order always that?''} It is a strong tendency, not a theorem; multimodal or discrete distributions can break it.
+\end{qa}
+
+\begin{qa}{What is kurtosis and what are its types? Is high kurtosis ``a peaked distribution''?}
+\oneline{Kurtosis is the standardised fourth moment and measures tail heaviness: mesokurtic (normal, excess 0), leptokurtic (heavy tails, excess $>0$), platykurtic
+(light tails, excess $<0$); it is primarily about tails and outliers, not peakedness.}
+\why A distribution can have a flat top and heavy tails, or a sharp peak and light tails. Practical reading: high kurtosis means extreme values occur more often than a
+normal model predicts, so normal-based intervals and z-score rules underestimate risk.
+\end{qa}
+
+\begin{qa}{Interpret a box plot of salary where the median line is near the bottom of the box, the upper whisker is long and several points lie above it.}
+\oneline{The distribution is right-skewed: the lower half of the middle 50\% is compressed and the upper half stretched, and several unusually high salaries lie beyond
+$Q_3 + 1.5\,$IQR.}
+\pushes \emph{``Would you delete those points?''} Not without checking: high salaries for senior roles are genuine. Consider a log transform or robust methods.
+\end{qa}
+
+\begin{qa}{How do you read a Q--Q plot, and where is it used in ML?}
+\oneline{Each point compares a data quantile with the quantile expected under a reference distribution; a straight line means a good match, curvature at the ends
+means heavier or lighter tails, and a consistent bend means skew; it is used to check normality of regression residuals and to decide on transformations.}
+\end{qa}
+
+\begin{qa}{\deep Two datasets have the same mean, median, variance, skewness and kurtosis. Can they still look very different?}
+\oneline{Yes: summary statistics compress a distribution into a few numbers, and very different shapes (bimodal vs unimodal, clustered vs spread) can share them;
+always plot.}
+\why Anscombe's quartet and the ``Datasaurus dozen'' show datasets with identical means, variances and correlations but completely different scatter plots.
+\end{qa}
+
+\begin{qa}{Histogram of ``years of experience'' shows a spike at exactly 0 and another at 30. What could they mean?}
+\oneline{The spike at 0 is probably genuine freshers mixed with missing values coded as 0; the spike at 30 may be a default or capped value from the form; both must be
+investigated before modelling.}
+\why Cross-check: freshers should have no previous employer; a cap at 30 means the true values are censored.
+\end{qa}
+
+\begin{qa}{What is the coefficient of variation and when would you use it?}
+\oneline{CV $= s/\bar x$, the standard deviation relative to the mean; use it to compare variability across groups with very different scales or units, such as salary
+variability for freshers vs senior leaders.}
+\end{qa}
+
+\begin{qa}{What is the geometric mean and when is it the right average?}
+\oneline{The $n$-th root of the product of values; it is the right average for multiplicative quantities like growth rates: growth of 10\% then 20\% averages to
+14.9\% per period, not 15\%.}
+\end{qa}
+
+\begin{qa}{\deep Why do we square deviations in the variance instead of taking absolute values?}
+\oneline{Squaring gives a smooth function with clean algebra (variances of independent variables add; the mean minimises squared error), and connects to the normal
+distribution; absolute deviations are more robust but mathematically less convenient, and lead to the median and MAD instead.}
+\end{qa}
+
+\begin{qa}{Which plot would you use to show: (a) the distribution of MBA percentage, (b) MBA percentage by placement status, (c) the number of students per degree
+type, (d) applications per day over a year?}
+\oneline{(a) histogram or KDE; (b) side-by-side box or violin plots; (c) sorted bar (count) plot; (d) line plot, ideally with a 7-day moving average.}
+\end{qa}
+
+\begin{qa}{\deep A feature is 99.5\% zeros. Drop it or keep it?}
+\oneline{Keep it if the rare non-zero values carry signal for the target (for example ``has a patent'' predicting senior roles), which you check by comparing target rates;
+drop it if it is noise. Near-zero-variance filters should not be applied blindly.}
+\end{qa}
+
+\begin{qa}{What are moments of a distribution?}
+\oneline{Expected values of powers: the first raw moment is the mean, the second central moment the variance, the third standardised moment the skewness, and the
+fourth standardised moment the kurtosis; together they describe location, spread, asymmetry and tail weight.}
+\end{qa}
