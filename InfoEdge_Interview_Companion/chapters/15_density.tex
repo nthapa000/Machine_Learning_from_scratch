@@ -1,1 +1,249 @@
-% TODO 15_density
+\chapter{Density Estimation and Clustering: Histograms, KDE, K-Means, GMM and EM}
+\companion{StatQuest: K-means clustering}{\ytid{4b5d3muPQmA}}
+
+The syllabus line is ``Density Estimation (KDE, K-Means etc)''. These methods answer: \emph{where does the data live, and in what
+groups?} They are unsupervised, so there is no label to check against, which is why interviewers probe whether you know how to choose
+$K$, what the algorithms assume, and when they fail.
+
+\section{What is density estimation?}
+A \textbf{probability density} $p(x)$ describes how data are spread: high where values are common, low where rare; it integrates to 1.
+\textbf{Density estimation} means estimating $p(x)$ from samples. Uses: understanding a variable's shape (bimodal salaries), anomaly
+detection (low-density points are unusual), generative modelling, and as a building block (Naive Bayes, Bayes classifiers).
+\begin{itemize}
+\item \textbf{Parametric}: assume a family (Gaussian) and estimate a few parameters (mean, variance). Efficient if the family is right,
+  badly wrong otherwise.
+\item \textbf{Non-parametric}: let the data shape the estimate: histograms, KDE, $k$-NN density.
+\item \textbf{Mixtures} sit between: a weighted sum of simple components (GMM).
+\end{itemize}
+
+\section{Histograms}
+Split the range into bins of width $h$; the density in a bin is $\frac{\text{count}}{n\cdot h}$ (so areas sum to 1).
+\begin{example}[: histogram density]
+100 points, 20 fall in a bin of width 0.5: density $= 20/(100\times0.5) = 0.4$.
+\end{example}
+Weaknesses: blocky (discontinuous), depends on bin width and on where bins start, scales badly to many dimensions (bins multiply).
+
+\section{Kernel Density Estimation (KDE)}
+\subsection{The idea}
+Instead of counting points in fixed bins, put a small smooth ``bump'' (a \textbf{kernel}, e.g. a tiny Gaussian) on top of every data point
+and add the bumps up:
+\[ \hat p(x) = \frac{1}{nh}\sum_{i=1}^nK\Big(\frac{x - x_i}{h}\Big). \]
+$h$ is the \textbf{bandwidth} (width of each bump). $K$ integrates to 1, so $\hat p$ does too.
+
+\begin{example}[: KDE by hand]
+Box kernel $K(u) = \frac12$ for $|u|\le1$, $h = 1$, data $\{1, 2, 4\}$. At $x = 2.5$: $|2.5 - 1|/1 = 1.5$ (out), $0.5$ (in), $1.5$ (out).
+$\hat p = \frac{1}{3\cdot1}\cdot\frac12 = 0.167$.
+Gaussian kernel, $h = 1$, data $\{0, 2\}$, at $x = 1$: both points are 1 away: $\hat p = \frac{1}{2}(\phi(1) + \phi(1)) = 0.242$.
+\end{example}
+
+\subsection{Bandwidth is everything}
+Small $h$: spiky estimate, one bump per point, high variance (overfitting). Large $h$: over-smoothed, real modes merged, high bias. The
+kernel shape matters much less. Rules of thumb: \textbf{Silverman} $h = 1.06\,\hat\sigma\,n^{-1/5}$ (assumes roughly Gaussian data; with
+$\hat\sigma = 2$, $n = 32$: $h = 1.06\cdot2\cdot0.5 = 1.06$); or choose $h$ by cross-validated likelihood.
+
+\subsection{Limits}
+Prediction cost $O(n)$ per point; boundary bias (density leaks below 0 for salaries; use log scale or reflection); curse of dimensionality
+(needs exponentially more data as dimension grows).
+
+\section{K-Means clustering}
+\subsection{The algorithm (Lloyd's)}
+\begin{enumerate}
+\item Choose $K$ and initial centroids.
+\item \textbf{Assign} each point to its nearest centroid.
+\item \textbf{Update} each centroid to the mean of its assigned points.
+\item Repeat 2--3 until assignments stop changing.
+\end{enumerate}
+It minimises the \textbf{inertia} (within-cluster sum of squares) $\sum_i\norm{\mathbf x_i - \boldsymbol\mu_{c(i)}}^2$. Each step cannot increase it,
+so it converges, but only to a local minimum that depends on initialisation.
+
+\begin{example}[: K-Means by hand]
+1-D points $\{1, 2, 6, 7\}$, $K = 2$, initial centroids 1 and 2.
+Assign: 1$\to$c1; 2$\to$c2; 6, 7$\to$c2. Update: c1 $=1$, c2 $= 5$.
+Assign: 1$\to$c1; 2 is 1 from c1 and 3 from c2$\to$c1; 6, 7$\to$c2. Update: c1 $= 1.5$, c2 $= 6.5$.
+Assign again: unchanged. Inertia $= 0.25 + 0.25 + 0.25 + 0.25 = 1$.
+\end{example}
+
+\subsection{Initialisation: k-means++}
+Pick the first centroid at random; pick each next centroid with probability proportional to the squared distance to the nearest
+existing centroid. Spreads centroids out, gives provably better starts. Also run several restarts (\code{n\_init}) and keep the lowest
+inertia.
+\begin{example}[: k-means++ probabilities]
+Remaining points at distances 1, 2, 3 from the first centroid: weights $1, 4, 9$; probabilities $1/14$, $4/14$, $9/14$.
+\end{example}
+
+\subsection{Choosing $K$}
+\begin{itemize}
+\item \textbf{Elbow}: plot inertia vs $K$; it always decreases; pick where improvement flattens.
+\item \textbf{Silhouette}: for each point, $a$ = mean distance to its own cluster, $b$ = mean distance to the nearest other cluster;
+  $s = \frac{b - a}{\max(a,b)}\in[-1,1]$. Average over points; higher is better. Example: $a = 2$, $b = 5$: $s = 0.6$.
+\item \textbf{Gap statistic}: compare inertia with that expected under a structureless reference distribution.
+\item \textbf{Business usefulness}: segments must be actionable.
+\end{itemize}
+
+\subsection{Assumptions and failure modes}
+K-Means assumes roughly spherical, similar-sized, similar-density clusters (it draws straight boundaries halfway between centroids:
+a Voronoi partition). It fails on elongated, nested or very unequal clusters; it is sensitive to outliers (means) and to feature scaling
+(Euclidean distance); categorical data need K-modes. Cost per iteration $O(nKd)$.
+
+\section{Gaussian Mixture Models and EM}
+\subsection{The model}
+Assume each point was generated by first picking a component $k$ with probability $\pi_k$, then drawing from $\mathcal N(\boldsymbol\mu_k,
+\Sigma_k)$. The density is
+\[ p(\mathbf x) = \sum_{k=1}^K\pi_k\,\mathcal N(\mathbf x\mid\boldsymbol\mu_k,\Sigma_k). \]
+A GMM is both a \textbf{density estimator} (flexible shapes from Gaussian bumps) and a \textbf{soft clustering} method (each point gets a
+probability of belonging to each component).
+
+\subsection{EM, step by step}
+We do not know which component generated each point (a hidden variable), so maximum likelihood has no closed form. EM alternates:
+\begin{itemize}
+\item \textbf{E-step}: \textbf{responsibilities} $\gamma_{ik} = \frac{\pi_k\mathcal N(\mathbf x_i\mid\boldsymbol\mu_k,\Sigma_k)}{\sum_j\pi_j\mathcal N(\mathbf x_i\mid\boldsymbol\mu_j,\Sigma_j)}$:
+  how much component $k$ ``owns'' point $i$ (Bayes' theorem).
+\item \textbf{M-step}: re-estimate with responsibilities as soft counts: $N_k = \sum_i\gamma_{ik}$, $\pi_k = N_k/n$,
+  $\boldsymbol\mu_k = \frac1{N_k}\sum_i\gamma_{ik}\mathbf x_i$, $\Sigma_k = \frac1{N_k}\sum_i\gamma_{ik}(\mathbf x_i - \boldsymbol\mu_k)(\mathbf x_i - \boldsymbol\mu_k)^\top$.
+\end{itemize}
+Each iteration never decreases the likelihood; converges to a local optimum.
+
+\begin{example}[: one E-step and one M-step]
+1-D, $\pi = (0.5, 0.5)$, $\mu = (0, 4)$, $\sigma = 1$. Point $x = 1$: $\mathcal N(1\mid0,1) = 0.242$, $\mathcal N(1\mid4,1) = \phi(3) = 0.0044$.
+$\gamma_1 = 0.242/0.2464 = 0.982$.
+M-step example: points 0, 2, 4 with responsibilities 1, 0.5, 0 for component 1: $N_1 = 1.5$, $\mu_1 = (0 + 1 + 0)/1.5 = 0.667$, $\pi_1 = 0.5$.
+\end{example}
+
+\subsection{K-Means is a special case}
+With equal, spherical covariances $\sigma^2I$ shrinking to 0, responsibilities become 0/1 (hard assignments to the nearest mean) and EM
+becomes K-Means. So K-Means is ``hard-assignment EM for a GMM with identical spherical clusters''.
+
+\subsection{Practical issues}
+\textbf{Singularity}: a component can collapse onto one point (variance $\to0$, likelihood $\to\infty$); fix with a variance floor
+(\code{reg\_covar}) or priors. \textbf{Choosing $K$}: BIC or AIC (likelihood penalised by parameter count). \textbf{Covariance types}:
+full, diagonal, spherical, tied (fewer parameters). Parameters for $K = 3$, $d = 2$, full covariance: means 6, covariances $3\times3 = 9$,
+weights 2: total 17.
+
+\section{Other clustering methods worth knowing}
+\begin{itemize}
+\item \textbf{DBSCAN}: density-based. A point is a \emph{core point} if at least \code{minPts} points lie within radius $\varepsilon$. Clusters
+  are connected core points plus their border points; everything else is noise. Finds arbitrary shapes and outliers; no $K$ needed;
+  struggles with varying densities. (HDBSCAN handles varying densities.)
+\item \textbf{Hierarchical (agglomerative)}: start with every point alone; repeatedly merge the closest pair. Linkage: single (min distance;
+  chaining), complete (max), average, \textbf{Ward} (merge that least increases within-cluster variance). Produces a dendrogram; cut at any
+  level.
+\item \textbf{Mean shift}: move each point uphill on a KDE to a mode; points ending at the same mode form a cluster.
+\item \textbf{Spectral clustering}: cluster using eigenvectors of a similarity graph; handles non-convex shapes.
+\end{itemize}
+
+\begin{practical}[: clustering and densities at InfoEdge]
+\begin{itemize}
+\item \textbf{Talent Pulse} cohorts and seeker segmentation (freshers in tier-2 cities looking for remote IT jobs vs mid-career sales):
+  K-Means or GMM on behaviour features, then named by the business.
+\item \textbf{Salary distributions} for a title are often bimodal (freshers and seniors): a GMM or KDE represents them; a single mean misleads.
+\item \textbf{Anomaly detection}: low KDE/GMM density for posting behaviour flags suspicious recruiters.
+\item \textbf{Taxonomy building}: clustering embeddings of 50 lakh raw skill strings to discover synonym groups (``ML'', ``machine learning'',
+  ``M.L.''), the first step of SilverSkAI-style normalisation.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: DBSCAN, Clearly Explained}{\ytid{RDZUdRSDOok}}
+\section{Interview questions}
+
+\begin{qa}{Explain K-Means, its objective, and why it always converges.}
+\oneline{Alternate between assigning points to the nearest centroid and moving each centroid to the mean of its points, which minimises the
+within-cluster sum of squared distances; each step can only lower that objective and there are finitely many assignments, so it converges, though
+only to a local minimum.}
+\why Assignment step: for fixed centroids, nearest-centroid assignment minimises each point's term. Update step: for fixed assignments, the mean
+minimises the sum of squared distances. Monotone decrease plus finite partitions implies termination.
+\worked The $\{1,2,6,7\}$ example ends with centroids 1.5 and 6.5, inertia 1.
+\end{qa}
+
+\begin{qa}{How do you choose $K$ in K-Means?}
+\oneline{Use the elbow of the inertia curve, the average silhouette score, the gap statistic, or stability across runs, and finally whether the
+segments are actionable for the business.}
+\why Inertia always falls with $K$ (with $K = n$ it is 0), so look for diminishing returns. Silhouette $s = (b - a)/\max(a,b)$ rewards tight,
+well-separated clusters.
+\end{qa}
+
+\begin{qa}{\deep Is K-Means a special case of a Gaussian mixture model?}
+\oneline{Yes, in the limit: a GMM with equal mixing weights and identical spherical covariances $\sigma^2I$ with $\sigma\to0$ makes responsibilities
+hard 0/1 assignments to the nearest mean, and EM then reduces exactly to K-Means.}
+\why As $\sigma\to0$, $\gamma_{ik}\propto\exp(-\norm{\mathbf x_i - \boldsymbol\mu_k}^2/2\sigma^2)$ is dominated by the nearest mean. The M-step mean update is
+then the plain cluster mean. GMM generalises K-Means with soft assignments, ellipsoidal shapes, different sizes and a likelihood for model selection.
+\end{qa}
+
+\begin{qa}{Explain EM for Gaussian mixtures and compute a responsibility.}
+\oneline{EM alternates computing each point's probability of belonging to each component given current parameters (E-step) and re-estimating
+weights, means and covariances using those probabilities as soft counts (M-step); for $x = 1$ between components at 0 and 4 with unit variance,
+the responsibility of the first is 0.982.}
+\why EM maximises a lower bound on the log-likelihood; the E-step makes the bound tight, the M-step maximises it. Each iteration increases (or keeps)
+the likelihood.
+\end{qa}
+
+\begin{qa}{\deep What does a GMM do when one component collapses onto a single point, and how do you prevent it?}
+\oneline{Its variance shrinks toward zero and the likelihood goes to infinity, a degenerate solution; prevent it with a minimum variance (regularisation
+added to the covariance diagonal), priors (MAP-EM), or restarting.}
+\end{qa}
+
+\begin{qa}{What is KDE, and how does the bandwidth affect it?}
+\oneline{KDE estimates a density by placing a kernel bump on each data point and averaging them; small bandwidth gives a spiky, high-variance estimate,
+large bandwidth an over-smoothed, high-bias one.}
+\worked Silverman: $\hat\sigma = 2$, $n = 32$: $h\approx1.06$.
+\pushes \emph{``How do you pick it properly?''} Maximise cross-validated log-likelihood of held-out points.
+\end{qa}
+
+\begin{qa}{Compute a box-kernel KDE at $x = 2.5$ for data $\{1,2,4\}$, $h = 1$.}
+\oneline{Only the point 2 is within distance 1, so $\hat p = \frac{1}{3}\cdot\frac12 = 0.167$.}
+\end{qa}
+
+\begin{qa}{\deep Salaries for ``Data Scientist'' look bimodal. How would you model the distribution, and why not report the mean?}
+\oneline{Use a two-component GMM (on log salary) or a KDE; the mean falls in the valley between the fresher and senior humps and describes almost
+nobody.}
+\why Better still, condition on experience: the bimodality is probably two populations. Report the distribution or quantiles by experience band.
+\end{qa}
+
+\begin{qa}{When does K-Means fail? Give three examples and alternatives.}
+\oneline{Non-spherical shapes (two moons: use DBSCAN/spectral), very different cluster sizes or densities (use GMM or HDBSCAN), and outliers or unscaled
+features (scale, use K-Medoids or robust methods).}
+\end{qa}
+
+\begin{qa}{Explain DBSCAN and count the core points for 1-D points $0, 0.5, 1, 5$ with $\varepsilon = 1$, minPts $= 3$ (including the point itself).}
+\oneline{DBSCAN grows clusters from dense core points and labels sparse points as noise; here 0 has $\{0, 0.5, 1\}$ (3: core), 0.5 has 3 (core), 1 has
+$\{0, 0.5, 1\}$ (3: core), 5 has 1 (noise): three core points, one cluster and one noise point.}
+\end{qa}
+
+\begin{qa}{Single vs complete vs Ward linkage in hierarchical clustering.}
+\oneline{Single linkage merges by the closest pair of points and tends to chain clusters together; complete linkage uses the farthest pair and gives
+compact clusters; Ward merges the pair that least increases within-cluster variance and behaves like K-Means.}
+\end{qa}
+
+\begin{qa}{Why must features be scaled before K-Means? Which clustering methods do not need it?}
+\oneline{K-Means uses Euclidean distance, so large-range features dominate; methods on a precomputed meaningful distance (e.g. cosine on normalised
+embeddings) or density on a single scale avoid the issue, but almost all distance-based clustering needs scaling.}
+\end{qa}
+
+\begin{qa}{\deep How do you evaluate clustering when there are no labels?}
+\oneline{With internal metrics (silhouette, Davies--Bouldin, Calinski--Harabasz), stability under resampling, and above all external usefulness: do segments
+differ on outcomes that matter (apply rate, churn) and can the business act on them?}
+\why If some labels exist, use adjusted Rand index or NMI. In a case study, propose an A/B test of segment-specific campaigns.
+\end{qa}
+
+\begin{qa}{How would you use density estimation for anomaly detection?}
+\oneline{Fit a density (KDE, GMM) on normal behaviour and flag points whose estimated density is below a threshold chosen for an acceptable alert rate.}
+\why For recruiters: features like jobs posted per hour, distinct cities, salary range width; a GMM on log-transformed features; alerts on the lowest
+0.1\% density. Isolation Forest is a non-density alternative.
+\end{qa}
+
+\begin{qa}{What is the silhouette of a point with mean intra-cluster distance 2 and mean nearest-cluster distance 5?}
+\oneline{$(5 - 2)/5 = 0.6$.}
+\end{qa}
+
+\begin{qa}{\deep Can you use K-Means for something other than clustering?}
+\oneline{Yes: vector quantisation (compressing data or images to $K$ colours), creating features (distance to each centroid, cluster ID), initialising GMMs,
+building inverted-file indexes for approximate nearest neighbour search (IVF in FAISS), and summarising large datasets.}
+\end{qa}
+
+\begin{qa}{How many free parameters does a GMM with $K = 3$, $d = 2$ and full covariances have?}
+\oneline{$17$: $3\times2 = 6$ means, $3\times3 = 9$ covariance entries (3 per symmetric $2\times2$), and $3 - 1 = 2$ mixing weights.}
+\end{qa}
+
+\begin{qa}{K-Means vs GMM: when would you choose each?}
+\oneline{K-Means for speed and simple, round, similar-sized clusters with hard assignments; GMM when clusters are elliptical or of different sizes, when you
+need soft membership probabilities or a density, and when you want a likelihood-based way (BIC) to choose $K$.}
+\end{qa}

@@ -1,1 +1,298 @@
-% TODO 14_matfact
+\chapter{Matrix Factorisations: SVD, PCA, NMF, Recommenders and t-SNE}
+\companion{StatQuest: Principal Component Analysis (PCA), Step by Step}{\ytid{FgakZw6K1QQ}}
+
+The InfoEdge hire was asked how PCA uses SVD, what a scree plot is, and how t-SNE and its perplexity work. Matrix
+factorisation is also how classic recommenders (``jobs you may like'', Jeevansathi's collaborative models) work. This chapter
+starts from ``what is a matrix'' and ends with recommender maths you can do on paper.
+
+\section{What ``factorising a matrix'' means}
+A matrix is a table of numbers. Factorising it means writing it as a product of simpler matrices, just as $12 = 3\times4$.
+Why? Because the factors reveal structure and compress data.
+
+\begin{example}[: a rank-1 table]
+Ratings of 3 users for 3 jobs:
+$A = \begin{pmatrix}2 & 4 & 6\\1 & 2 & 3\\3 & 6 & 9\end{pmatrix} = \begin{pmatrix}2\\1\\3\end{pmatrix}\begin{pmatrix}1 & 2 & 3\end{pmatrix}$.
+Nine numbers are explained by six: a ``user enthusiasm'' and a ``job attractiveness''. Every row is a multiple of every other: the
+\textbf{rank} is 1 (only one independent pattern).
+\end{example}
+Real data are never exactly low-rank, but they are often \emph{approximately} low-rank: a few patterns explain most of the variation.
+Factorisation finds those patterns.
+
+\section{A quick refresher: vectors, matrices, eigenvectors}
+\begin{itemize}
+\item Multiplying a matrix by a vector transforms the vector (stretches, rotates, projects).
+\item An \textbf{eigenvector} $\mathbf v$ of a square matrix $A$ is a direction that $A$ only stretches: $A\mathbf v = \lambda\mathbf v$; the
+  stretch factor $\lambda$ is the \textbf{eigenvalue}.
+\item A symmetric matrix (like a covariance matrix) has real eigenvalues and perpendicular eigenvectors.
+\item The \textbf{covariance matrix} $\Sigma$ of centred data $X$ ($n\times d$) is $\frac{1}{n-1}X^\top X$: entry $(j,k)$ is the covariance of
+  features $j$ and $k$; the diagonal holds variances.
+\end{itemize}
+
+\section{SVD: the master factorisation}
+\textbf{Every} real $m\times n$ matrix can be written
+\[ A = U\Sigma V^\top, \]
+\begin{itemize}
+\item $V$ ($n\times n$): orthonormal columns $\mathbf v_i$, the \textbf{right singular vectors}: directions in the input (column) space.
+\item $\Sigma$: diagonal with \textbf{singular values} $\sigma_1\ge\sigma_2\ge\dots\ge0$: how much $A$ stretches each direction.
+\item $U$ ($m\times m$): orthonormal columns $\mathbf u_i$, the \textbf{left singular vectors}: where those directions land.
+\end{itemize}
+Geometric meaning: any linear map is a rotation ($V^\top$), then a stretch along the axes ($\Sigma$), then another rotation ($U$).
+Equivalently $A = \sum_i\sigma_i\mathbf u_i\mathbf v_i^\top$: a sum of rank-1 layers, most important first.
+
+Connections: $A^\top A = V\Sigma^2V^\top$, so the $\mathbf v_i$ are eigenvectors of $A^\top A$ and $\sigma_i^2$ its eigenvalues. Rank $=$
+number of non-zero singular values. For a symmetric positive semi-definite matrix, SVD and eigendecomposition coincide. Thin SVD of a
+$1000\times50$ full-rank matrix: $U$ is $1000\times50$, $\Sigma$ $50\times50$, $V$ $50\times50$.
+
+\subsection{Low-rank approximation (Eckart--Young)}
+Keep only the top $k$ terms: $A_k = \sum_{i=1}^k\sigma_i\mathbf u_i\mathbf v_i^\top$. This is the \emph{best} rank-$k$ approximation of $A$ in
+both Frobenius and spectral norms. The squared Frobenius error equals the sum of the discarded $\sigma_i^2$.
+\begin{example}[: compression]
+Singular values 5, 3, 1. Rank-1 error $=\sqrt{9 + 1} = 3.16$. Rank 2 keeps $(25 + 9)/35 = 97\%$ of the squared norm. A $100\times200$ image
+stored with rank 10 needs $10(100 + 200 + 1) = 3{,}010$ numbers instead of 20{,}000.
+\end{example}
+
+\section{PCA is SVD of the centred data}
+\subsection{The goal}
+Find a few new axes (\textbf{principal components}) that capture as much of the data's variation as possible, so we can describe each
+point with fewer numbers while losing little information.
+
+\subsection{Step by step}
+\begin{enumerate}
+\item \textbf{Centre} each feature (subtract its mean). Usually also \textbf{standardise} (divide by its standard deviation), otherwise
+  features with large units dominate.
+\item Compute the covariance matrix $\Sigma = \frac{1}{n-1}X^\top X$.
+\item Find its eigenvectors (the principal directions) and eigenvalues (the variance along each).
+\item Sort by eigenvalue; keep the top $k$. Project: $Z = XV_k$ (each point's coordinates on the new axes).
+\end{enumerate}
+\textbf{Via SVD}: $X = U\Sigma V^\top$ directly gives the directions $V$; the variances are $\sigma_i^2/(n-1)$; the projected coordinates
+are $U\Sigma$. Libraries use SVD because it avoids forming $X^\top X$ (which squares the condition number and loses precision).
+
+\begin{example}[: PCA on two features by hand]
+Covariance matrix $\begin{pmatrix}2 & 1\\1 & 2\end{pmatrix}$ (two standardised-ish features with covariance 1).
+Eigenvalues: $\det\begin{pmatrix}2-\lambda & 1\\1 & 2-\lambda\end{pmatrix} = (2-\lambda)^2 - 1 = 0\Rightarrow\lambda = 3, 1$.
+Eigenvectors: $(1,1)/\sqrt2$ for 3 and $(1,-1)/\sqrt2$ for 1. PC1 is ``the sum of the two features'' and carries $3/4 = 75\%$ of the variance.
+\end{example}
+
+\subsection{How many components? The scree plot}
+A \textbf{scree plot} shows eigenvalues (or explained-variance ratio $\lambda_i/\sum\lambda$) against component number. Look for the
+``elbow'' after which the curve flattens (``scree'' is the rubble at the foot of a cliff). Alternatives: keep enough components for
+90--95\% cumulative variance; Kaiser rule (eigenvalue $>1$ on standardised data); or choose $k$ by cross-validated downstream performance.
+\begin{example}[: explained variance]
+Eigenvalues 6, 3, 1: PC1 explains 60\%, PC1+PC2 90\%.
+\end{example}
+
+\subsection{Limitations of PCA}
+Linear only; maximises variance, which need not be what matters for a target (Chapter 10); sensitive to scaling and outliers; components
+are mixtures of all features and hard to interpret; assumes the mean and covariance summarise the data.
+
+\section{NMF: non-negative parts}
+\textbf{Non-negative matrix factorisation}: $A\approx WH$ with all entries of $W$ and $H$ non-negative. Because nothing can cancel,
+factors are additive ``parts''. On a TF-IDF document--term matrix, each row of $H$ is a \emph{topic} (a non-negative combination of words) and
+each row of $W$ says how much of each topic a document contains. Fitted by multiplicative updates or alternating least squares; not unique;
+needs non-negative input.
+
+\section{Matrix factorisation for recommendations}
+\subsection{The setting}
+A huge user $\times$ item matrix $R$ (seekers $\times$ jobs) with a few observed entries (ratings, applies, clicks); most are unknown, not zero.
+Goal: predict the unknown entries.
+
+\subsection{The model}
+Give each user $u$ a vector $\mathbf p_u\in\R^k$ and each item $i$ a vector $\mathbf q_i\in\R^k$ (latent factors, $k\approx 32$--$200$). Predict
+\[ \hat r_{ui} = \mu + b_u + b_i + \mathbf p_u^\top\mathbf q_i, \]
+with global mean $\mu$, user bias $b_u$ (this user rates/applies a lot) and item bias $b_i$ (popular job). Factors are learned so that
+dot products reproduce the observed entries:
+\[ \min\sum_{(u,i)\ \text{observed}}(r_{ui} - \hat r_{ui})^2 + \lambda(\norm{\mathbf p_u}^2 + \norm{\mathbf q_i}^2 + b_u^2 + b_i^2). \]
+Latent dimensions often become interpretable (``remote-friendly'', ``startup vs MNC'', ``data roles'').
+
+\begin{example}[: predicting a rating]
+$\mu = 3.5$, $b_u = 0.2$, $b_i = -0.3$, $\mathbf p_u = (1, 2)$, $\mathbf q_i = (3, 0.5)$: $\mathbf p_u^\top\mathbf q_i = 3 + 1 = 4$; $\hat r = 3.5 + 0.2 - 0.3 + 4 = 7.4$
+(on an unbounded scale; clip if needed).
+\end{example}
+
+\subsection{Why not plain SVD?}
+SVD needs a complete matrix; filling unknowns with 0 says ``the user dislikes every unseen job'', which is false. Matrix factorisation only fits
+the observed entries.
+
+\subsection{Training: SGD and ALS}
+\textbf{SGD}: for each observed $(u,i)$, error $e = r - \hat r$; update $\mathbf p_u\leftarrow\mathbf p_u + \eta(e\,\mathbf q_i - \lambda\mathbf p_u)$ and
+$\mathbf q_i\leftarrow\mathbf q_i + \eta(e\,\mathbf p_u - \lambda\mathbf q_i)$.
+\begin{example}[: one SGD step]
+$r = 4$, $\mathbf p = (1,0)$, $\mathbf q = (2,1)$, $\eta = 0.1$, $\lambda = 0$: $\hat r = 2$, $e = 2$. $\mathbf p\leftarrow(1,0) + 0.2(2,1) = (1.4, 0.2)$;
+$\mathbf q\leftarrow(2,1) + 0.2(1,0) = (2.2, 1)$ (using the old $\mathbf p$).
+\end{example}
+\textbf{ALS (alternating least squares)}: fix all item vectors and solve each user vector exactly (a small ridge regression), then fix users and
+solve items; repeat. Each subproblem is convex and independent per user, so ALS parallelises well (Spark MLlib) and handles implicit feedback.
+
+\subsection{Implicit feedback and cold start}
+Clicks and applies are \emph{implicit}: an absent click is not a dislike. Implicit ALS treats every entry with a confidence weight
+($1 + \alpha\cdot\text{count}$) and a binary preference. \textbf{Cold start} (new job, new user): no interactions, no factors. Use content
+features (title, skills, location embeddings), hybrid models (factorisation machines, two-tower networks), popularity priors, and exploration.
+
+\section{t-SNE and UMAP: seeing clusters}
+PCA is linear and preserves large-scale variance. For \emph{visualising} clusters in high-dimensional data (resume embeddings), use
+non-linear methods that preserve \emph{neighbourhoods}.
+
+\subsection{t-SNE in steps}
+\begin{enumerate}
+\item In the original space, turn distances into probabilities that $j$ is $i$'s neighbour: a Gaussian around each point, $p_{j|i}\propto
+  \exp(-\norm{\mathbf x_i - \mathbf x_j}^2/2\sigma_i^2)$; symmetrise.
+\item Each point's bandwidth $\sigma_i$ is chosen so that its neighbourhood has a set \textbf{perplexity} (roughly the effective number of
+  neighbours, typically 5--50): dense regions get small $\sigma_i$, sparse regions large.
+\item In 2-D, define similarities with a heavy-tailed \textbf{Student-t} distribution: $q_{ij}\propto(1 + \norm{\mathbf y_i - \mathbf y_j}^2)^{-1}$.
+\item Move the 2-D points by gradient descent to minimise $KL(P\,\|\,Q)$.
+\end{enumerate}
+Why the t-distribution: its heavy tails let moderately distant points sit far apart in 2-D, relieving the ``crowding problem'' and producing
+clear, separated clusters.
+
+\subsection{How to read (and not read) a t-SNE plot}
+\begin{itemize}
+\item Clusters and local neighbourhoods are meaningful.
+\item Cluster \emph{sizes} and the \emph{distances between clusters} are not reliably meaningful.
+\item Results depend on perplexity and random seed; run several.
+\item It is for visualisation: no \code{transform} for new points; do not feed t-SNE coordinates to a classifier.
+\item \textbf{Perplexity}: low values focus on very local structure (many small clumps); high values capture more global structure but can
+  merge clusters.
+\end{itemize}
+\textbf{UMAP} is a faster alternative that preserves more global structure and can transform new points.
+
+\begin{practical}[: factorisations at InfoEdge]
+\begin{itemize}
+\item \textbf{Collaborative models} (Jeevansathi slide: ``content models, activity-based models, collaborative models''): MF/ALS on
+  profile-view and interest interactions; ``users who showed interest in similar profiles''.
+\item \textbf{Job recommendations} (``Reco'' in the Seeker AI engines): MF or two-tower models on apply data, with content features for cold
+  start (most jobs live only weeks, so cold start is the norm).
+\item \textbf{LSA} (truncated SVD of TF-IDF) as a quick semantic search baseline; PCA to compress embeddings for storage in a vector index.
+\item t-SNE/UMAP of resume embeddings to sanity-check that the taxonomy's clusters (Data Science, DevOps, Sales) separate.
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: t-SNE, Clearly Explained}{\ytid{NEaUSP4YerM}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{INT: PCA via SVD and the scree plot} Explain PCA and how it uses SVD. What is a scree plot?}
+\oneline{PCA finds orthogonal directions of maximum variance in centred data; the right singular vectors of the centred data matrix are those
+directions, and the squared singular values divided by $n-1$ are the variances; a scree plot shows those variances in decreasing order to choose
+how many components to keep.}
+\why
+\textbf{Objective.} Find unit vector $\mathbf v$ maximising the variance of projections $\Var(X\mathbf v) = \mathbf v^\top\Sigma\mathbf v$. With a Lagrange
+multiplier for $\norm{\mathbf v} = 1$: $\Sigma\mathbf v = \lambda\mathbf v$, so the best $\mathbf v$ is the top eigenvector and the variance captured is
+$\lambda$. The next component maximises variance subject to being orthogonal to the first, and so on.
+\textbf{SVD link.} $X = U\Sigma_sV^\top$ gives $X^\top X = V\Sigma_s^2V^\top$: eigenvectors $V$, eigenvalues $\sigma_i^2$. So compute SVD of the
+centred $X$ and read off $V$ (loadings), $\sigma_i^2/(n-1)$ (variances) and $U\Sigma_s$ (scores). SVD is numerically better than forming $X^\top X$.
+\textbf{Scree plot.} Plot $\lambda_i$ or explained-variance ratio; choose $k$ at the elbow or by a cumulative threshold.
+\worked Eigenvalues 6, 3, 1: 60\%, 30\%, 10\%; two components keep 90\%. Centred data with $n = 101$ and $\sigma_1 = 20$: variance along PC1 $= 400/100 = 4$.
+\pushes \emph{``Why centre?''} Without centring, the first component points toward the mean rather than along the spread. \emph{``Why standardise?''}
+So a feature in rupees does not dominate one in years. \emph{``Is PCA feature selection?''} No, each component mixes all features.
+\end{qa}
+
+\begin{qa}{\pyq{INT: t-SNE and perplexity} Why is t-SNE useful for seeing clusters, and what does perplexity control?}
+\oneline{t-SNE places points in 2-D so that points that are neighbours in high dimensions remain neighbours, using a heavy-tailed similarity in 2-D
+that pulls clusters apart; perplexity sets the effective number of neighbours each point considers, trading local against more global structure.}
+\why Perplexity $= 2^{H(P_i)}$, where $H$ is the entropy of point $i$'s neighbour distribution; each point's Gaussian width is tuned so the perplexity
+matches the chosen value, so dense and sparse regions are treated fairly. Low perplexity (5): fragmented, very local; high (50--100): smoother,
+more global, small clusters may merge.
+\pushes \emph{``Can I trust distances between clusters?''} No. \emph{``Why not use it as features?''} It is non-parametric, stochastic, and has no
+out-of-sample mapping; use UMAP or PCA for features.
+\end{qa}
+
+\begin{qa}{\pyq{INT: PCA vs t-SNE vs LDA} Compare them.}
+\oneline{PCA is linear, unsupervised and preserves global variance; LDA is linear, supervised and maximises class separation (at most $K-1$
+dimensions); t-SNE is non-linear, unsupervised and preserves local neighbourhoods for visualisation.}
+\why Use PCA for compression, denoising and decorrelation before modelling; LDA for supervised reduction or a linear classifier; t-SNE/UMAP for
+looking at cluster structure.
+\end{qa}
+
+\begin{qa}{What is the SVD and what do $U$, $\Sigma$ and $V$ mean geometrically?}
+\oneline{$A = U\Sigma V^\top$: $V^\top$ rotates the input onto special orthogonal directions, $\Sigma$ stretches each by a singular value, and $U$
+rotates the result into the output space.}
+\why The unit circle maps to an ellipse whose semi-axes have lengths $\sigma_i$ along $\mathbf u_i$. Singular values are always non-negative; the
+number of non-zero ones is the rank.
+\end{qa}
+
+\begin{qa}{\pyq{reported linear algebra: rank, null space} What is the rank of a matrix and its null space, and how does SVD reveal both?}
+\oneline{Rank is the number of linearly independent columns (the dimension of the column space); the null space is the set of vectors the matrix sends
+to zero; in the SVD, rank $=$ number of non-zero singular values, and the right singular vectors with zero singular value span the null space.}
+\why Rank--nullity: rank $+$ dim(null space) $=$ number of columns. In regression, a non-trivial null space of $X$ means some combination of features
+is identically zero (perfect multicollinearity), so coefficients are not unique: adding any null-space vector to $\mathbf w$ leaves predictions unchanged.
+\worked $\begin{pmatrix}1 & 2\\2 & 4\end{pmatrix}$: rank 1; null space spanned by $(2, -1)$ because $1\cdot2 + 2\cdot(-1) = 0$.
+\end{qa}
+
+\begin{qa}{Explain the Eckart--Young theorem and compute the rank-1 approximation error for singular values 5, 3, 1.}
+\oneline{Truncating the SVD to the top $k$ singular values gives the best rank-$k$ approximation; the Frobenius error is $\sqrt{3^2 + 1^2} = 3.16$.}
+\end{qa}
+
+\begin{qa}{Find the principal components of the covariance matrix $\begin{pmatrix}2 & 1\\1 & 2\end{pmatrix}$.}
+\oneline{Eigenvalues 3 and 1 with eigenvectors $(1,1)/\sqrt2$ and $(1,-1)/\sqrt2$; PC1 explains 75\% of the variance.}
+\end{qa}
+
+\begin{qa}{\deep Can PCA hurt a classifier?}
+\oneline{Yes: PCA keeps high-variance directions, and the direction that separates the classes may have low variance and be discarded; also it can mix
+informative and noisy features.}
+\why The parallel-cigars example: the class difference lies along the narrow axis, PC2, which a ``keep 95\% variance'' rule might drop. Choose $k$ by
+validation performance, or use supervised reduction (LDA, PLS).
+\end{qa}
+
+\begin{qa}{\deep Two features are perfectly correlated ($x_2 = 2x_1$). What does PCA give?}
+\oneline{One component with all the variance and a second with eigenvalue exactly zero: the data lie on a line, so the covariance matrix has rank 1.}
+\why The zero eigenvector $(2, -1)/\sqrt5$ spans the null space of the centred data: a combination that is always 0.
+\end{qa}
+
+\begin{qa}{How does matrix factorisation predict a seeker's interest in a job they have never seen?}
+\oneline{It represents each seeker and job as vectors learned from observed interactions so that dot products (plus biases) reproduce known interests;
+the dot product of an unseen pair is the prediction.}
+\why Similar seekers get similar vectors because they interacted with similar jobs; so a seeker inherits the tastes of their ``neighbours'' in latent
+space. Worked: $3.5 + 0.2 - 0.3 + 4 = 7.4$.
+\end{qa}
+
+\begin{qa}{Why not run ordinary SVD on a sparse ratings matrix?}
+\oneline{SVD requires every entry, and filling unknown ratings with zeros treats ``not seen'' as ``hated'', biasing all factors toward predicting zero;
+matrix factorisation fits only observed entries with regularisation.}
+\end{qa}
+
+\begin{qa}{ALS vs SGD for matrix factorisation: which and why?}
+\oneline{ALS alternates exact least-squares solves for users and items, which is easily parallelised and handles implicit-feedback weighting efficiently;
+SGD is simpler, works well for explicit ratings, and handles extra terms easily but needs learning-rate tuning.}
+\worked ALS with $k = 1$: a user rated items with $q = 1$ and $q = 2$ as 3 and 4; with $\lambda = 1$: $p = \frac{1\cdot3 + 2\cdot4}{1 + 4 + 1} = 11/6 = 1.83$.
+\end{qa}
+
+\begin{qa}{\deep How do you recommend a job posted five minutes ago, with zero interactions?}
+\oneline{With content-based signals: embed the job from its title, skills, location and salary (text encoders, taxonomy features), match it to seekers
+whose profiles or past applies are similar, and use exploration to collect early feedback; hybrid models map content features into the same latent
+space as collaborative factors.}
+\why Two-tower models learn a job tower from content features, so new jobs get vectors immediately. Also use popularity of similar jobs as a prior and
+bandit-style exploration so new jobs get some impressions.
+\end{qa}
+
+\begin{qa}{What is NMF and how does it differ from SVD?}
+\oneline{NMF factorises a non-negative matrix into non-negative factors, giving additive, parts-based, interpretable components (like topics); SVD factors
+can be negative, are orthogonal and optimal in squared error, but are harder to interpret.}
+\end{qa}
+
+\begin{qa}{How many parameters does a factorisation with 10{,}000 users, 5{,}000 jobs and $k = 32$ have (no biases)?}
+\oneline{$(10{,}000 + 5{,}000)\times32 = 480{,}000$.}
+\end{qa}
+
+\begin{qa}{\deep LoRA fine-tunes a large model by learning $\Delta W = BA$ with rank $r$. How is this a matrix factorisation, and how many parameters does
+it save for a $4096\times4096$ weight with $r = 8$?}
+\oneline{It constrains the weight update to be low-rank, the product of a $4096\times8$ and an $8\times4096$ matrix: $65{,}536$ parameters instead of
+$16{,}777{,}216$, a 256-fold saving.}
+\why The hypothesis is that the change needed to adapt a pretrained model has low intrinsic rank. This is exactly a truncated factorisation of the update.
+\end{qa}
+
+\begin{qa}{What is the condition number of a matrix and why does it matter in ML?}
+\oneline{The ratio of largest to smallest singular value; a large condition number means the problem is ill-conditioned: small changes in data cause
+large changes in the solution, and gradient descent converges slowly.}
+\worked Singular values 100, 10, 0.1: condition number 1{,}000. Ridge improves it to $(\sigma_1^2 + \lambda)/(\sigma_{min}^2 + \lambda)$ for the normal equations.
+\end{qa}
+
+\begin{qa}{\deep Is PCA the same as a linear autoencoder?}
+\oneline{A linear autoencoder with a $k$-unit bottleneck trained with squared error learns the same subspace as the top $k$ principal components, though
+its weights need not be orthogonal or ordered.}
+\why Non-linear autoencoders generalise PCA to curved manifolds (Chapter 22).
+\end{qa}
+
+\begin{qa}{What is Latent Semantic Analysis?}
+\oneline{Truncated SVD of a document--term (TF-IDF) matrix; documents and words are represented in a low-dimensional ``concept'' space where synonyms that
+co-occur with similar words end up close.}
+\why Use \code{TruncatedSVD} rather than \code{PCA} because it works on sparse matrices without centring (centring would make them dense).
+\end{qa}

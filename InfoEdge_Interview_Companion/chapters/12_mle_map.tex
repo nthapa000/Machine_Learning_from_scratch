@@ -1,1 +1,263 @@
-% TODO 12_mle_map
+\chapter{Maximum Likelihood (MLE) and Maximum a Posteriori (MAP)}
+\companion{StatQuest: Maximum Likelihood, Clearly Explained}{\ytid{XepXtl9YKwc}}
+
+MLE and MAP are named in the syllabus and quietly sit under almost everything else: least squares, log loss, cross-entropy,
+Naive Bayes counts, Laplace smoothing, Ridge and Lasso, EM for mixtures. If you can explain where a loss function
+\emph{comes from}, interviewers see that you understand ML rather than having memorised it.
+
+\section{Probability vs likelihood: flipping the question}
+\begin{itemize}
+\item \textbf{Probability}: the parameter is known; how likely is the data? ``If the coin is fair ($p = 0.5$), what is the chance of
+  7 heads in 10 tosses?'' Answer: $\binom{10}{7}0.5^{10} = 0.117$.
+\item \textbf{Likelihood}: the data are known; how plausible is each parameter value? ``I saw 7 heads in 10 tosses. How well does
+  $p = 0.5$ explain that? $p = 0.7$? $p = 0.9$?''
+\end{itemize}
+The formula is the same, $L(p) = P(\text{data}\mid p)$, but we treat it as a function of $p$ with the data fixed.
+
+\begin{example}[: compare candidate parameters]
+7 heads in 10. $L(p)\propto p^7(1-p)^3$. $L(0.5) = 0.00098$; $L(0.7) = 0.00222$; $L(0.9) = 0.00048$. The data are best explained
+by $p = 0.7$. Note that the likelihood values do not sum to 1 over $p$: likelihood is not a probability distribution over parameters.
+\end{example}
+
+\section{Maximum likelihood estimation: the recipe}
+\textbf{MLE} chooses the parameter that makes the observed data most probable: $\hat\theta = \argmax_\theta L(\theta)$.
+\begin{enumerate}
+\item Write the probability of one observation given $\theta$.
+\item Assume observations are independent: the likelihood is the product over observations.
+\item Take the log (products become sums; the maximiser is unchanged because log is increasing; numerically stable).
+\item Differentiate with respect to $\theta$, set to zero, solve. (Check it is a maximum.)
+\end{enumerate}
+
+\subsection{Coin (Bernoulli)}
+$k$ heads in $n$ tosses: $\ell(p) = k\log p + (n-k)\log(1-p)$. $\ell'(p) = \frac kp - \frac{n-k}{1-p} = 0 \Rightarrow \hat p = \frac kn$.
+The MLE is the observed fraction. 12 heads in 20 tosses: $\hat p = 0.6$.
+
+\subsection{Gaussian}
+Data $x_1,\dots,x_n$ from $\mathcal N(\mu,\sigma^2)$:
+$\ell = -\frac n2\log(2\pi\sigma^2) - \frac{1}{2\sigma^2}\sum(x_i - \mu)^2$.
+\begin{itemize}
+\item $\partial\ell/\partial\mu = 0 \Rightarrow \hat\mu = \bar x$ (the sample mean).
+\item $\partial\ell/\partial\sigma^2 = 0 \Rightarrow \hat\sigma^2 = \frac1n\sum(x_i - \bar x)^2$: divides by $n$, not $n-1$, so it is
+  \emph{biased} (slightly too small); the unbiased sample variance divides by $n-1$.
+\end{itemize}
+\begin{example}[: Gaussian MLE]
+Data 2, 4, 6, 8: $\hat\mu = 5$, $\hat\sigma^2 = (9 + 1 + 1 + 9)/4 = 5$ (unbiased version: $20/3 = 6.67$).
+\end{example}
+
+\subsection{Poisson and exponential}
+Poisson counts: $\hat\lambda = \bar x$. Applications per hour 3, 5, 4, 0, 3: $\hat\lambda = 3$.
+Exponential waiting times with rate $\lambda$: $\hat\lambda = 1/\bar x$. Times 2, 3, 5 minutes: $\bar x = 3.33$, $\hat\lambda = 0.3$/min.
+
+\subsection{A case where calculus fails: Uniform$(0,\theta)$}
+$L(\theta) = \theta^{-n}$ if $\theta\ge\max x_i$, else 0. It decreases in $\theta$, so the MLE is the smallest allowed value:
+$\hat\theta = \max x_i$. Data 1.2, 3.4, 2.7: $\hat\theta = 3.4$ (biased low: the true $\theta$ is almost surely a bit bigger).
+
+\section{Why ML losses are negative log-likelihoods}
+This is the single most useful idea in the chapter.
+\begin{itemize}
+\item \textbf{Regression with Gaussian noise}: $y = f(\mathbf x) + \varepsilon$, $\varepsilon\sim\mathcal N(0,\sigma^2)$.
+  $-\log L = \frac{1}{2\sigma^2}\sum(y_i - f(\mathbf x_i))^2 + \text{const}$. \textbf{Minimising squared error = MLE.}
+\item \textbf{Regression with Laplace noise}: $-\log L\propto\sum|y_i - f(\mathbf x_i)|$. \textbf{MAE = MLE} under Laplace noise.
+\item \textbf{Binary classification}: $y\sim\text{Bernoulli}(p)$. $-\log L = -\sum[y\log p + (1-y)\log(1-p)]$.
+  \textbf{Log loss = MLE.}
+\item \textbf{Multiclass}: categorical distribution. \textbf{Cross-entropy = MLE.}
+\item \textbf{Counts}: Poisson. \textbf{Poisson deviance = MLE} (Chapter 4).
+\end{itemize}
+So choosing a loss is choosing a noise model. Minimising cross-entropy between the data distribution and the model is also the same as
+minimising the \textbf{KL divergence} from data to model, since the data's own entropy is a constant.
+
+\section{MAP: adding prior beliefs}
+\subsection{Bayes' theorem for parameters}
+\[ \underbrace{P(\theta\mid D)}_{\text{posterior}} = \frac{\overbrace{P(D\mid\theta)}^{\text{likelihood}}\ \overbrace{P(\theta)}^{\text{prior}}}{P(D)}. \]
+The \textbf{prior} encodes what we believe before seeing data. The \textbf{maximum a posteriori} estimate is the posterior's peak:
+\[ \hat\theta_{MAP} = \argmax_\theta\big[\log P(D\mid\theta) + \log P(\theta)\big]. \]
+It is MLE plus a term that pulls toward plausible values: a regulariser.
+
+\subsection{Coin with a Beta prior}
+A Beta$(a, b)$ prior on $p$ acts like $a - 1$ imaginary heads and $b - 1$ imaginary tails. With $k$ heads in $n$:
+\[ \hat p_{MAP} = \frac{k + a - 1}{n + a + b - 2},\qquad \text{posterior mean} = \frac{k + a}{n + a + b}. \]
+\begin{example}[: three heads in three tosses]
+MLE: $3/3 = 1$: ``this coin never lands tails''. Absurd after three tosses. With a Beta(2,2) prior (mild belief in fairness):
+MAP $= (3+1)/(3+2) = 0.8$; posterior mean $= 5/7 = 0.714$. With more data the prior's influence fades.
+\end{example}
+
+\begin{example}[: click-through rate smoothing]
+A new job got 1 click in 2 views: MLE CTR $= 50\%$. Ranking by raw CTR would put it on top of jobs with 300 clicks in 10{,}000 views
+(3\%). Use a Beta prior matching the platform average 5\%, e.g. Beta(2, 38): posterior mean $= (1 + 2)/(2 + 40) = 7.1\%$. Small
+samples are pulled toward the average; large samples keep their own rate.
+\end{example}
+
+\subsection{Regularisation is MAP}
+\begin{itemize}
+\item Gaussian prior $w_j\sim\mathcal N(0,\tau^2)$: $-\log P(\mathbf w) = \frac{1}{2\tau^2}\norm{\mathbf w}^2 + c$. With Gaussian noise
+  $\sigma^2$, MAP minimises $\frac{1}{2\sigma^2}\text{SSE} + \frac{1}{2\tau^2}\norm{\mathbf w}^2$, i.e. \textbf{Ridge} with
+  $\lambda = \sigma^2/\tau^2$.
+\item Laplace prior $p(w_j)\propto e^{-|w_j|/b}$: \textbf{Lasso}. The Laplace density has a sharp peak at 0, which is why it produces exact
+  zeros.
+\item Laplace smoothing in Naive Bayes: MAP (or posterior mean) with a Dirichlet prior.
+\end{itemize}
+\begin{example}[: Ridge's $\lambda$ from priors]
+Noise variance $\sigma^2 = 4$, prior variance $\tau^2 = 2$: $\lambda = 4/2 = 2$.
+\end{example}
+
+\subsection{Conjugate priors}
+When prior and posterior are in the same family, updating is just adding counts:
+Beta--Bernoulli/Binomial, Gamma--Poisson, Dirichlet--Multinomial, Gaussian--Gaussian (known variance).
+\begin{example}[: Gamma--Poisson]
+Prior Gamma$(\alpha = 2, \beta = 1)$ on a rate; observe counts 3 and 5. Posterior Gamma$(2 + 8, 1 + 2) = $ Gamma$(10, 3)$; mean $10/3 = 3.33$.
+\end{example}
+\begin{example}[: Gaussian--Gaussian]
+Prior $\mu\sim\mathcal N(0, 1)$, one observation $x = 4$ with noise variance 1: posterior mean $= \frac{0/1 + 4/1}{1/1 + 1/1} = 2$, a
+precision-weighted average of prior mean and data.
+\end{example}
+
+\section{MLE vs MAP vs full Bayesian inference}
+\begin{itemize}
+\item \textbf{MLE}: one best value, no prior. Can overfit with little data (the 3/3 coin).
+\item \textbf{MAP}: one best value, with prior. Equivalent to regularised MLE. Not invariant to reparameterisation (the peak of a
+  density moves when you change variables).
+\item \textbf{Full Bayes}: keep the whole posterior distribution and average predictions over it: $P(y\mid x, D) = \int P(y\mid x,\theta)
+  P(\theta\mid D)\,d\theta$. Gives uncertainty; usually expensive (MCMC, variational inference).
+\end{itemize}
+As $n\to\infty$, all three agree (the likelihood dominates the prior).
+
+\section{Properties of MLE worth quoting}
+Under regularity conditions MLE is \textbf{consistent} (converges to the truth), \textbf{asymptotically normal}, and
+\textbf{asymptotically efficient} (achieves the Cram\'er--Rao lower bound: variance $\approx 1/(nI(\theta))$ with Fisher information
+$I$). It is \textbf{invariant}: the MLE of $g(\theta)$ is $g(\hat\theta)$ (MLE of $\sigma$ is $\sqrt{\hat\sigma^2}$). It can be biased in small
+samples ($\hat\sigma^2$, Uniform). Bernoulli Fisher information is $\frac{1}{p(1-p)}$, giving standard error $\sqrt{p(1-p)/n}$.
+
+\section{When there is no closed form: EM}
+With hidden (latent) variables (which mixture component generated each point), the likelihood is a sum inside a log and has no closed
+form. The \textbf{Expectation--Maximisation} algorithm alternates: E-step: compute the probability of each hidden assignment given
+current parameters; M-step: re-estimate parameters as if those soft assignments were observed. Each iteration never decreases the
+likelihood. Chapter 15 works through EM for Gaussian mixtures.
+
+\begin{practical}[: MLE and MAP at InfoEdge]
+\begin{itemize}
+\item \textbf{CTR/apply-rate smoothing} for new jobs and new recruiters (Beta priors) before ranking.
+\item \textbf{Salary engine}: shrink company-specific salary estimates toward the industry average when a company has few data points
+  (hierarchical/empirical Bayes = MAP with a learned prior).
+\item ``Bayesian inference'' is on the Tools slide: A/B test analysis with Beta posteriors (``probability variant B is better'').
+\end{itemize}
+\end{practical}
+
+\stuck{StatQuest: Probability is not Likelihood}{\ytid{pYxNSUDSFH4}}
+\section{Interview questions}
+
+\begin{qa}{What is the difference between probability and likelihood?}
+\oneline{Probability fixes the parameters and asks how likely different data are; likelihood fixes the observed data and asks how well different
+parameter values explain it; same formula, different variable.}
+\why Probability sums to 1 over outcomes; likelihood does not sum or integrate to 1 over parameters. Worked example: $L(0.7) > L(0.5) > L(0.9)$ for
+7/10 heads.
+\end{qa}
+
+\begin{qa}{\pyq{OA style: cross-entropy as likelihood} Show that minimising log loss is maximum likelihood, and that minimising squared error is
+maximum likelihood under Gaussian noise.}
+\oneline{For Bernoulli labels the negative log-likelihood is exactly the log loss; for $y = f(x) + $ Gaussian noise, the negative log-likelihood is
+$\frac{1}{2\sigma^2}\sum(y - f(x))^2$ plus a constant.}
+\why Bernoulli: $P(y\mid p) = p^y(1-p)^{1-y}$; $-\log = -[y\log p + (1-y)\log(1-p)]$; summed over independent examples. Gaussian:
+$P(y\mid x) = \frac{1}{\sqrt{2\pi}\sigma}e^{-(y - f)^2/(2\sigma^2)}$; $-\log = \frac{(y-f)^2}{2\sigma^2} + \log(\sqrt{2\pi}\sigma)$. Since $\sigma$ does not
+depend on $f$, minimising SSE maximises likelihood.
+\pushes \emph{``So what does choosing MAE assume?''} Laplace noise; its MLE location is the median.
+\end{qa}
+
+\begin{qa}{\pyq{INT: Bayes in real life; Naive Bayes smoothing as MAP} Explain Laplace smoothing as a Bayesian (MAP) estimate.}
+\oneline{Adding 1 to every count is the posterior estimate under a uniform Dirichlet prior over word probabilities: it is as if we had seen every word once
+in every class before looking at the data.}
+\why Dirichlet$(\alpha_1,\dots,\alpha_V)$ prior with multinomial counts $c_w$ gives a Dirichlet$(c_w + \alpha_w)$ posterior; its mean is
+$\frac{c_w + \alpha}{N + V\alpha}$. With $\alpha = 1$ that is Laplace smoothing (posterior mean; the MAP with $\alpha = 2$ gives the same formula with
+$\alpha - 1 = 1$). It prevents zero probabilities and shrinks rare-word estimates toward uniform.
+\end{qa}
+
+\begin{qa}{Derive the MLE of $p$ for $k$ successes in $n$ Bernoulli trials.}
+\oneline{$\hat p = k/n$.}
+\why $\ell(p) = k\log p + (n-k)\log(1-p)$; $\ell' = k/p - (n-k)/(1-p) = 0\Rightarrow k(1-p) = (n-k)p\Rightarrow p = k/n$; $\ell'' < 0$.
+\end{qa}
+
+\begin{qa}{Derive the MLE of $\mu$ and $\sigma^2$ for a Gaussian. Is $\hat\sigma^2$ unbiased?}
+\oneline{$\hat\mu = \bar x$ and $\hat\sigma^2 = \frac1n\sum(x_i - \bar x)^2$, which is biased low by the factor $(n-1)/n$.}
+\why The bias arises because $\bar x$ is fitted to the same data, so deviations from $\bar x$ are smaller on average than deviations from the true $\mu$.
+Dividing by $n-1$ (Bessel's correction) fixes it. Worked: data 2, 4, 6, 8 give 5 and 5 (unbiased 6.67).
+\end{qa}
+
+\begin{qa}{Three heads in three tosses. Give the MLE, the MAP with a Beta(2,2) prior and the posterior mean. Which would you use?}
+\oneline{MLE 1.0, MAP 0.8, posterior mean 0.714; with three tosses I would use the posterior mean or MAP because the MLE overfits to tiny data.}
+\end{qa}
+
+\begin{qa}{\deep Show that L2 regularisation is MAP with a Gaussian prior and derive $\lambda$.}
+\oneline{With Gaussian noise $\sigma^2$ and prior $w_j\sim\mathcal N(0,\tau^2)$, the negative log-posterior is $\frac{1}{2\sigma^2}\norm{\mathbf y - X\mathbf w}^2 +
+\frac{1}{2\tau^2}\norm{\mathbf w}^2$; multiplying by $2\sigma^2$ gives Ridge with $\lambda = \sigma^2/\tau^2$.}
+\why Intuition: a strong prior (small $\tau^2$) or noisy data (large $\sigma^2$) means large $\lambda$: trust the prior more. $\sigma^2 = 4$, $\tau^2 = 2$
+gives $\lambda = 2$.
+\pushes \emph{``And L1?''} Laplace prior. \emph{``Is the Lasso solution the posterior mean?''} No, it is the posterior mode; the posterior mean under a
+Laplace prior is not sparse.
+\end{qa}
+
+\begin{qa}{\deep A new job has 1 click from 2 impressions. How would you estimate its CTR for ranking, and why not just use 50\%?}
+\oneline{Use a Beta prior fitted to the platform's CTR distribution and take the posterior mean $(k + \alpha)/(n + \alpha + \beta)$; raw 50\% from 2 impressions is
+extremely noisy and would wrongly rank the job above proven performers.}
+\why With Beta(2, 38) (mean 5\%): $(1+2)/(2+40) = 7.1\%$. Fit $\alpha,\beta$ by method of moments on historic jobs (empirical Bayes). For exploration,
+sample from the posterior (Thompson sampling) instead of using the mean.
+\end{qa}
+
+\begin{qa}{What is the MLE of $\theta$ for Uniform$(0,\theta)$ data 2.1, 4.7, 3.9, 1.2? Why can't you use calculus?}
+\oneline{$\hat\theta = 4.7$; the likelihood $\theta^{-n}$ is decreasing on the allowed region $\theta\ge\max x_i$ and zero below it, so the maximum is at the
+boundary, where the derivative is not zero.}
+\end{qa}
+
+\begin{qa}{What is the MLE of $\lambda$ for Poisson counts 3, 5, 4, 0, 3, and for an exponential with waiting times 2, 3, 5?}
+\oneline{Poisson: $\bar x = 3$; exponential: $1/\bar x = 0.3$ per minute.}
+\why Poisson: $\ell = \sum[x_i\log\lambda - \lambda] + c$; $\ell' = \sum x_i/\lambda - n = 0$. Exponential: $\ell = n\log\lambda - \lambda\sum x_i$;
+$\ell' = n/\lambda - \sum x_i = 0$.
+\end{qa}
+
+\begin{qa}{Why do we maximise the log-likelihood instead of the likelihood?}
+\oneline{Log turns the product over observations into a sum (easier to differentiate and to optimise with SGD), avoids numerical underflow, and does not move
+the maximiser because log is strictly increasing.}
+\end{qa}
+
+\begin{qa}{Explain MLE vs MAP vs full Bayesian inference in three lines.}
+\oneline{MLE: the parameter that best explains the data; MAP: the parameter that best explains the data and the prior (regularised MLE); full Bayes: keep the
+whole posterior and average predictions over it, which also gives uncertainty.}
+\end{qa}
+
+\begin{qa}{\deep Why is MAP not invariant to reparameterisation while MLE is?}
+\oneline{A likelihood is a function of the parameter, so its maximiser maps through any reparameterisation; a posterior is a density, and changing variables
+multiplies it by a Jacobian, which can move its peak.}
+\why If $\phi = g(\theta)$, $p_\phi(\phi) = p_\theta(g^{-1}(\phi))|dg^{-1}/d\phi|$. The extra factor shifts the mode. Example: the mode of a posterior over $\sigma$
+differs from the square root of the mode over $\sigma^2$.
+\end{qa}
+
+\begin{qa}{What does minimising cross-entropy have to do with KL divergence?}
+\oneline{Cross-entropy $H(p, q) = H(p) + KL(p\,\|\,q)$; since the data entropy $H(p)$ does not depend on the model, minimising cross-entropy minimises the KL
+divergence from the data distribution to the model.}
+\end{qa}
+
+\begin{qa}{What are conjugate priors? Give three pairs and a worked update.}
+\oneline{A prior is conjugate to a likelihood if the posterior stays in the prior's family: Beta--Binomial, Gamma--Poisson, Dirichlet--Multinomial; e.g.
+Gamma(2,1) prior and counts 3, 5 give Gamma(10, 3), mean 3.33.}
+\end{qa}
+
+\begin{qa}{\deep Logistic regression on perfectly separable data has no MLE. How does a prior fix this?}
+\oneline{The likelihood keeps increasing as $\norm{\mathbf w}\to\infty$, so no maximiser exists; a Gaussian prior adds $-\norm{\mathbf w}^2/(2\tau^2)$ to the log-posterior,
+which eventually outweighs the shrinking gains in likelihood, so a finite MAP exists.}
+\end{qa}
+
+\begin{qa}{What is Fisher information and what does it tell you?}
+\oneline{It measures how sharply the log-likelihood is curved around the true parameter, i.e. how much information each observation carries; the MLE's variance
+is approximately $1/(nI(\theta))$.}
+\worked Bernoulli: $I(p) = 1/(p(1-p))$; with $p = 0.1$, $n = 900$: SE $\approx\sqrt{0.09/900} = 0.01$.
+\end{qa}
+
+\begin{qa}{\deep In a salary engine, a small startup has 3 salary records for ``Data Scientist''. How do you estimate its typical salary?}
+\oneline{Use a hierarchical (empirical Bayes) estimate that shrinks the company's mean toward the industry/city mean in proportion to how few records it has:
+$\hat\mu_c = \frac{n_c\bar x_c/\sigma^2 + \mu_0/\tau^2}{n_c/\sigma^2 + 1/\tau^2}$.}
+\why This is the Gaussian--Gaussian posterior mean. With $n_c = 3$ the industry mean carries real weight; with $n_c = 300$ the company's own mean dominates.
+It is also how mixed-effects models and target encoding with priors work.
+\end{qa}
+
+\begin{qa}{How is MLE used to train neural networks?}
+\oneline{Training with cross-entropy or MSE is maximising the likelihood of the labels under the network's output distribution; weight decay adds a Gaussian prior
+(MAP); and the output layer (sigmoid, softmax, linear) defines which distribution is assumed.}
+\end{qa}

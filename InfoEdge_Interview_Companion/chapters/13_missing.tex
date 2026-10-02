@@ -1,1 +1,297 @@
-% TODO 13_missing
+\chapter{Missing Data Imputation, Outliers and Class Imbalance}
+\companion{Kaggle Learn: Missing Values (Intermediate ML)}{https://www.kaggle.com/code/alexisbcook/missing-values}
+
+``Missing data imputation'' is a syllabus item, and the reported Round 3 checked for missing values and outliers before
+modelling. The candidate who did \emph{not} blindly delete genuine extreme marks was praised for ``presence of mind''.
+This chapter teaches the reasoning: \emph{why} values are missing decides \emph{how} to fill them.
+
+\section{Why missing values are a modelling problem}
+Most algorithms (linear models, SVMs, neural networks, $k$-NN) cannot take a blank. More importantly, \emph{the fact that a
+value is missing can carry information}, and careless filling can bias the model or leak the target.
+
+\begin{example}[: a missing value that means something]
+On Naukri, ``current salary'' is blank for 40\% of freshers and 5\% of experienced candidates. If you fill blanks with the
+overall median (say 8 lakh), freshers suddenly look like mid-level professionals. If you drop rows with blanks, you drop most
+freshers. Either way the model learns a distorted picture.
+\end{example}
+
+\section{Three missingness mechanisms (Rubin)}
+\begin{itemize}
+\item \textbf{MCAR (missing completely at random)}: missingness has nothing to do with any value. A lab technician randomly lost 3\%
+  of forms. Deleting such rows loses data but does not bias results.
+\item \textbf{MAR (missing at random)}: missingness depends on \emph{observed} variables only. Freshers (experience $=0$, recorded)
+  often leave salary blank; \emph{among freshers}, blanks are random. Model-based imputation using experience works well.
+\item \textbf{MNAR (missing not at random)}: missingness depends on the \emph{missing value itself}. People with very high incomes
+  decline to report income. No imputation from observed data can fully correct it; you need domain knowledge, a missingness
+  indicator, or modelling the missingness.
+\end{itemize}
+You cannot prove MAR vs MNAR from the data alone; you argue it from how the data were collected.
+
+\section{Option 1: deletion}
+\begin{itemize}
+\item \textbf{Listwise} (drop rows with any missing value). Fine for small MCAR fractions. Danger: with many columns, few rows survive.
+  \begin{example}[: how fast rows disappear]
+  12 independent columns each missing 5\% of the time: complete rows $= 0.95^{12} = 54\%$. Almost half the data gone.
+  \end{example}
+\item \textbf{Column deletion}: drop a column that is mostly missing (say 85\%) \emph{and} whose missingness is uninformative.
+  If missingness predicts the target, keep a missing indicator instead.
+\end{itemize}
+
+\section{Option 2: simple (univariate) imputation}
+\begin{itemize}
+\item \textbf{Mean}: fine for symmetric distributions. \textbf{Median}: robust for skewed ones (salary, price).
+  \textbf{Mode / most frequent} or a new category \code{"Unknown"} for categoricals. \textbf{Constant} (0, $-999$ for tree models).
+\item Time series: \textbf{forward fill} (last observation carried forward), \textbf{interpolation}.
+\end{itemize}
+
+\subsection{What mean imputation does to the data}
+\begin{example}[: shrinking variance]
+Column: 2, 4, 6, NaN, NaN. Observed mean 4, population variance $(4 + 0 + 4)/3 = 2.67$. After filling with 4: values 2, 4, 6, 4, 4;
+variance $(4 + 0 + 4 + 0 + 0)/5 = 1.6$. The variance shrank by 40\%, and correlations with other features are weakened, because the
+filled points sit exactly at the mean and carry no relationship.
+\end{example}
+Consequences: distorted distributions (a spike at the mean), attenuated correlations, over-confident inference. Still often fine for
+prediction with tree models, especially with a missing indicator.
+
+\section{Option 3: multivariate (model-based) imputation}
+\begin{itemize}
+\item \textbf{Group-wise}: fill salary with the median of the candidate's experience band and city. Simple, uses MAR structure.
+\item \textbf{$k$-NN imputation}: average the value from the $k$ most similar rows (on observed features). Scale first.
+  \begin{example}[: KNN imputation]
+  Three nearest neighbours have age 24, 27, 30: impute 27. Distance-weighted with neighbours 10 at $d = 1$ and 20 at $d=2$, weights
+  $1/d$: $(10 + 10)/1.5 = 13.3$.
+  \end{example}
+\item \textbf{Regression imputation}: predict the missing column from the others. Deterministic predictions sit exactly on the
+  regression line, understating variance; \textbf{stochastic regression imputation} adds a random residual.
+\item \textbf{MICE / IterativeImputer}: cycle through columns, regressing each on all others, repeat until stable.
+\item \textbf{Multiple imputation}: create $m$ completed datasets with randomness, fit the model on each, combine (Rubin's rules).
+  This propagates the uncertainty about the filled values into standard errors, which single imputation ignores.
+\item \textbf{Matrix factorisation / low-rank completion}: fill a ratings-like matrix from latent factors (Chapter 14).
+\end{itemize}
+
+\section{Option 4: let the model handle it}
+XGBoost, LightGBM, CatBoost and scikit-learn's \code{HistGradientBoosting} accept NaN and learn, at each split, which side missing
+values go (Chapter 8). This automatically exploits informative missingness.
+
+\section{The missing-indicator trick}
+Add a binary column \code{salary\_missing}, then impute. The model can learn ``blank salary'' as a signal of its own. It is the
+standard way to protect against MNAR and informative MAR.
+
+\section{Leakage: fit imputers on training data only}
+The median, the KNN neighbours, the MICE regressions must be learned from training data and \emph{applied} to validation/test. Put
+the imputer inside a \code{Pipeline} so cross-validation refits it per fold.
+\begin{lstlisting}
+from sklearn.pipeline import Pipeline
+from sklearn.impute import SimpleImputer
+pipe = Pipeline([("impute", SimpleImputer(strategy="median", add_indicator=True)),
+                 ("model", LogisticRegression(max_iter=1000))])
+pipe.fit(X_train, y_train)          # median learned from training rows only
+\end{lstlisting}
+
+\section{Outliers: detect, understand, then decide}
+\subsection{Detection}
+\begin{itemize}
+\item \textbf{Domain ranges} first: a percentage outside 0--100 is an error; 99.5 is a genius, not an error. The InfoEdge coding round
+  tested exactly this with \code{describe()}.
+\item \textbf{IQR rule}: outliers beyond $Q_1 - 1.5\,\text{IQR}$ or $Q_3 + 1.5\,\text{IQR}$, IQR $= Q_3 - Q_1$.
+  \begin{example}[: IQR]
+  Data 3, 5, 7, 8, 9, 11, 13, 40 with $Q_1 = 6$, $Q_3 = 12$: IQR $= 6$, fences $-3$ and $21$: 40 is flagged.
+  \end{example}
+\item \textbf{z-score}: $|z| > 3$ (assumes rough normality; the outlier itself inflates the standard deviation). Robust version with
+  median and MAD.
+  \begin{example}[: z-score]
+  Mean 50, sd 8, $x = 76$: $z = 26/8 = 3.25$: flagged.
+  \end{example}
+\item Multivariate: Mahalanobis distance, Isolation Forest, Local Outlier Factor, DBSCAN noise points.
+\end{itemize}
+
+\subsection{What to do}
+\begin{enumerate}
+\item \textbf{Error?} (age 250, price Rs.~1, negative experience) Fix or set to missing.
+\item \textbf{Genuine but extreme?} (a 5 crore salary; a 99th-percentile score) Keep. Use robust methods: median/MAE/Huber loss,
+  tree models (insensitive to feature outliers), log transforms, \textbf{winsorising/capping} at the 1st/99th percentile, robust scaling
+  (\code{RobustScaler} uses median and IQR).
+\item \textbf{A different population?} (bulk-posting staffing agencies among normal recruiters) Model separately or add a segment
+  feature.
+\item \textbf{The thing you are looking for?} (fraud) Then outliers are the signal: anomaly detection.
+\end{enumerate}
+
+\section{Class imbalance}
+When one class is rare (fraud 0.5\%, high-intent buyers 2\%):
+\begin{itemize}
+\item \textbf{Evaluate correctly}: precision, recall, F1, PR AUC, precision@k; stratified splits (Chapter 11).
+\item \textbf{Class weights}: scale the loss of the rare class. scikit-learn \code{"balanced"}: $w_c = \frac{n}{K\,n_c}$.
+  \begin{example}[: balanced weight]
+  900 negatives, 100 positives: positive weight $1000/(2\cdot100) = 5$, negative $1000/1800 = 0.556$. XGBoost
+  \code{scale\_pos\_weight} $= n_{neg}/n_{pos}$, e.g. $9500/500 = 19$.
+  \end{example}
+\item \textbf{Random undersampling} of the majority: fast, loses information.
+\item \textbf{Random oversampling} of the minority: duplicates; risk of overfitting those rows.
+\item \textbf{SMOTE}: create synthetic minority points by interpolating between a minority point and one of its $k$ minority neighbours:
+  $\mathbf x_{new} = \mathbf x + u(\mathbf x_{nn} - \mathbf x)$, $u\sim U(0,1)$.
+  \begin{example}[: SMOTE]
+  $\mathbf x = (2,4)$, neighbour $(6,8)$, $u = 0.25$: $(2,4) + 0.25(4,4) = (3,5)$.
+  \end{example}
+  Variants: Borderline-SMOTE (only near the boundary), ADASYN (more synthetic points where the minority is harder), SMOTE-NC for
+  categorical features. Cautions: synthetic points can land in majority regions; apply \emph{only} to training folds.
+\item \textbf{NearMiss, Tomek links}: informed undersampling (remove majority points close to the minority / boundary noise).
+\item \textbf{Threshold tuning}: often the single most effective step.
+\item \textbf{Anomaly detection} when positives are extremely rare and varied.
+\end{itemize}
+
+\begin{practical}[: data quality at InfoEdge scale]
+Naukri profiles are user-entered: free-text skills, blank salaries, ``0'' as a placeholder, 50 spellings of the same company. The SilverSkAI
+taxonomy slide (50 lakh raw skills normalised to 70K; 80 lakh company strings to 7.2 lakh) is the industrial answer to a data-quality
+problem: standardise first, then impute. For 99acres, listing prices posted as ``1'' (to mean ``call for price'') are not outliers to
+cap; they are missing values in disguise.
+\end{practical}
+
+\stuck{StatQuest: Handling Missing Data (search)}{\yts{StatQuest+missing+data+random+forest}}
+\section{Interview questions}
+
+\begin{qa}{\pyq{Coding round / INT: handling missing values} You find 8\% NaNs in a numeric column. Walk me through your options and how
+you would choose.}
+\oneline{First ask why they are missing (MCAR, MAR, MNAR) and whether missingness predicts the target; then choose between deletion, simple
+imputation (median for skewed data), model-based imputation (KNN, MICE, group medians), native NaN handling in boosted trees, and always
+consider adding a missing indicator, fitting everything on training data only.}
+\why
+\begin{enumerate}
+\item \textbf{Investigate}: \code{df[col].isna().groupby(df[target]).mean()} and against other columns. If the missing rate differs by target
+  or segment, missingness is informative.
+\item \textbf{If MCAR and few rows}: dropping is acceptable.
+\item \textbf{If skewed}: median, not mean.
+\item \textbf{If related to other features (MAR)}: group-wise median or KNN/IterativeImputer.
+\item \textbf{If possibly MNAR}: add an indicator; consider domain-specific fills.
+\item \textbf{Model choice}: with LightGBM, leave NaN as is.
+\item \textbf{Leakage}: put the imputer in a Pipeline.
+\end{enumerate}
+\worked In the placement data, ``work experience months'' is blank for students without work experience: that is not missing, it is 0, and the
+binary ``work experience'' column confirms it. Reading the data dictionary resolves many ``missing'' values.
+\pitfall Filling with the mean computed on the whole dataset before splitting (leakage), or filling a categorical with the mean of its codes.
+\end{qa}
+
+\begin{qa}{\pyq{INT: mean vs median imputation} When do you use mean vs median imputation? Show the effect on variance.}
+\oneline{Median for skewed or outlier-prone variables, mean for roughly symmetric ones; both shrink the variance and weaken correlations
+because all filled values sit at one point.}
+\why Salary is right-skewed: a few crore-level salaries pull the mean far above the typical value; median is representative. Variance
+example: $2.67\to1.6$.
+\end{qa}
+
+\begin{qa}{\pyq{INT: imputing categorical features} How do you impute a missing categorical column like ``city''?}
+\oneline{With the most frequent category if missingness is rare and random, or (usually better) with an explicit ``Unknown'' category so the model
+can learn whether missingness matters; model-based imputation (from pincode, company location) if available.}
+\why Mode imputation inflates the most common city; ``Unknown'' preserves information. For tree models with native categorical support, NaN
+can be its own branch.
+\end{qa}
+
+\begin{qa}{\pyq{INT: XGBoost and missing values} How do gradient-boosted trees handle missing values, and should you still impute?}
+\oneline{They learn a default direction for missing values at every split, choosing the side that gives the higher gain, so imputation is usually
+unnecessary and can even remove the signal in missingness.}
+\why Imputing with the median merges ``missing'' with ``typical'', which the tree can no longer distinguish. Exceptions: if test data will have
+missingness patterns not present in training (then imputation can be more robust), or if the same features feed other models.
+\end{qa}
+
+\begin{qa}{Explain MCAR, MAR and MNAR with examples from a job portal.}
+\oneline{MCAR: a server bug randomly dropped 2\% of profile fields; MAR: freshers leave current salary blank (depends on observed experience);
+MNAR: very high earners hide salary (depends on the missing salary itself).}
+\why Under MCAR, deletion is unbiased. Under MAR, imputation from observed features is valid. Under MNAR, imputing from others is biased; an
+indicator, sensitivity analysis, or a model of the missingness is needed.
+\end{qa}
+
+\begin{qa}{\deep Why does multiple imputation create several completed datasets instead of one?}
+\oneline{Because a single filled-in value pretends we know the missing number exactly; drawing several plausible values and pooling the results
+carries the uncertainty about the missing data into the final estimates and standard errors.}
+\why With single imputation, confidence intervals are too narrow and p-values too small. Rubin's rules combine: total variance $=$ within-imputation
+variance $+ (1 + 1/m)\times$ between-imputation variance. For pure prediction tasks, single imputation is usually fine.
+\end{qa}
+
+\begin{qa}{\pyq{INT: outlier detection} Data 3, 5, 7, 8, 9, 11, 13, 40. Which points are outliers by the IQR rule, and what would you do about them?}
+\oneline{With $Q_1 = 6$, $Q_3 = 12$, IQR $= 6$, fences are $-3$ and $21$, so 40 is an outlier; whether to remove it depends on whether it is an error,
+a genuine extreme, or the phenomenon of interest.}
+\why I would look at the row: if it is ``years of experience $=40$'' for a 60-year-old, keep it; if ``age $=40$'' in a column of ages of 3--13-year-olds,
+it is likely an error. Rather than delete, prefer robust methods or capping.
+\pushes \emph{``Why not z-scores?''} With small or skewed samples, the outlier inflates the sd; here $\bar x = 12$, $s\approx11.7$, $z(40) = 2.4$: not flagged
+at 3 even though it is clearly unusual. IQR or median/MAD is more robust.
+\end{qa}
+
+\begin{qa}{\pyq{INT: dealing with outliers} Which models and statistics are robust to outliers?}
+\oneline{Medians and IQR (not means and standard deviations), MAE/Huber/quantile losses (not MSE), tree-based models with respect to feature
+outliers, and rank-based methods like Spearman correlation and AUC.}
+\why Trees split on order, so an extreme feature value just lands in the extreme leaf. But trees are not robust to target outliers under MSE (a
+leaf mean can be dragged). Linear models, $k$-NN, $k$-means, PCA and SVMs (without robust scaling) are sensitive.
+\end{qa}
+
+\begin{qa}{\pyq{reported Round 3: presence of mind} \code{describe()} shows a maximum of 98.5 in an exam-percentage column, far above the 75th
+percentile of 72. Do you remove it?}
+\oneline{No: it lies within the valid 0--100 range, so it is a genuine high score; removing it would delete real information, and I would only treat
+values outside the valid range as errors.}
+\why Statistical outlier rules flag ``unusual'' not ``wrong''. Blindly applying box-plot or z-score filtering removes the best students, biasing the
+model. This is exactly what the reported interview tested.
+\end{qa}
+
+\begin{qa}{\pyq{INT: imbalanced data} Fraud is 0.5\% of transactions. Which techniques help, and in what order would you try them?}
+\oneline{Correct metrics and stratified splits first, then class weights or \code{scale\_pos\_weight}, threshold tuning, and only then resampling
+(undersampling, SMOTE) or anomaly detection, always applied to training folds only.}
+\why Weighting is simple and does not distort data. Resampling helps some models but breaks calibration. A capable GBM with good features and a
+tuned threshold often beats elaborate resampling. Collect more positives if possible (active learning on the review queue).
+\end{qa}
+
+\begin{qa}{\pyq{INT: SMOTE mechanics} How does SMOTE generate a sample? Compute one for $\mathbf x = (2,4)$, neighbour $(6,8)$, $u = 0.25$.}
+\oneline{It picks a minority point and one of its $k$ nearest minority neighbours and creates a new point at a random position on the segment between
+them: here $(3, 5)$.}
+\why $\mathbf x + u(\mathbf x_{nn} - \mathbf x) = (2,4) + 0.25(4,4)$. It enlarges minority regions instead of duplicating points.
+\pushes \emph{``Weaknesses?''} Can create points in majority territory (overlap), amplifies noise, meaningless for categorical/one-hot features
+without SMOTE-NC, and must be done inside CV.
+\end{qa}
+
+\begin{qa}{\pyq{INT: SMOTE vs NearMiss vs ADASYN} Describe each.}
+\oneline{SMOTE interpolates new minority points uniformly; ADASYN interpolates more around minority points that are hard to learn (many majority
+neighbours); NearMiss undersamples the majority by keeping majority points closest to the minority.}
+\end{qa}
+
+\begin{qa}{\deep Why is applying SMOTE before the train--test split a serious mistake?}
+\oneline{Synthetic points are interpolations of real minority points, so near-copies of test points end up in training; the model looks far better
+than it is.}
+\why A test positive $\mathbf x$ and a synthetic point between $\mathbf x$ and its neighbour are almost identical. Correct: split first, then
+oversample only the training fold (imblearn's \code{Pipeline} does this per CV fold).
+\end{qa}
+
+\begin{qa}{Compute the \code{class\_weight="balanced"} weights for 900 negatives and 100 positives, and \code{scale\_pos\_weight} for 9{,}500
+negatives and 500 positives.}
+\oneline{Positive weight 5, negative 0.556; \code{scale\_pos\_weight} $= 19$.}
+\end{qa}
+
+\begin{qa}{\deep A column is 85\% missing. Drop it?}
+\oneline{Not automatically: if its missingness or its observed values predict the target, keep it with a missing indicator (or as-is for GBMs); drop it
+only if both are uninformative.}
+\why Example: ``portfolio URL'' is 85\% blank, but having one strongly predicts recruiter interest. Test by comparing target rates for missing vs
+present and by permutation importance.
+\end{qa}
+
+\begin{qa}{What is winsorising, and when would you use it?}
+\oneline{Capping values at chosen percentiles (e.g. 1st and 99th) instead of deleting them; use it for linear models or neural nets when extreme but
+genuine values would otherwise dominate the fit.}
+\why It keeps the row and its order information, reduces leverage. The caps must be computed on training data.
+\end{qa}
+
+\begin{qa}{\deep Freshers' salary is missing. Someone fills it with the global median and the model learns ``freshers earn 8 lakh''. What would you do
+instead?}
+\oneline{Recognise the MAR (or structural) pattern and impute within segments (experience band, degree, city), add a missing indicator, or let a GBM use
+NaN directly; for a fresher, ``current salary'' may be genuinely not applicable, which a separate category captures.}
+\end{qa}
+
+\begin{qa}{Why must an imputer be fitted only on training data, and how do you enforce it?}
+\oneline{Because statistics computed on validation/test rows leak information about them into training; enforce it with a scikit-learn Pipeline (or
+ColumnTransformer) so that \code{fit} is called only on training folds.}
+\end{qa}
+
+\begin{qa}{\deep Missing values only occur in the test data for a feature that was always present in training. What happens and what do you do?}
+\oneline{The model never learned what to do with missingness for that feature: a GBM will send NaNs down its default (arbitrary) direction and a pipeline
+imputer will fill with the training median; investigate the upstream pipeline break, and design training to include realistic missingness
+(randomly masking values) if it will recur.}
+\end{qa}
+
+\begin{qa}{Which scaler would you use with outliers, and why?}
+\oneline{RobustScaler, which centres on the median and scales by the IQR, so a few extreme values do not compress all the other values.}
+\worked Values 1--10 plus 1{,}000: StandardScaler squeezes 1--10 into a tiny range near $-0.3$; RobustScaler keeps them spread.
+\end{qa}
