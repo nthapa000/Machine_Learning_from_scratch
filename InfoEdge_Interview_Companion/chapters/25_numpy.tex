@@ -1,1 +1,185 @@
-% TODO 25_numpy
+\chapter{NumPy: Arrays, Vectorisation and Broadcasting}
+\companion{freeCodeCamp: NumPy Full Course (search)}{\yts{freeCodeCamp+Python+NumPy+Tutorial+for+Beginners}}
+
+Round 3 Part 1 names NumPy explicitly. Under every pandas column and every scikit-learn model is a NumPy array, so understanding
+shapes, axes, vectorisation and broadcasting makes you fast and lets you debug ``shape mismatch'' errors in seconds. All outputs below
+were verified by running the code (NumPy 2.x).
+
+\section{Why NumPy}
+A Python list of a million numbers stores a million separate Python objects; a loop over them runs the interpreter a million times.
+A NumPy \textbf{array} stores raw numbers of one type in one contiguous block of memory, and operations run in compiled C loops.
+Typical speed-up: 10--100$\times$. This is \textbf{vectorisation}: write the operation on the whole array, not on each element.
+\begin{lstlisting}
+import numpy as np
+a = np.array([1, 2, 3])
+a * 2, a + a, a ** 2           # [2 4 6] [2 4 6] [1 4 9]   element-wise
+a.dtype                        # int64
+np.array([1, 2.5]).dtype       # float64   (upcast to a common type)
+np.array([1, "a"]).dtype       # <U21      everything became strings!
+\end{lstlisting}
+\code{[1, 2, 3] * 2} on a \emph{list} gives \code{[1, 2, 3, 1, 2, 3]}; on an array it doubles each element.
+
+\section{Shape, axes and creation}
+\begin{lstlisting}
+M = np.arange(6).reshape(2, 3)   # [[0 1 2]
+                                 #  [3 4 5]]
+M.shape, M.T.shape               # (2, 3) (3, 2)
+np.zeros((2, 2)); np.ones(3); np.eye(2); np.linspace(0, 1, 5)  # [0. .25 .5 .75 1.]
+np.arange(10).reshape(2, -1).shape    # (2, 5)   -1 means "infer"
+\end{lstlisting}
+\textbf{Axis} is the dimension along which an operation \emph{collapses}: \code{axis=0} goes down the rows (one result per column), \code{axis=1} across the columns (one result
+per row).
+\begin{lstlisting}
+M.sum()             # 15
+M.sum(axis=0)       # [3 5 7]    column sums
+M.sum(axis=1)       # [ 3 12]    row sums
+M.mean(axis=0)      # [1.5 2.5 3.5]
+\end{lstlisting}
+
+\section{Indexing}
+\begin{lstlisting}
+M[1, 2]             # 5          row 1, column 2
+M[:, 1]             # [1 4]      a column
+M[0]                # [0 1 2]    a row
+M[M > 2]            # [3 4 5]    boolean mask
+M[[0, 1], [1, 2]]   # fancy indexing: elements (0,1) and (1,2)
+s = np.array([1, 2, 3, 4]); s[s > 2] = 0     # [1 2 0 0]
+np.where(v > 1, "hi", "lo")    # element-wise if/else
+\end{lstlisting}
+
+\subsection{Views vs copies}
+Basic slicing returns a \textbf{view}: a window onto the same memory. Changing it changes the original. Fancy (list) and boolean indexing return copies.
+\begin{lstlisting}
+b = M[0]; b[0] = 100; print(M[0])     # [100 1 2]   M changed!
+c = M[0].copy(); c[0] = -1            # M unchanged
+\end{lstlisting}
+
+\section{Broadcasting}
+When shapes differ, NumPy stretches dimensions of size 1 to match, without copying data. \textbf{Rule}: compare shapes from the right; two dimensions are compatible
+if they are equal or one of them is 1; missing leading dimensions count as 1.
+\begin{example}[: broadcasting step by step]
+\code{x} has shape (2, 1): $\begin{pmatrix}1\\2\end{pmatrix}$; \code{y} has shape (3,): $(10, 20, 30)$. Align right: (2, 1) vs (, 3) $\to$ (2, 1) vs (1, 3).
+Both stretch to (2, 3): \code{x + y} $= \begin{pmatrix}11 & 21 & 31\\12 & 22 & 32\end{pmatrix}$.
+(2, 3) + (2, 2): last dims 3 vs 2, neither is 1: \code{ValueError: operands could not be broadcast together}.
+\end{example}
+The everyday use: standardising a feature matrix in one line.
+\begin{lstlisting}
+X = np.array([[1., 2.], [3., 4.], [5., 6.]])          # shape (3, 2)
+Z = (X - X.mean(axis=0)) / X.std(axis=0)              # (3,2) - (2,) broadcasts per column
+# [[-1.22 -1.22] [0. 0.] [1.22 1.22]]
+w = np.array([1, 2, 3])
+w.reshape(-1, 1).shape, w[:, None].shape, w[None, :].shape   # (3,1) (3,1) (1,3)
+\end{lstlisting}
+
+\section{Useful functions}
+\begin{lstlisting}
+v = np.array([3, 1, 2])
+np.argsort(v), np.sort(v), v.argmax()     # [1 2 0] [1 2 3] 0
+np.unique([3, 1, 3, 2], return_counts=True)  # (array([1, 2, 3]), array([1, 1, 2]))
+np.percentile([1, 2, 3, 4, 5, 6, 7, 8], [25, 50, 75])   # [2.75 4.5 6.25]
+np.corrcoef([1, 2, 3], [2, 4, 7])[0, 1]   # 0.9934
+np.cumsum([1, 2, 3]), np.diff([1, 4, 9])  # [1 3 6] [3 5]
+np.clip([-1, 0.5, 2], 0, 1)               # [0. 0.5 1.]
+(p > 0.5).astype(int)                     # threshold probabilities into labels
+np.concatenate([[1, 2], [3]]); np.vstack(...); np.hstack(...)
+\end{lstlisting}
+
+\section{Linear algebra}
+\begin{lstlisting}
+A = np.array([[2, 1], [1, 2]])
+A @ A                    # [[5 4] [4 5]]   matrix product (not A * A, which is element-wise)
+np.linalg.inv(A)         # [[ 0.667 -0.333] [-0.333  0.667]]
+np.linalg.eigh(A)[0]     # [1. 3.]  eigenvalues of a symmetric matrix
+np.dot([1, 2], [3, 4])   # 11
+np.linalg.norm([3, 4])   # 5.0
+w = np.linalg.solve(X.T @ X, X.T @ y)     # normal equations, safer than inv
+w, *_ = np.linalg.lstsq(X, y, rcond=None) # least squares via SVD (best)
+\end{lstlisting}
+
+\section{Missing values and randomness}
+\code{np.nan == np.nan} is \code{False} (NaN is not equal to anything); use \code{np.isnan}. \code{np.mean([1, np.nan, 3])} is \code{nan}; \code{np.nanmean} gives 2.0.
+Use a seeded generator for reproducibility: \code{rng = np.random.default\_rng(42); rng.normal(size=5)}.
+
+\begin{practical}[: NumPy habits that impress in Round 3]
+Vectorise instead of looping; check \code{.shape} after every transformation; use \code{axis} deliberately; prefer \code{np.where} and boolean masks over Python
+\code{if}s on arrays; set random seeds; never compare floats with \code{==}.
+\end{practical}
+
+\stuck{NumPy docs: Broadcasting}{https://numpy.org/doc/stable/user/basics.broadcasting.html}
+\section{Interview and OA questions}
+
+\begin{qa}{Why is NumPy faster than Python lists for numeric work?}
+\oneline{Arrays store one fixed type in contiguous memory and run operations in compiled, vectorised C loops (often using SIMD), avoiding per-element Python object
+overhead and interpreter loops.}
+\worked Summing $10^7$ numbers: a Python loop takes about a second; \code{arr.sum()} a few milliseconds.
+\end{qa}
+
+\begin{qa}{Explain broadcasting and predict the shape of \code{(2,1) + (3,)} and whether \code{(2,3) + (2,2)} works.}
+\oneline{Shapes are compared from the right and dimensions of size 1 stretch to match; \code{(2,1) + (3,)} gives \code{(2,3)}; \code{(2,3) + (2,2)} fails because 3 and 2 are
+incompatible.}
+\end{qa}
+
+\begin{qa}{What do \code{axis=0} and \code{axis=1} mean in \code{M.sum(axis=...)} for a $2\times3$ matrix?}
+\oneline{\code{axis=0} collapses the rows, giving one sum per column (\code{[3 5 7]}); \code{axis=1} collapses the columns, giving one sum per row (\code{[3 12]}).}
+\end{qa}
+
+\begin{qa}{\deep After \code{b = M[0]; b[0] = 100}, has \code{M} changed? What about after \code{c = M[[0]]; c[0, 0] = -1}?}
+\oneline{Yes in the first case, because basic slicing returns a view sharing memory; no in the second, because fancy indexing returns a copy.}
+\why Views save memory and time but cause surprising side effects; use \code{.copy()} when you intend to modify independently. Check with \code{np.shares\_memory(a, b)}.
+\end{qa}
+
+\begin{qa}{Standardise each column of a matrix \code{X} in one line.}
+\oneline{\code{(X - X.mean(axis=0)) / X.std(axis=0)}, which broadcasts the per-column means and standard deviations over the rows.}
+\pushes \emph{``In a train/test setting?''} Compute mean and std on the training set only and apply them to test (or use \code{StandardScaler}).
+\end{qa}
+
+\begin{qa}{What is the difference between \code{A * B}, \code{A @ B} and \code{np.dot(A, B)}?}
+\oneline{\code{*} is element-wise multiplication (with broadcasting); \code{@} is matrix multiplication; \code{np.dot} is matrix multiplication for 2-D arrays and the dot product for
+1-D arrays.}
+\end{qa}
+
+\begin{qa}{What is the dtype of \code{np.array([1, "a"])}, and why does it matter?}
+\oneline{A Unicode string type (\code{<U21}): mixing types upcasts everything to a common type, so the numbers became strings and arithmetic will fail or misbehave.}
+\why The same thing happens in pandas when one bad value (``N/A'' typed in a salary column) makes the column \code{object}; detect with \code{df.dtypes}.
+\end{qa}
+
+\begin{qa}{Why is \code{np.nan == np.nan} false, and how do you count NaNs in an array?}
+\oneline{By the IEEE floating-point standard NaN is unequal to everything, including itself; count with \code{np.isnan(a).sum()}.}
+\end{qa}
+
+\begin{qa}{Compute the sigmoid of an array and threshold it at 0.5, without loops.}
+\oneline{\code{p = 1 / (1 + np.exp(-z)); labels = (p >= 0.5).astype(int)}.}
+\end{qa}
+
+\begin{qa}{Implement one gradient-descent step for linear regression in NumPy.}
+\oneline{Compute predictions \code{X @ w}, the gradient \code{X.T @ (X @ w - y) * 2 / n}, and update \code{w -= lr * grad}.}
+\worked
+\begin{lstlisting}
+def gd_step(X, y, w, lr=0.1):
+    n = len(y)
+    grad = 2 / n * X.T @ (X @ w - y)
+    return w - lr * grad
+\end{lstlisting}
+\end{qa}
+
+\begin{qa}{\deep Solve least squares in NumPy: why prefer \code{lstsq} or \code{solve} over \code{inv}?}
+\oneline{Explicitly inverting $X^\top X$ squares the condition number and amplifies rounding errors; \code{np.linalg.solve} solves the system directly and \code{lstsq} uses SVD, which
+is stable even for rank-deficient $X$.}
+\end{qa}
+
+\begin{qa}{What does \code{np.argsort} return and how would you get the top-3 scoring candidates?}
+\oneline{The indices that would sort the array; top 3: \code{np.argsort(scores)[::-1][:3]} (or \code{np.argpartition} for speed on large arrays).}
+\worked \code{np.argsort([3, 1, 2])} is \code{[1 2 0]}.
+\end{qa}
+
+\begin{qa}{What does \code{reshape(-1, 1)} do, and why does scikit-learn often need it?}
+\oneline{It turns a 1-D array of length $n$ into a 2-D column of shape $(n, 1)$; scikit-learn expects features as a 2-D array (rows $\times$ features), even with one feature.}
+\end{qa}
+
+\begin{qa}{Compute the 25th, 50th and 75th percentiles of 1--8 with NumPy's default method.}
+\oneline{2.75, 4.5, 6.25 (linear interpolation between order statistics).}
+\end{qa}
+
+\begin{qa}{How do you make random results reproducible?}
+\oneline{Use a seeded generator, \code{rng = np.random.default\_rng(42)}, pass \code{random\_state} to scikit-learn, and set seeds in deep-learning frameworks.}
+\end{qa}

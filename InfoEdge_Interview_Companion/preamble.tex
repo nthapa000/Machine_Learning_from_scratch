@@ -20,6 +20,7 @@
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.16}
 \usepackage[most]{tcolorbox}
+\usepackage{textcomp}
 \usepackage{listings}
 \usepackage{totcount}
 \usepackage{fontawesome5}
@@ -134,7 +135,7 @@
 % ---------------- code ----------------
 \lstdefinestyle{py}{language=Python,basicstyle=\ttfamily\small,backgroundcolor=\color{codebg},
   keywordstyle=\color{accent}\bfseries,commentstyle=\color{exframe}\itshape,stringstyle=\color{prframe},
-  showstringspaces=false,frame=single,rulecolor=\color{black!15},breaklines=true,
+  showstringspaces=false,upquote=true,frame=single,rulecolor=\color{black!15},breaklines=true,
   columns=fullflexible,keepspaces=true,xleftmargin=4pt,xrightmargin=4pt,aboveskip=6pt,belowskip=6pt,
   literate={≤}{{$\le$}}1 {≥}{{$\ge$}}1 {→}{{$\to$}}1}
 \lstset{style=py}

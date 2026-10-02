@@ -1,1 +1,253 @@
-% TODO 27_sklearn
+\chapter{Scikit-learn and the Complete Round 3 Walkthrough}
+\companion{Data School: Machine learning in Python with scikit-learn (search)}{\yts{Data+School+scikit-learn+pipeline+ColumnTransformer}}
+
+Round 3 Part 2 is ``ML Basics (Sklearn): train--test split, training an ML model, performance testing''. The 2026--27 talk described it as
+``an ML case study: cleaning data, applying an ML model to it, doing some testing of performance, how good the model is''. The reported task was
+the MBA placement dataset ending in logistic regression, a confusion matrix, precision, recall, F1 and accuracy. This chapter teaches the
+scikit-learn API from scratch and then walks through that round end to end with real outputs.
+
+\section{The scikit-learn API in one idea}
+Every object follows the same pattern:
+\begin{itemize}
+\item \textbf{Estimators} learn from data with \code{fit(X, y)}.
+\item \textbf{Predictors} then \code{predict(X)} (and classifiers often \code{predict\_proba(X)}).
+\item \textbf{Transformers} \code{fit} on training data and \code{transform} any data (scalers, encoders, imputers, TF-IDF); \code{fit\_transform} does both on the training set.
+\item Hyperparameters go in the constructor (\code{LogisticRegression(C=0.1)}); learned values end with an underscore (\code{coef\_}, \code{mean\_}).
+\end{itemize}
+\code{X} is a 2-D table (rows $\times$ features); \code{y} a 1-D target.
+
+\section{Splitting}
+\begin{lstlisting}
+from sklearn.model_selection import train_test_split
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+\end{lstlisting}
+\code{stratify=y} keeps the class ratio equal in both parts; \code{random\_state} makes the split reproducible. For time data use \code{TimeSeriesSplit}; for grouped data
+\code{GroupKFold}.
+
+\section{Preprocessing with Pipeline and ColumnTransformer}
+Numeric and categorical columns need different treatment; every step must be fitted on training data only. A \textbf{Pipeline} chains steps so that \code{fit} fits them in
+order on training data and \code{predict} applies them to new data; a \textbf{ColumnTransformer} routes columns to different sub-pipelines.
+\begin{lstlisting}
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.impute import SimpleImputer
+num = X.select_dtypes("number").columns.tolist()
+cat = X.columns.difference(num).tolist()
+pre = ColumnTransformer([
+    ("num", Pipeline([("imp", SimpleImputer(strategy="median")),
+                      ("sc",  StandardScaler())]), num),
+    ("cat", Pipeline([("imp", SimpleImputer(strategy="most_frequent")),
+                      ("oh",  OneHotEncoder(handle_unknown="ignore"))]), cat)])
+\end{lstlisting}
+\textbf{Why this matters}: (1) no leakage, because cross-validation refits the imputer and scaler inside each fold; (2) the same object transforms production data identically;
+(3) \code{handle\_unknown="ignore"} survives categories never seen in training.
+
+Scalers: \code{StandardScaler} (mean 0, sd 1), \code{MinMaxScaler} ([0, 1]), \code{RobustScaler} (median/IQR, for outliers). Encoders: \code{OneHotEncoder} (nominal),
+\code{OrdinalEncoder} (ordered categories), target encoding (\code{TargetEncoder}, cross-fitted internally).
+
+\section{Models you should be able to call}
+\begin{lstlisting}
+from sklearn.linear_model import LogisticRegression, LinearRegression, Ridge, Lasso
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
+from sklearn.svm import SVC, LinearSVC, SVR
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.naive_bayes import MultinomialNB, GaussianNB
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+\end{lstlisting}
+
+\section{Performance testing}
+\begin{lstlisting}
+from sklearn.metrics import (confusion_matrix, classification_report, accuracy_score,
+                             precision_score, recall_score, f1_score, roc_auc_score,
+                             mean_absolute_error, mean_squared_error, r2_score)
+from sklearn.model_selection import cross_val_score, StratifiedKFold, GridSearchCV
+\end{lstlisting}
+\code{confusion\_matrix(y\_true, y\_pred)} returns rows = actual, columns = predicted, ordered by label: for 0/1 it is $\begin{pmatrix}TN & FP\\FN & TP\end{pmatrix}$.
+Note: scikit-learn puts the negative class first, the opposite of many textbooks' layout.
+
+\section{The complete Round 3 walkthrough}
+To make the outputs concrete we use a \emph{simulated} dataset of 215 students with the same columns as the public MBA campus-recruitment dataset the round reportedly used
+(gender, SSC/HSC/degree percentages, HSC stream, degree type, work experience, employability test, MBA specialisation and percentage, status, salary). The numbers below are what this
+code prints on the simulated data; on the real data they will differ, but every step and every judgement is the same.
+
+\subsection{Step 1: load and understand}
+\begin{lstlisting}
+df = pd.read_csv("placement.csv")
+df.shape                                   # (215, 13)
+df.isna().sum()[lambda s: s > 0]           # salary: 105
+df["status"].value_counts()                # Placed 110, Not Placed 105  (balanced)
+df.groupby("status")["salary"].apply(lambda s: s.isna().mean())
+# Not Placed 1.0, Placed 0.0   <- salary is missing exactly for non-placed students
+\end{lstlisting}
+\textbf{Say aloud}: ``Salary exists only for placed students, so it is a consequence of the target. Keeping it, or even its missingness, would leak the answer. I will drop it.''
+\textbf{Also}: \code{sl\_no} is an ID: drop it.
+
+\subsection{Step 2: sanity-check values and outliers}
+\code{df.describe()}: all percentages lie within 0--100. High values like 95 are genuine top performers, not errors; I will not remove them.
+\code{value\_counts()} of each categorical: \code{degree\_t = "Others"} is small (about 5\%): keep, but note its estimates will be noisy.
+
+\subsection{Step 3: quick EDA}
+\begin{lstlisting}
+df.groupby("workex")["status"].apply(lambda s: (s == "Placed").mean())
+df[num + ["placed"]].corr()["placed"]
+sns.boxplot(data=df, x="status", y="ssc_p")
+\end{lstlisting}
+
+\subsection{Step 4: split and build the pipeline}
+\begin{lstlisting}
+X = df.drop(columns=["sl_no", "status", "salary"])
+y = (df["status"] == "Placed").astype(int)
+num = ['ssc_p', 'hsc_p', 'degree_p', 'etest_p', 'mba_p']
+cat = ['degree_t', 'gender', 'hsc_s', 'specialisation', 'workex']
+Xtr, Xte, ytr, yte = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+len(Xtr), len(Xte)                    # 172 43   (positive rate 0.512 in both)
+clf = Pipeline([("pre", pre), ("lr", LogisticRegression(max_iter=1000))])
+clf.fit(Xtr, ytr)
+\end{lstlisting}
+
+\subsection{Step 5: evaluate}
+\begin{lstlisting}
+pred = clf.predict(Xte); prob = clf.predict_proba(Xte)[:, 1]
+confusion_matrix(yte, pred)          # [[17  4]
+                                     #  [ 6 16]]   TN=17 FP=4 FN=6 TP=16
+print(classification_report(yte, pred, digits=3))
+#               precision  recall  f1-score  support
+#            0      0.739   0.810     0.773       21
+#            1      0.800   0.727     0.762       22
+#     accuracy                        0.767       43
+roc_auc_score(yte, prob)             # 0.846
+\end{lstlisting}
+\textbf{Interpretation aloud}: ``Accuracy 76.7\%, sensible here because classes are balanced. Of students predicted placed, 80\% were (precision); of students actually placed, we
+identified 72.7\% (recall). AUC 0.85 means a random placed student outscores a random non-placed one 85\% of the time. With only 43 test rows, these numbers have a margin of error
+of roughly $\pm$6--7 points, so I will check cross-validation.''
+
+\subsection{Step 6: cross-validate and compare}
+\begin{lstlisting}
+cv = StratifiedKFold(5, shuffle=True, random_state=42)
+s = cross_val_score(clf, X, y, cv=cv, scoring="roc_auc")
+s.round(3), s.mean(), s.std()        # [0.764 0.909 0.838 0.807 0.851] 0.834 0.048
+GridSearchCV(clf, {"lr__C": [0.01, 0.1, 1, 10]}, cv=cv, scoring="roc_auc").fit(Xtr, ytr)
+# best C = 0.01, CV AUC 0.843
+rf = Pipeline([("pre", pre), ("rf", RandomForestClassifier(n_estimators=300,
+              min_samples_leaf=3, random_state=42))])
+cross_val_score(rf, X, y, cv=cv, scoring="roc_auc").mean()   # 0.823
+\end{lstlisting}
+``Logistic regression (0.83--0.84) is as good as the random forest (0.82) on 215 rows; I prefer the simpler, interpretable model.''
+
+\subsection{Step 7: explain the model}
+\begin{lstlisting}
+names = clf.named_steps["pre"].get_feature_names_out()
+coefs = clf.named_steps["lr"].coef_[0]
+sorted(zip(names, coefs), key=lambda t: -abs(t[1]))[:5]
+# ssc_p 1.46, workex_Yes 0.62, workex_No -0.62, degree_t_Others 0.56, degree_p 0.45
+\end{lstlisting}
+``Scaled SSC percentage has the largest effect: one standard deviation higher multiplies the odds of placement by $e^{1.46}\approx4.3$. Work experience raises the odds. The
+degree\_t = Others coefficient rests on very few students, so I would not trust it.''
+
+\subsection{Step 8: choose a threshold for the use case}
+\begin{lstlisting}
+for t in [0.3, 0.5, 0.7]:
+    p = (prob >= t).astype(int)
+    print(t, precision_score(yte, p), recall_score(yte, p))
+# 0.3  0.667  0.818
+# 0.5  0.800  0.727
+# 0.7  0.824  0.636
+\end{lstlisting}
+``If the college uses this to find students who need extra support, the important class is `Not Placed', and we want high recall for it; I would pick the threshold accordingly.''
+
+\subsection{Step 9: demonstrate what leakage would have done}
+\begin{lstlisting}
+X_leaky = X.assign(salary_missing=df["salary"].isna().astype(int))
+cross_val_score(leaky_pipeline, X_leaky, y, cv=cv, scoring="roc_auc").mean()   # 1.0
+\end{lstlisting}
+A perfect AUC on a noisy human outcome is a red flag, not a success.
+
+\section{Regression and other tasks in scikit-learn}
+\begin{lstlisting}
+reg = Pipeline([("pre", pre), ("m", Ridge(alpha=1.0))]).fit(Xtr, ytr_salary)
+mean_absolute_error(yte_salary, reg.predict(Xte)); r2_score(...)
+TransformedTargetRegressor(regressor=Ridge(), func=np.log1p, inverse_func=np.expm1)  # log target
+\end{lstlisting}
+Text: \code{Pipeline([("tfidf", TfidfVectorizer()), ("clf", LinearSVC())])}. Clustering: \code{KMeans(n\_clusters=4, n\_init=10).fit\_predict(Xs)}.
+Saving: \code{joblib.dump(clf, "model.pkl")}.
+
+\begin{practical}[: what interviewers watch in Round 3]
+Leakage spotted first; no blind outlier deletion; a sound split (stratified); preprocessing inside a pipeline; a simple baseline before anything fancy; the right metrics read
+correctly; uncertainty acknowledged on small data; clear narration; clean code. Exactly the steps the successful candidate reported.
+\end{practical}
+
+\stuck{scikit-learn User Guide: Pipelines and composite estimators}{https://scikit-learn.org/stable/modules/compose.html}
+\section{Round 3 style questions}
+
+\begin{qa}{\pyq{Round 3 Part 2: train--test split, training, performance testing} Walk me through building and evaluating a placement classifier in scikit-learn.}
+\oneline{Drop leaking and ID columns, split stratified into train and test, build a Pipeline with a ColumnTransformer (impute + scale numerics, impute + one-hot categoricals) and
+logistic regression, fit on train, then report the confusion matrix, precision, recall, F1, accuracy and ROC AUC on test, confirmed by stratified cross-validation.}
+\why The nine steps above. The key judgement calls: leakage, outliers, metric choice, threshold, honest uncertainty.
+\end{qa}
+
+\begin{qa}{\pyq{Round 3: leakage} Why do you drop \code{salary} before modelling placement? How would you prove the leak to the interviewer?}
+\oneline{Because salary is only recorded after placement, so it is unavailable at prediction time and encodes the label; the proof is that its missingness is 100\% for non-placed and
+0\% for placed students, and a model using it reaches AUC 1.0.}
+\end{qa}
+
+\begin{qa}{Why put the scaler and imputer inside a Pipeline instead of transforming the whole DataFrame first?}
+\oneline{So that their statistics are learned only from training folds, avoiding leakage into validation and test, and so the identical transformation is applied at prediction time.}
+\why Scaling before splitting uses test means and variances; small with big data, but a real bias with 215 rows, and it is the kind of mistake interviewers look for.
+\end{qa}
+
+\begin{qa}{Read this confusion matrix from scikit-learn: \code{[[17, 4], [6, 16]]}. Compute precision, recall and F1 for the positive class.}
+\oneline{Rows are actual, columns predicted, negative class first: TN 17, FP 4, FN 6, TP 16; precision $16/20 = 0.80$, recall $16/22 = 0.727$, F1 $= 0.762$.}
+\end{qa}
+
+\begin{qa}{\code{fit}, \code{transform}, \code{fit\_transform}, \code{predict}, \code{predict\_proba}: explain each.}
+\oneline{\code{fit} learns parameters from data; \code{transform} applies a fitted transformer; \code{fit\_transform} does both (training data only); \code{predict} outputs labels or values;
+\code{predict\_proba} outputs class probabilities.}
+\pitfall Calling \code{fit\_transform} on the test set (re-fits on test: leakage and inconsistent features).
+\end{qa}
+
+\begin{qa}{Why \code{stratify=y} and \code{random\_state}?}
+\oneline{\code{stratify} keeps class proportions equal across train and test (vital for imbalanced or small data); \code{random\_state} makes results reproducible.}
+\end{qa}
+
+\begin{qa}{How do you tune hyperparameters properly?}
+\oneline{With \code{GridSearchCV} or \code{RandomizedSearchCV} over the whole Pipeline on the training set with stratified CV and a metric that matches the goal, then evaluate the chosen model
+once on the test set.}
+\worked \code{\{"lr\_\_C": [0.01, 0.1, 1, 10]\}}: parameter names are \code{step\_\_param}.
+\end{qa}
+
+\begin{qa}{\deep Your test accuracy is 0.77 on 43 rows. How confident are you?}
+\oneline{Not very: the standard error is about $\sqrt{0.77\cdot0.23/43}\approx0.064$, so the true accuracy could plausibly be anywhere from about 0.64 to 0.90; cross-validation (0.83 $\pm$ 0.05 AUC)
+gives a steadier estimate.}
+\end{qa}
+
+\begin{qa}{How do you handle a categorical value in test that never appeared in training?}
+\oneline{\code{OneHotEncoder(handle\_unknown="ignore")} encodes it as all zeros; alternatives are grouping rare categories into ``other'' at training time or using encoders that map unknowns to
+a default.}
+\end{qa}
+
+\begin{qa}{Logistic regression vs random forest on this small dataset: which do you present and why?}
+\oneline{Logistic regression: cross-validated AUC is equal or better (0.83 vs 0.82), it is interpretable (odds ratios), calibrated and less prone to overfit 215 rows.}
+\end{qa}
+
+\begin{qa}{How do you extract feature names and coefficients from a fitted pipeline?}
+\oneline{\code{pipe.named\_steps["pre"].get\_feature\_names\_out()} with \code{pipe.named\_steps["lr"].coef\_[0]}; sort by absolute value; for tree models use \code{feature\_importances\_}
+or \code{permutation\_importance}.}
+\end{qa}
+
+\begin{qa}{\deep The interviewer asks you to predict salary for placed students. What changes?}
+\oneline{It becomes a regression on the placed subset only (salary is not defined for others): use a log target or Gamma GLM because salary is skewed, evaluate with MAE/MAPE, and remember the
+model applies only to students who get placed (a two-stage model: placement probability, then salary given placement).}
+\why Expected salary $= P(\text{placed})\times\E[\text{salary}\mid\text{placed}]$. That is the hurdle model from Chapter 4.
+\end{qa}
+
+\begin{qa}{How do you save and reload a trained pipeline?}
+\oneline{\code{joblib.dump(pipe, "model.joblib")} and \code{joblib.load}; save the whole Pipeline (preprocessing + model), record the library versions, and never unpickle untrusted files.}
+\end{qa}
+
+\begin{qa}{\deep Accuracy, precision or recall: which would you optimise for this placement model?}
+\oneline{It depends on the decision: for allocating extra coaching to at-risk students, recall of the ``Not Placed'' class; for a recruiter shortlist predicted to be placed, precision of ``Placed'';
+since classes are balanced, accuracy is a fair overall summary, and AUC compares models independent of threshold.}
+\end{qa}

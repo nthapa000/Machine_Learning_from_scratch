@@ -1,1 +1,307 @@
-% TODO 26_pandas
+\chapter{Pandas and Visualisation: Data Handling for Round 3}
+\companion{Corey Schafer: Pandas Tutorial (Part 8), Grouping and Aggregating}{\ytid{txMdrV1Ut64}}
+
+Round 3 Part 1 is exactly this chapter: ``Data Handling (Python, NumPy, Pandas): data reading, column naming, statistical parameters computation,
+group-by operations, basic visualisations, basic text processing.'' The reported task used an MBA placement dataset. We use a small version of it
+throughout, and every output below was produced by running the code (pandas 3.0; older versions show text columns as \code{object} rather than
+\code{str}).
+
+\begin{lstlisting}
+sl_no,gender,ssc_p,hsc_p,degree_p,degree_t,workex,mba_p,status,salary
+1,M,67.0,91.0,58.0,Sci&Tech,No,58.8,Placed,270000
+2,M,79.3,78.3,77.5,Sci&Tech,Yes,66.3,Placed,200000
+3,M,65.0,68.0,64.0,Comm&Mgmt,No,57.8,Placed,250000
+4,M,56.0,52.0,52.0,Sci&Tech,No,59.4,Not Placed,
+5,M,85.8,73.6,73.3,Comm&Mgmt,No,55.5,Placed,425000
+6,F,55.0,49.8,67.3,Sci&Tech,Yes,51.6,Not Placed,
+7,F,46.0,49.2,79.0,Comm&Mgmt,No,53.3,Not Placed,
+8,M,82.0,64.0,66.0,Sci&Tech,Yes,62.1,Placed,252000
+\end{lstlisting}
+
+\section{The two objects: Series and DataFrame}
+A \textbf{Series} is a one-dimensional labelled array (one column). A \textbf{DataFrame} is a table: columns are Series sharing a row \textbf{index}. Each column has
+one dtype (int64, float64, str/object, bool, category, datetime64).
+
+\section{Reading and first look}
+\begin{lstlisting}
+import pandas as pd, numpy as np
+df = pd.read_csv("placement.csv")       # also read_excel, read_json, read_parquet, read_sql
+df.shape                 # (8, 10)
+df.head(); df.tail(3); df.sample(5, random_state=0)
+df.info()                # dtypes, non-null counts, memory
+df.dtypes
+df.isna().sum()          # salary: 3 missing
+df.describe()            # count, mean, std, min, quartiles, max of numeric columns
+df.describe(include="all")
+df["status"].value_counts()                  # Placed 5, Not Placed 3
+df["status"].value_counts(normalize=True)    # 0.625, 0.375
+df.nunique(); df["degree_t"].unique()        # ['Sci&Tech', 'Comm&Mgmt']
+df.duplicated().sum()                        # 0
+\end{lstlisting}
+Useful \code{read\_csv} arguments: \code{sep}, \code{header}, \code{names}, \code{usecols}, \code{dtype}, \code{parse\_dates}, \code{na\_values=["NA", "-", "?"]},
+\code{nrows}, \code{chunksize} (stream a huge file), \code{encoding}.
+
+\section{Column naming}
+\begin{lstlisting}
+df = df.rename(columns={"ssc_p": "ssc_pct", "hsc_p": "hsc_pct"})   # selected columns
+df.columns = (df.columns.str.strip()          # clean all names at once
+                        .str.lower()
+                        .str.replace(" ", "_"))
+df = df.add_prefix("f_")        # or add_suffix
+df.columns.tolist()
+\end{lstlisting}
+Good names are lower-case, no spaces, descriptive (\code{mba\_pct}), so \code{df.mba\_pct} and formulas work.
+
+\section{Selecting and filtering}
+\begin{lstlisting}
+df["mba_p"]                     # a Series
+df[["sl_no", "mba_p"]]          # a DataFrame
+df.loc[0:2, "sl_no"]            # label-based, END INCLUSIVE   -> rows 0,1,2
+df.iloc[0:2, 0:3]               # position-based, end exclusive -> rows 0,1
+df.loc[df["mba_p"] > 60, ["sl_no", "mba_p"]]        # rows 2 and 8
+df.query("ssc_pct > 80 and workex == 'Yes'")        # sl_no 8
+df[(df.gender == "F") & (df.workex == "Yes")]       # & | ~ with parentheses, not and/or
+df.sort_values("mba_p", ascending=False).head(2)    # sl_no 2, 8
+df.nlargest(2, "salary")                            # sl_no 5, 1
+\end{lstlisting}
+\begin{trap}
+\code{loc} slices include the end label, \code{iloc} slices exclude it. Use \code{\&}, \code{|}, \code{\textasciitilde} with parentheses for conditions; Python's
+\code{and}/\code{or} raise ``truth value of a Series is ambiguous''. Assign with \code{df.loc[mask, "col"] = value}, not chained indexing
+\code{df[mask]["col"] = value} (which may modify a copy).
+\end{trap}
+
+\section{Statistical parameters}
+\begin{lstlisting}
+df["salary"].mean(), df["salary"].median()      # 279400.0  252000.0   (NaN skipped)
+df["ssc_p"].std(), df["ssc_p"].var()            # sample (n-1) by default: ddof=1
+df["mba_p"].quantile([0.25, 0.5, 0.75])
+df["mba_p"].skew(), df["mba_p"].kurt()
+df["degree_t"].mode()
+num = ["ssc_pct", "hsc_pct", "degree_p", "mba_p", "placed"]
+df[num].corr()["placed"]        # ssc 0.85, hsc 0.85, degree 0.09, mba 0.58
+df[num].corr(method="spearman") # rank correlation, robust to outliers
+\end{lstlisting}
+Note that pandas' \code{std} uses $n-1$ (sample) while NumPy's \code{np.std} uses $n$ by default.
+
+\section{Creating and transforming columns}
+\begin{lstlisting}
+df["placed"] = (df["status"] == "Placed").astype(int)          # vectorised
+df["gender_code"] = df["gender"].map({"M": 0, "F": 1})
+df["mba_band"] = pd.cut(df["mba_p"], bins=[0, 55, 60, 100],
+                        labels=["low", "mid", "high"])           # low 2, mid 4, high 2
+df["mba_q"] = pd.qcut(df["mba_p"], q=4)                          # equal-count bins
+df["school_gap"] = df["ssc_pct"] - df["hsc_pct"]                 # prefer this...
+df.apply(lambda r: r["ssc_pct"] - r["hsc_pct"], axis=1)          # ...over row-wise apply (slow)
+np.where(df["mba_p"] > 60, "high", "other")
+pd.get_dummies(df, columns=["workex", "degree_t"], drop_first=True)
+\end{lstlisting}
+
+\section{Group-by: split, apply, combine}
+\begin{intuition}[: what groupby does]
+Split the rows into groups by a key (``work experience: Yes / No''), apply a function to each group (mean placement rate), combine the results into a table. Every
+``by segment'' question in Round 3 and Round 4 is a groupby.
+\end{intuition}
+\begin{lstlisting}
+df.groupby("workex")["placed"].mean()          # No 0.600, Yes 0.667
+df.groupby("degree_t").agg(n=("placed", "size"),
+                           rate=("placed", "mean"),
+                           avg_mba=("mba_p", "mean"))
+#            n  rate  avg_mba
+# Comm&Mgmt  3  0.67    55.53
+# Sci&Tech   5  0.60    59.64
+df.groupby(["gender", "workex"])["placed"].mean()   # MultiIndex result
+df.groupby("degree_t")["mba_p"].transform("mean")   # same length as df: group mean per row
+df.groupby("degree_t").filter(lambda g: len(g) >= 4)  # keep only big groups
+pd.crosstab(df["workex"], df["status"])              # counts table
+df.pivot_table(index="degree_t", columns="workex", values="placed", aggfunc="mean")
+\end{lstlisting}
+\code{agg} reduces each group to one row; \code{transform} returns a value per original row (useful for features like ``salary relative to city average'');
+\code{filter} keeps or drops whole groups; \code{apply} is the general fallback.
+
+\section{Missing values}
+\begin{lstlisting}
+df.isna().sum(); df.isna().mean()           # counts and fractions
+df.dropna()                                  # (5, ...) here: drops every non-placed row!
+df.drop(columns=["salary"])                  # what the leakage-aware candidate did
+df["salary"].fillna(0)                       # only when 0 is meaningful
+df["x"].fillna(df.groupby("degree_t")["x"].transform("median"))   # group-wise imputation
+pd.to_numeric(pd.Series(["10", "x", "3.5"]), errors="coerce")       # [10.0, NaN, 3.5]
+\end{lstlisting}
+In this dataset \code{dropna()} silently deletes all non-placed students (their salary is missing): a disastrous bias. Always ask \emph{why} values are missing.
+
+\section{Combining tables}
+\begin{lstlisting}
+pd.merge(left, right, on="id", how="left")   # inner / left / right / outer joins
+# left ids [1,2,3], right ids [2,3,4] -> left join keeps 1,2,3; b is NaN for id 1
+pd.concat([df1, df2])                         # stack rows (axis=0) or columns (axis=1)
+\end{lstlisting}
+Check row counts after a merge: a many-to-many key silently multiplies rows (\code{validate="one\_to\_one"} catches it).
+
+\section{Basic text processing with the .str accessor}
+\begin{lstlisting}
+s = pd.Series(["Sr. Data Scientist ", "data analyst", "ML Engineer"])
+s.str.strip().str.lower()            # ['sr. data scientist', 'data analyst', 'ml engineer']
+s.str.contains("data", case=False)   # [True, True, False]
+s.str.len()                          # [19, 12, 11]
+s.str.split().str[0]                 # ['Sr.', 'data', 'ML']
+s.str.replace(r"[^a-zA-Z ]", "", regex=True)
+s.str.extract(r"(\d+)\s*\+?\s*(?:yrs|years)")    # numbers before "yrs"/"years"
+words = s.str.lower().str.split().explode(); words.value_counts()   # word frequencies
+\end{lstlisting}
+
+\section{Dates}
+\begin{lstlisting}
+df["posted"] = pd.to_datetime(df["posted"], errors="coerce")
+df["posted"].dt.dayofweek, df["posted"].dt.month
+df.set_index("posted").resample("W")["applies"].sum()      # weekly totals
+df["applies"].rolling(7).mean()                              # 7-day moving average
+\end{lstlisting}
+
+\section{Basic visualisation}
+\begin{lstlisting}
+import matplotlib.pyplot as plt, seaborn as sns
+df["mba_p"].hist(bins=10); plt.xlabel("MBA %"); plt.title("Distribution"); plt.show()
+sns.boxplot(data=df, x="status", y="mba_p")          # distribution by group, outliers
+sns.countplot(data=df, x="degree_t", hue="status")   # category counts
+sns.scatterplot(data=df, x="ssc_p", y="mba_p", hue="status")
+sns.heatmap(df[num].corr(), annot=True, cmap="coolwarm", vmin=-1, vmax=1)
+df.groupby("workex")["placed"].mean().plot(kind="bar")
+\end{lstlisting}
+Which plot for which question:
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l X}
+\toprule
+Question & Plot\\
+\midrule
+Distribution of one numeric variable & histogram, KDE, box plot\\
+Numeric vs category & box/violin plot, bar of means\\
+Two numerics & scatter (with hue for a third), hexbin for many points\\
+Counts of categories & bar / count plot\\
+Correlations among many numerics & heatmap\\
+Trend over time & line plot (with rolling mean)\\
+\bottomrule
+\end{tabularx}
+\end{center}
+Always label axes and title; avoid pie charts with many slices; use log scale for skewed salaries.
+
+\section{Performance}
+Vectorise (\code{df["a"] * df["b"]}) instead of \code{apply}/loops; use \code{category} dtype for repeated strings; read only needed columns; process big files in chunks;
+avoid growing a DataFrame row by row in a loop (collect in a list, build once).
+
+\begin{practical}[: a Round 3 data-handling checklist]
+\begin{enumerate}
+\item Load, \code{shape}, \code{head}, \code{info}, \code{dtypes}; fix types (\code{to\_numeric}, \code{to\_datetime}).
+\item Clean column names.
+\item Missing values per column, and \emph{why}; duplicates.
+\item \code{describe()}: check valid ranges (percentages within 0--100) before calling anything an outlier.
+\item \code{value\_counts} for every categorical; target balance.
+\item Leakage check: any column that exists only because of the outcome (salary).
+\item Group-bys of the target by key segments; correlation matrix; 2--3 clear plots.
+\item Narrate findings in one line each.
+\end{enumerate}
+\end{practical}
+
+\stuck{Corey Schafer: Pandas Tutorial (Part 1), Getting Started with Data Analysis}{\ytid{ZyhVh-qRZPA}}
+\section{Round 3 style questions}
+
+\begin{qa}{\pyq{Round 3 Part 1} Load the placement CSV and give a first summary: size, types, missing values, target balance and anything suspicious.}
+\oneline{8 rows and 10 columns; \code{salary} is the only column with missing values (3), exactly for the ``Not Placed'' rows, so it leaks the target and must be dropped;
+62.5\% are placed; percentages are all within 0--100, so extreme marks are genuine.}
+\why
+\begin{lstlisting}
+df = pd.read_csv("placement.csv")
+print(df.shape); df.info()
+print(df.isna().sum())
+print(df["status"].value_counts(normalize=True))
+print(df.describe())
+print(df.groupby("status")["salary"].apply(lambda s: s.isna().mean()))  # 1.0 for Not Placed
+\end{lstlisting}
+The last line proves the leakage: missingness of salary is 100\% for one class and 0\% for the other.
+\pushes \emph{``Would you drop rows with missing salary?''} No: that deletes every negative example.
+\end{qa}
+
+\begin{qa}{\pyq{Round 3: column naming} Clean messy column names like \code{" SSC Percentage "} and \code{"Work Exp"}.}
+\oneline{Vectorised string methods on \code{df.columns}: strip, lower, replace spaces with underscores, then rename specific ones with a mapping.}
+\why \code{df.columns = df.columns.str.strip().str.lower().str.replace(r"\textbackslash s+", "\_", regex=True)}; then \code{df.rename(columns=\{"ssc\_percentage": "ssc\_pct"\})}.
+\end{qa}
+
+\begin{qa}{\pyq{Round 3: group-by} What is the placement rate by work experience and by degree type? Show sizes too.}
+\oneline{\code{df.groupby("workex")["placed"].mean()} gives No 0.60, Yes 0.67; by degree type: Comm\&Mgmt 0.67 (n = 3), Sci\&Tech 0.60 (n = 5), computed with named
+aggregation.}
+\why Always report group sizes next to rates: with $n = 3$, a rate of 0.67 is very uncertain. \code{agg(n=("placed","size"), rate=("placed","mean"))}.
+\end{qa}
+
+\begin{qa}{\pyq{Round 3: statistical parameters} Compute mean, median, standard deviation and quartiles of MBA percentage, and the correlation of each score with placement.}
+\oneline{\code{df["mba\_p"].describe()} gives count, mean (58.1), std (4.74), min, quartiles and max; \code{df[num].corr()["placed"]} shows school scores (0.85) relate to placement more
+than degree percentage (0.09).}
+\why Correlation with a binary target is the point-biserial correlation. With 8 rows these numbers are illustrative only; say so. Use Spearman if outliers exist.
+\end{qa}
+
+\begin{qa}{What is the difference between \code{loc} and \code{iloc}? What does \code{df.loc[0:2]} return vs \code{df.iloc[0:2]}?}
+\oneline{\code{loc} selects by labels and includes the end of a slice; \code{iloc} selects by integer positions and excludes the end; with a default index, \code{loc[0:2]} returns 3 rows,
+\code{iloc[0:2]} returns 2.}
+\end{qa}
+
+\begin{qa}{\code{agg} vs \code{transform} vs \code{apply} in groupby: when do you use each?}
+\oneline{\code{agg} to reduce each group to summary values (one row per group); \code{transform} to broadcast a group statistic back to every row (same length as the input, ideal for
+features); \code{apply} for arbitrary functions when the others do not fit (slowest).}
+\worked \code{df.groupby("degree\_t")["mba\_p"].transform("mean")} gives 59.64 for each Sci\&Tech row and 55.53 for each Comm\&Mgmt row; \code{df["mba\_p"] - that} is ``MBA score
+relative to peers''.
+\end{qa}
+
+\begin{qa}{\deep Why is \code{df.dropna()} dangerous on the placement data?}
+\oneline{Because \code{salary} is missing for every non-placed student, so dropping rows with any NaN removes all negative examples and leaves a dataset where everyone is placed.}
+\why General lesson: inspect missingness by target and segment before dropping; drop the column instead (here it leaks anyway).
+\end{qa}
+
+\begin{qa}{Make a cross-tabulation of work experience vs placement status, and a pivot table of placement rate by degree type and work experience.}
+\oneline{\code{pd.crosstab(df.workex, df.status)} gives counts (No: 2 not placed, 3 placed; Yes: 1, 2); \code{pivot\_table(index="degree\_t", columns="workex", values="placed",
+aggfunc="mean")} gives rates, with NaN where a combination has no rows (Comm\&Mgmt with work experience).}
+\end{qa}
+
+\begin{qa}{\pyq{Round 3: basic text processing} Given a column of job titles, normalise them, flag data roles, and count the most common words.}
+\oneline{Use the \code{.str} accessor: strip and lower-case, \code{str.contains("data|analyst|scientist", regex=True)} for the flag, then split, explode and \code{value\_counts}.}
+\worked \code{s.str.contains("data", case=False)} gives \code{[True, True, False]} for the three sample titles.
+\end{qa}
+
+\begin{qa}{Convert a salary column containing values like ``12,00,000'', ``NA'' and ``8.5 LPA'' to numbers.}
+\oneline{Standardise text with \code{.str} (remove commas, convert ``LPA'' to rupees by multiplying by $10^5$), then \code{pd.to\_numeric(errors="coerce")}, and inspect what became NaN.}
+\worked
+\begin{lstlisting}
+s = df["salary"].astype(str).str.strip().str.upper()
+lpa = s.str.contains("LPA")
+num = pd.to_numeric(s.str.replace(r"[^0-9.]", "", regex=True), errors="coerce")
+df["salary_rs"] = np.where(lpa, num * 1e5, num)
+\end{lstlisting}
+\end{qa}
+
+\begin{qa}{How do you merge a candidates table with an applications table, and what can go wrong?}
+\oneline{\code{pd.merge(apps, cands, on="candidate\_id", how="left")}; check row counts and use \code{validate="many\_to\_one"} because duplicate keys on the right silently multiply rows, and check
+for unmatched keys (NaNs) after a left join.}
+\end{qa}
+
+\begin{qa}{Which plots would you draw to explore placement drivers, and what does each show?}
+\oneline{A count plot of status (balance), box plots of each score by status (separation), a count plot of degree type and work experience with hue = status, a scatter of SSC vs MBA
+coloured by status, and a correlation heatmap.}
+\end{qa}
+
+\begin{qa}{\deep Why is \code{df.apply(func, axis=1)} slow and how do you replace it?}
+\oneline{It calls a Python function once per row, losing vectorisation; replace it with column arithmetic, \code{np.where}/\code{np.select}, \code{map} with a dict, or \code{.str}/\code{.dt}
+methods.}
+\worked \code{df["ssc\_pct"] - df["hsc\_pct"]} vs \code{apply(lambda r: r.ssc\_pct - r.hsc\_pct, axis=1)}: same result $[-24.0, 1.0, -3.0, \dots]$, 100$\times$ faster on large data.
+\end{qa}
+
+\begin{qa}{What is \code{SettingWithCopyWarning} (chained assignment) and how do you avoid it?}
+\oneline{It warns that \code{df[mask]["col"] = v} may modify a temporary copy rather than \code{df}; use \code{df.loc[mask, "col"] = v}, or \code{.copy()} when you intentionally create a new frame
+(pandas 3 uses copy-on-write, making chained assignment never modify the original).}
+\end{qa}
+
+\begin{qa}{Compute a 7-day moving average of daily applications and weekly totals.}
+\oneline{\code{df.set\_index("date")["applies"].rolling(7).mean()} and \code{.resample("W").sum()} after parsing dates with \code{pd.to\_datetime}.}
+\end{qa}
+
+\begin{qa}{\deep A colleague bins MBA percentage with \code{pd.cut} and with \code{pd.qcut}. What is the difference?}
+\oneline{\code{cut} uses fixed value boundaries (equal width or given edges), so bins can have very different counts; \code{qcut} uses quantiles, so bins have (roughly) equal counts but uneven
+widths.}
+\worked With edges [0, 55, 60, 100]: counts low 2, mid 4, high 2.
+\end{qa}

@@ -1,1 +1,344 @@
-% TODO 24_python
+\chapter{Python for Data Science: the Core Language}
+\companion{Corey Schafer: Python Tutorial for Beginners (search the series)}{\yts{Corey+Schafer+Python+Tutorial+for+Beginners+Strings}}
+
+The pre-placement talk said programming MCQs in the online test ``will be quite easy'', giving the example of converting a string to an int and
+spotting the right output. Round 3 then puts you in a live notebook. This chapter teaches the language features that such questions test,
+assuming no prior Python. Every output shown here was checked by running the code (Python 3.11).
+
+\section{Values, types and variables}
+A \textbf{variable} is a name that refers to an object. Every object has a \textbf{type}:
+\begin{center}\small
+\begin{tabularx}{\linewidth}{l l X}
+\toprule
+Type & Example & Notes\\
+\midrule
+\code{int} & \code{42}, \code{-7} & unlimited size\\
+\code{float} & \code{3.14}, \code{1e-3} & 64-bit; \code{0.1 + 0.2 == 0.3} is \code{False}\\
+\code{bool} & \code{True}, \code{False} & a subclass of int: \code{True + True == 2}\\
+\code{str} & \code{"Pune"} & immutable sequence of characters\\
+\code{list} & \code{[1, "a", 2.5]} & ordered, mutable\\
+\code{tuple} & \code{(1, 2)}, \code{(1,)} & ordered, immutable; \code{(1)} is just \code{1}\\
+\code{dict} & \code{\{"city": "Pune"\}} & key $\to$ value; insertion-ordered\\
+\code{set} & \code{\{1, 2, 3\}} & unordered, unique elements\\
+\code{NoneType} & \code{None} & ``no value''\\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Converting between types (the OA's favourite)}
+\begin{lstlisting}
+int("12") + 1        # 13
+int(3.9), int(-3.9)  # (3, -3)   truncates toward zero
+int("3.5")           # ValueError: invalid literal for int() with base 10: '3.5'
+int(float("3.5"))    # 3
+"3" + "4"            # '34'      string concatenation
+"3" * 3              # '333'
+str(10) + "5"        # '105'
+int("101", 2)        # 5         binary
+round(2.5), round(3.5)   # (2, 4)  banker's rounding: ties go to the even number
+round(2.675, 2)      # 2.67      2.675 is stored as 2.67499999...
+\end{lstlisting}
+
+\subsection{Truthiness}
+In an \code{if}, these are false: \code{0}, \code{0.0}, \code{""}, \code{[]}, \code{\{\}}, \code{set()}, \code{None}, \code{False}. Everything else is true,
+including \code{"0"} and \code{[0]}. So \code{bool("0")} is \code{True}.
+
+\section{Operators}
+\begin{lstlisting}
+7 // 2, -7 // 2      # (3, -4)   floor division rounds DOWN, not toward zero
+7 % 3, -7 % 3        # (1, 2)    result takes the sign of the divisor
+5 / 2, 4 / 2         # (2.5, 2.0)  / always returns a float
+2 ** 3 ** 2          # 512       ** is right-associative: 2 ** 9
+divmod(17, 5)        # (3, 2)
+1 == 1.0             # True      equal values
+[] == [], [] is []   # (True, False)  == compares values, `is` compares identity
+\end{lstlisting}
+
+\section{Strings}
+Strings are immutable sequences: indexing and slicing work like lists, but you cannot assign to a character.
+\begin{lstlisting}
+s = "DataScience"
+s[0], s[-1]          # ('D', 'e')
+s[2:6]               # 'taSc'      start inclusive, stop exclusive
+s[-3:]               # 'nce'
+s[::2]               # 'DtSine'    every second character
+s[::-1]              # 'ecneicSataD'  reversed
+len(s)               # 11
+"a,b,,c".split(",")  # ['a', 'b', '', 'c']
+" x ".strip()        # 'x'
+"-".join(["a", "b"]) # 'a-b'
+"abc".find("z")      # -1   (index() would raise ValueError)
+"12".isdigit(), "1.2".isdigit()   # (True, False)
+f"{3.14159:.2f}"     # '3.14'
+s[0] = "d"           # TypeError: 'str' object does not support item assignment
+\end{lstlisting}
+
+\section{Lists, tuples, dicts and sets}
+\begin{lstlisting}
+L = [3, 1, 2]
+L.sort()             # sorts in place and RETURNS None
+sorted(L, reverse=True)   # [3, 2, 1]  returns a new list
+L.append(4); L.extend([5, 6]); L.pop(); L.insert(0, 9)
+nums = [1, 2, 3, 4]
+nums[1:-1], nums[::-1]    # ([2, 3], [4, 3, 2, 1])
+a, *rest = [1, 2, 3, 4]   # a = 1, rest = [2, 3, 4]
+
+d = {"a": 1}
+d.get("b", 0)        # 0   (d["b"] would raise KeyError)
+for k, v in d.items(): ...
+{k: v for k, v in [("a", 1), ("b", 2)] if v > 1}   # {'b': 2}
+
+s, s2 = {1, 2, 3}, {2, 3, 4}
+s & s2, s | s2, s - s2, s ^ s2   # ({2, 3}, {1, 2, 3, 4}, {1}, {1, 4})
+\end{lstlisting}
+Membership: \code{x in list} is $O(n)$; \code{x in set} and \code{x in dict} (keys) are $O(1)$ on average because they use hashing. Dict keys and set elements
+must be hashable (immutable): a tuple can be a key, a list cannot.
+
+\section{Mutability, references and copying}
+This is the source of most ``what is the output'' traps.
+\begin{lstlisting}
+a = [1, 2, 3]; b = a; b.append(4); print(a)     # [1, 2, 3, 4]  same object
+a = [1, 2, 3]; b = a[:]; b.append(4); print(a)  # [1, 2, 3]     a copy
+m = [[0] * 2] * 2; m[0][0] = 5; print(m)        # [[5, 0], [5, 0]]  both rows are ONE list
+m = [[0] * 2 for _ in range(2)]                 # correct: two separate rows
+
+import copy
+a = [[1, 2], [3]]
+b = copy.copy(a)        # shallow: new outer list, same inner lists
+c = copy.deepcopy(a)    # deep: everything copied
+a[0].append(9)
+print(b, c)             # [[1, 2, 9], [3]] [[1, 2], [3]]
+
+t = ([1], 2); t[0].append(3); print(t)   # ([1, 3], 2)  tuple fixed, its list is mutable
+\end{lstlisting}
+\textbf{Function arguments} are passed by object reference (``call by sharing''): a function can mutate a mutable argument, but rebinding the name inside does not
+affect the caller.
+\begin{lstlisting}
+x = [1, 2, 3]
+def mod(l):  l += [4]       # in-place: caller sees it
+def mod2(l): l = l + [5]    # new list bound to local name: caller does not
+mod(x); mod2(x); print(x)   # [1, 2, 3, 4]
+\end{lstlisting}
+
+\subsection{The mutable default argument trap}
+\begin{lstlisting}
+def f(x, L=[]):
+    L.append(x)
+    return L
+print(f(1), f(2))     # [1, 2] [1, 2]   the default list is created ONCE
+def f(x, L=None):     # fix
+    if L is None: L = []
+    L.append(x); return L
+\end{lstlisting}
+
+\section{Control flow and comprehensions}
+\begin{lstlisting}
+[i * i for i in range(5) if i % 2 == 0]       # [0, 4, 16]
+{w: len(w) for w in ["ml", "python"]}          # {'ml': 2, 'python': 6}
+list(enumerate("ab", start=1))                  # [(1, 'a'), (2, 'b')]
+list(zip([1, 2, 3], "ab"))                      # [(1, 'a'), (2, 'b')]   stops at shortest
+any([0, 0, 1]), all([1, 1, 0]), all([])        # (True, False, True)
+\end{lstlisting}
+
+\section{Functions: \code{*args}, \code{**kwargs}, lambda, scope}
+\begin{lstlisting}
+def k(*args, **kw): return args, kw
+k(1, 2, a=3)                 # ((1, 2), {'a': 3})
+list(map(lambda v: v * 2, [1, 2, 3]))        # [2, 4, 6]
+list(filter(None, [0, 1, "", 2]))            # [1, 2]
+sorted(["b", "A", "c"])                      # ['A', 'b', 'c']   uppercase sorts first
+sorted(["b", "A", "c"], key=str.lower)       # ['A', 'b', 'c']
+sorted({"b": 2, "a": 3}.items(), key=lambda kv: kv[1], reverse=True)  # [('a', 3), ('b', 2)]
+\end{lstlisting}
+\textbf{Scope (LEGB)}: names are looked up in Local, Enclosing function, Global, Built-in order. Assigning to a global inside a function needs \code{global}.
+\textbf{Late binding of closures}:
+\begin{lstlisting}
+funcs = [lambda: i for i in range(3)]; [f() for f in funcs]        # [2, 2, 2]
+funcs = [lambda i=i: i for i in range(3)]; [f() for f in funcs]    # [0, 1, 2]
+\end{lstlisting}
+
+\section{Iterators and generators}
+A \textbf{generator} produces values lazily, one at a time, with \code{yield}; it remembers where it paused. It uses constant memory, ideal for streaming a
+10 GB log file line by line.
+\begin{lstlisting}
+def countdown(n):
+    while n > 0:
+        yield n
+        n -= 1
+list(countdown(3))         # [3, 2, 1]
+g = (i for i in range(3))  # generator expression
+sum(g), sum(g)             # (3, 0)   a generator is exhausted after one pass
+\end{lstlisting}
+\code{next(g)} on an exhausted generator raises \code{StopIteration}.
+
+\section{Decorators}
+A decorator is a function that takes a function and returns a new function that adds behaviour (logging, timing, caching, retries, auth checks).
+\begin{lstlisting}
+import functools, time
+def timer(fn):
+    @functools.wraps(fn)                 # keep fn's name and docstring
+    def wrapper(*a, **k):
+        t = time.perf_counter()
+        result = fn(*a, **k)
+        print(f"{fn.__name__} took {time.perf_counter() - t:.4f}s")
+        return result
+    return wrapper
+
+@timer                 # same as: add = timer(add)
+def add(a, b): return a + b
+add(2, 3)              # prints the timing line, returns 5
+\end{lstlisting}
+\code{@functools.lru\_cache} is a built-in caching decorator.
+
+\section{Exceptions}
+\begin{lstlisting}
+try:
+    value = int(row["salary"])
+except (ValueError, TypeError):
+    value = None
+else:
+    pass                 # runs if no exception
+finally:
+    pass                 # always runs
+\end{lstlisting}
+Catch specific exceptions, not bare \code{except:}.
+
+\section{Classes in one page}
+\begin{lstlisting}
+class Candidate:
+    count = 0                              # class attribute, shared
+    def __init__(self, name, years):
+        self.name, self.years = name, years  # instance attributes
+        Candidate.count += 1
+    def is_senior(self):
+        return self.years >= 5
+    def __repr__(self):
+        return f"Candidate({self.name!r}, {self.years})"
+\end{lstlisting}
+\code{\_\_eq\_\_} defines \code{==}; without it, \code{==} falls back to identity.
+
+\section{Performance notes}
+Vectorise with NumPy/pandas instead of Python loops (Chapter 25). Use sets/dicts for membership. Use generators for big streams. The \textbf{GIL} (global interpreter
+lock) lets only one thread execute Python bytecode at a time, so CPU-bound work is parallelised with \code{multiprocessing} (or done in NumPy, which releases the
+GIL), while threads suit I/O-bound work.
+
+\begin{practical}[: Python in the InfoEdge rounds]
+OA: short output-prediction MCQs on types, slicing, conversion, mutability. Round 3: data handling in pandas and an sklearn model (Chapters 26--27); clean,
+readable code with small functions and clear names counts.
+\end{practical}
+
+\stuck{Ned Batchelder: Facts and Myths about Python Names and Values}{\ytid{_AEJHKGk9ns}}
+\section{Interview and OA questions}
+
+\begin{qa}{\pyq{2026--27 talk: string to int} What do \code{int("12") + 1}, \code{int("3.5")}, \code{int(3.9)} and \code{"3" + "4"} give?}
+\oneline{13; a \code{ValueError}; 3; and the string \code{'34'}.}
+\why \code{int()} parses a string only if it is a valid integer literal; ``3.5'' is not, so convert via \code{float} first: \code{int(float("3.5")) == 3}.
+\code{int(3.9)} truncates toward zero (not rounding). \code{+} on strings concatenates.
+\pushes \emph{``How do you safely convert a messy salary column?''} \code{pd.to\_numeric(df["salary"], errors="coerce")} turns unparsable values into NaN.
+\end{qa}
+
+\begin{qa}{What is printed: \code{a = [1,2,3]; b = a; b.append(4); print(a)}? And with \code{b = a[:]}?}
+\oneline{\code{[1, 2, 3, 4]} in the first case (both names refer to the same list) and \code{[1, 2, 3]} in the second (slicing makes a shallow copy).}
+\why Assignment never copies in Python; it binds another name to the same object. Check with \code{a is b}.
+\end{qa}
+
+\begin{qa}{What does \code{m = [[0]*2]*2; m[0][0] = 5; print(m)} print, and how do you fix it?}
+\oneline{\code{[[5, 0], [5, 0]]}, because the outer \code{*2} repeats a reference to the same inner list; build rows with a comprehension: \code{[[0]*2 for \_ in range(2)]}.}
+\end{qa}
+
+\begin{qa}{Explain shallow vs deep copy with an example.}
+\oneline{A shallow copy creates a new outer container that still references the same inner objects; a deep copy recursively copies everything.}
+\worked After \code{a[0].append(9)}: shallow copy shows \code{[[1, 2, 9], [3]]}, deep copy \code{[[1, 2], [3]]}. In pandas, \code{df.copy()} is deep by default for data.
+\end{qa}
+
+\begin{qa}{What is wrong with \code{def f(x, L=[])}? Show the output of \code{f(1), f(2)}.}
+\oneline{The default list is created once at definition time and shared across calls, so both calls append to the same list: \code{[1, 2] [1, 2]}; use \code{L=None} and create
+a new list inside.}
+\end{qa}
+
+\begin{qa}{Lists vs tuples vs sets vs dicts: when do you use each?}
+\oneline{List for an ordered, changeable sequence; tuple for a fixed record or a dictionary key; set for uniqueness and fast membership; dict for key-to-value lookups.}
+\why Membership in a list is $O(n)$, in a set or dict $O(1)$ average. Tuples are hashable (if their contents are), so \code{(city, title)} can key a dict of average salaries.
+\end{qa}
+
+\begin{qa}{Give the outputs: \code{7 // 2}, \code{-7 // 2}, \code{-7 \% 3}, \code{2 ** 3 ** 2}, \code{5 / 2}, \code{round(2.5)}.}
+\oneline{3, $-4$, 2, 512, 2.5, 2.}
+\why Floor division rounds toward $-\infty$; \code{\%} has the divisor's sign so that \code{(a // b) * b + a \% b == a}; \code{**} is right-associative; \code{/} is true division;
+\code{round} uses banker's rounding.
+\end{qa}
+
+\begin{qa}{Slice \code{s = "DataScience"}: \code{s[2:6]}, \code{s[-3:]}, \code{s[::-1]}, \code{s[::2]}.}
+\oneline{\code{'taSc'}, \code{'nce'}, \code{'ecneicSataD'}, \code{'DtSine'}.}
+\end{qa}
+
+\begin{qa}{What is the difference between \code{==} and \code{is}?}
+\oneline{\code{==} compares values (calls \code{\_\_eq\_\_}); \code{is} checks whether two names refer to the same object; use \code{is} only for singletons like \code{None}.}
+\worked \code{[] == []} is \code{True}; \code{[] is []} is \code{False}.
+\end{qa}
+
+\begin{qa}{What is a generator, and why would you use one on a 10 GB log of job applications?}
+\oneline{A function with \code{yield} that produces values lazily one at a time and keeps its state between calls; it lets you process the file line by line in constant memory.}
+\worked
+\begin{lstlisting}
+def parse(path):
+    with open(path) as f:
+        for line in f:                    # files are iterators too
+            uid, job, ts = line.rstrip("\n").split("\t")
+            yield uid, job
+applies_per_job = Counter(job for _, job in parse("applies.tsv"))
+\end{lstlisting}
+\end{qa}
+
+\begin{qa}{What is a decorator? Write one that times a function.}
+\oneline{A function that wraps another function to add behaviour without changing its code; \code{@timer} above is equivalent to \code{add = timer(add)}.}
+\why Use \code{functools.wraps} so the wrapped function keeps its name. Real uses: caching (\code{lru\_cache}), retries for flaky API calls, logging model latency.
+\end{qa}
+
+\begin{qa}{\deep Why does \code{[lambda: i for i in range(3)]} return functions that all give 2?}
+\oneline{Closures capture variables, not values; all lambdas refer to the same \code{i}, which is 2 after the loop ends; bind the current value with a default argument
+\code{lambda i=i: i}.}
+\end{qa}
+
+\begin{qa}{What are \code{*args} and \code{**kwargs}?}
+\oneline{\code{*args} collects extra positional arguments into a tuple, \code{**kwargs} extra keyword arguments into a dict; also used to unpack when calling,
+\code{f(*lst, **dct)}.}
+\worked \code{k(1, 2, a=3)} returns \code{((1, 2), \{'a': 3\})}.
+\end{qa}
+
+\begin{qa}{Count word frequencies in a list of job titles without pandas.}
+\oneline{Use \code{collections.Counter} on the split words.}
+\worked
+\begin{lstlisting}
+from collections import Counter
+titles = ["Data Scientist", "Senior Data Scientist", "Data Analyst"]
+c = Counter(w.lower() for t in titles for w in t.split())
+c.most_common(2)        # [('data', 3), ('scientist', 2)]
+\end{lstlisting}
+\end{qa}
+
+\begin{qa}{What does the GIL mean for data science code?}
+\oneline{Only one thread runs Python bytecode at a time, so pure-Python CPU-bound loops do not speed up with threads; use vectorised NumPy/pandas (which run in C and
+release the GIL), \code{multiprocessing}, or libraries with their own parallelism (\code{n\_jobs=-1}).}
+\end{qa}
+
+\begin{qa}{\deep Why is \code{0.1 + 0.2 == 0.3} false, and how should you compare floats?}
+\oneline{Because 0.1 and 0.2 have no exact binary representation, so their sum is $0.30000000000000004$; compare with a tolerance using \code{math.isclose} or
+\code{np.isclose}.}
+\end{qa}
+
+\begin{qa}{What does \code{L.sort()} return? What about \code{sorted(L)}?}
+\oneline{\code{L.sort()} sorts in place and returns \code{None}; \code{sorted(L)} returns a new sorted list and leaves \code{L} unchanged.}
+\worked \code{print(L.sort())} prints \code{None} (a classic OA trap).
+\end{qa}
+
+\begin{qa}{Sort a dict of skill counts by count, descending.}
+\oneline{\code{sorted(d.items(), key=lambda kv: kv[1], reverse=True)}.}
+\end{qa}
+
+\begin{qa}{What happens with \code{d["missing"]} vs \code{d.get("missing")}?}
+\oneline{The first raises \code{KeyError}; \code{get} returns \code{None} or a given default; for counting, \code{defaultdict(int)} or \code{Counter} avoid the issue.}
+\end{qa}
+
+\begin{qa}{\deep A function receives a list and does \code{l = l + [5]}; another does \code{l += [5]}. Which changes the caller's list and why?}
+\oneline{Only \code{l += [5]}, because for lists \code{+=} mutates in place (\code{list.\_\_iadd\_\_}), while \code{l + [5]} builds a new list and rebinds the local name.}
+\end{qa}
